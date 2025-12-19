@@ -1,5 +1,4 @@
-import { Users, Plus, Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Users, Plus } from "lucide-react";
 
 interface HeaderProps {
   contactCount: number;
@@ -23,19 +22,13 @@ export function Header({ contactCount, onOpenAddDialog }: HeaderProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onOpenAddDialog}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add Contact</span>
-        </button>
-        
-        <Button variant="ghost" size="icon" className="rounded-xl">
-          <Settings className="h-5 w-5" />
-        </Button>
-      </div>
+      <button
+        onClick={onOpenAddDialog}
+        className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
+      >
+        <Plus className="h-4 w-4" />
+        <span>Add Contact</span>
+      </button>
     </header>
   );
 }
