@@ -11,33 +11,59 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [isProfileMode, setIsProfileMode] = useState(false);
   
   const { contacts, isLoading: contactsLoading, addContact, updateContact } = useContacts();
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(contacts, searchQuery);
+
+  // Find the user's own contact card (marked with isProfile flag or stored separately)
+  const myProfile = contacts.find(c => c.tags?.includes("my-profile"));
 
   const handleSaveContact = (contactData: Omit<Contact, "id">) => {
     if (editingContact) {
       updateContact({ ...contactData, id: editingContact.id });
     } else {
-      addContact(contactData);
+      // If saving profile, add the my-profile tag
+      if (isProfileMode) {
+        addContact({ ...contactData, tags: [...(contactData.tags || []), "my-profile"] });
+      } else {
+        addContact(contactData);
+      }
     }
     setEditingContact(null);
+    setIsProfileMode(false);
   };
 
   const handleOpenAddDialog = () => {
     setEditingContact(null);
+    setIsProfileMode(false);
+    setDialogOpen(true);
+  };
+
+  const handleOpenProfile = () => {
+    if (myProfile) {
+      setEditingContact(myProfile);
+    } else {
+      setEditingContact(null);
+    }
+    setIsProfileMode(true);
     setDialogOpen(true);
   };
 
   const handleEditContact = (contact: Contact) => {
     setEditingContact(contact);
+    setIsProfileMode(false);
     setDialogOpen(true);
   };
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <Header contactCount={filteredContacts.length} onOpenAddDialog={handleOpenAddDialog} />
+        <Header 
+          contactCount={filteredContacts.length} 
+          onOpenAddDialog={handleOpenAddDialog}
+          onOpenProfile={handleOpenProfile}
+        />
         
         <div className="mb-10">
           <SearchBar
@@ -88,9 +114,13 @@ const Index = () => {
 
         <ContactFormDialog
           open={dialogOpen}
-          onOpenChange={setDialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) setIsProfileMode(false);
+          }}
           onSave={handleSaveContact}
           contact={editingContact}
+          isProfileMode={isProfileMode}
         />
       </div>
     </div>
