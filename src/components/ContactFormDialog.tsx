@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Contact } from "@/types/contact";
 
 const PRESET_TAGS = [
@@ -126,137 +127,139 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="font-display text-xl">
             {getDialogTitle()}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="John Doe"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email *</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="john@example.com"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone *</Label>
-            <Input
-              id="phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1 (555) 000-0000"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+        <ScrollArea className="flex-1 overflow-auto pr-4">
+          <div className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label htmlFor="company">Company *</Label>
+              <Label htmlFor="name">Name *</Label>
               <Input
-                id="company"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                placeholder="Acme Inc"
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="John Doe"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="role">Role *</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
-                id="role"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                placeholder="Developer"
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="john@example.com"
                 required
               />
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="tags">Keywords</Label>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {PRESET_TAGS.map((preset) => {
-                const isSelected = tags.includes(preset);
-                return (
-                  <Badge
-                    key={preset}
-                    variant={isSelected ? "default" : "outline"}
-                    className={`cursor-pointer transition-colors ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent hover:text-accent-foreground"
-                    }`}
-                    onClick={() => togglePresetTag(preset)}
-                  >
-                    {isSelected && <Check className="h-3 w-3 mr-1" />}
-                    {preset}
-                  </Badge>
-                );
-              })}
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone *</Label>
+              <Input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 (555) 000-0000"
+                required
+              />
             </div>
-            <Input
-              id="tags"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={handleAddTag}
-              placeholder="Or type custom keywords..."
-            />
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {tags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
-                    onClick={() => removeTag(tag)}
-                  >
-                    {tag}
-                    <X className="h-3 w-3 ml-1" />
-                  </Badge>
-                ))}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="company">Company *</Label>
+                <Input
+                  id="company"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="Acme Inc"
+                  required
+                />
               </div>
-            )}
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="What do they handle? (e.g., 'Handles all marketing campaigns and brand strategy')"
-              rows={3}
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="role">Role *</Label>
+                <Input
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="Developer"
+                  required
+                />
+              </div>
+            </div>
 
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" className="gradient-hero text-primary-foreground">
-              {isEditing ? "Save Changes" : "Add Contact"}
-            </Button>
+            <div className="space-y-2">
+              <Label htmlFor="tags">Keywords</Label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {PRESET_TAGS.map((preset) => {
+                  const isSelected = tags.includes(preset);
+                  return (
+                    <Badge
+                      key={preset}
+                      variant={isSelected ? "default" : "outline"}
+                      className={`cursor-pointer transition-colors ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-accent hover:text-accent-foreground"
+                      }`}
+                      onClick={() => togglePresetTag(preset)}
+                    >
+                      {isSelected && <Check className="h-3 w-3 mr-1" />}
+                      {preset}
+                    </Badge>
+                  );
+                })}
+              </div>
+              <Input
+                id="tags"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleAddTag}
+                placeholder="Or type custom keywords..."
+              />
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                      onClick={() => removeTag(tag)}
+                    >
+                      {tag}
+                      <X className="h-3 w-3 ml-1" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What do they handle? (e.g., 'Handles all marketing campaigns and brand strategy')"
+                rows={3}
+              />
+            </div>
           </div>
+        </ScrollArea>
+
+        <form onSubmit={handleSubmit} className="flex justify-end gap-3 pt-4 border-t border-border mt-4">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" className="gradient-hero text-primary-foreground">
+            {isEditing ? "Save Changes" : "Add Contact"}
+          </Button>
         </form>
       </DialogContent>
     </Dialog>
