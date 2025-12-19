@@ -33,9 +33,10 @@ interface ContactFormDialogProps {
   onOpenChange: (open: boolean) => void;
   onSave: (contact: Omit<Contact, "id">) => void;
   contact?: Contact | null;
+  isProfileMode?: boolean;
 }
 
-export function ContactFormDialog({ open, onOpenChange, onSave, contact }: ContactFormDialogProps) {
+export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfileMode }: ContactFormDialogProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -46,6 +47,13 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact }: Conta
   const [description, setDescription] = useState("");
 
   const isEditing = !!contact;
+  
+  const getDialogTitle = () => {
+    if (isProfileMode) {
+      return isEditing ? "Edit My Contact Card" : "Create My Contact Card";
+    }
+    return isEditing ? "Edit Contact" : "Add New Contact";
+  };
 
   useEffect(() => {
     if (contact) {
@@ -121,7 +129,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact }: Conta
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display text-xl">
-            {isEditing ? "Edit Contact" : "Add New Contact"}
+            {getDialogTitle()}
           </DialogTitle>
         </DialogHeader>
 

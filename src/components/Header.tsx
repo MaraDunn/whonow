@@ -12,9 +12,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 interface HeaderProps {
   contactCount: number;
   onOpenAddDialog: () => void;
+  onOpenProfile: () => void;
 }
 
-export function Header({ contactCount, onOpenAddDialog }: HeaderProps) {
+export function Header({ contactCount, onOpenAddDialog, onOpenProfile }: HeaderProps) {
   return (
     <header className="flex items-center justify-between mb-8 animate-fade-in">
       <div className="flex items-center gap-4">
@@ -53,9 +54,9 @@ export function Header({ contactCount, onOpenAddDialog }: HeaderProps) {
           <DropdownMenuContent align="end" className="w-48 bg-popover">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
+            <DropdownMenuItem className="cursor-pointer" onClick={onOpenProfile}>
               <User className="mr-2 h-4 w-4" />
-              Profile
+              My Contact Card
             </DropdownMenuItem>
             <DropdownMenuItem className="cursor-pointer">
               <Settings className="mr-2 h-4 w-4" />
