@@ -7,9 +7,10 @@ interface ContactGridProps {
   contacts: Contact[];
   searchQuery: string;
   action?: ActionType;
+  onEditContact: (contact: Contact) => void;
 }
 
-export function ContactGrid({ contacts, searchQuery, action }: ContactGridProps) {
+export function ContactGrid({ contacts, searchQuery, action, onEditContact }: ContactGridProps) {
   if (contacts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
@@ -31,7 +32,13 @@ export function ContactGrid({ contacts, searchQuery, action }: ContactGridProps)
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
       {contacts.map((contact, index) => (
-        <ContactCard key={contact.id} contact={contact} index={index} action={action} />
+        <ContactCard
+          key={contact.id}
+          contact={contact}
+          index={index}
+          action={action}
+          onEdit={() => onEditContact(contact)}
+        />
       ))}
     </div>
   );
