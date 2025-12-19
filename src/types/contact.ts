@@ -7,4 +7,5 @@ export interface Contact {
   role: string;
   avatar?: string;
   tags: string[];
+  description?: string;
 }

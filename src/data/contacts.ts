@@ -9,6 +9,7 @@ export const sampleContacts: Contact[] = [
     company: "TechCorp",
     role: "Product Manager",
     tags: ["work", "tech", "priority"],
+    description: "Handles product roadmap and feature prioritization for the mobile team",
   },
   {
     id: "2",
@@ -18,6 +19,7 @@ export const sampleContacts: Contact[] = [
     company: "DesignLab",
     role: "Creative Director",
     tags: ["creative", "design"],
+    description: "Leads brand identity projects and oversees all visual design work",
   },
   {
     id: "3",
@@ -27,6 +29,7 @@ export const sampleContacts: Contact[] = [
     company: "StartupXYZ",
     role: "CEO",
     tags: ["startup", "priority", "investor"],
+    description: "Potential investor contact, interested in AI and fintech opportunities",
   },
   {
     id: "4",
@@ -36,6 +39,7 @@ export const sampleContacts: Contact[] = [
     company: "FinancePlus",
     role: "Financial Analyst",
     tags: ["finance", "work"],
+    description: "Manages quarterly reports and budget forecasting",
   },
   {
     id: "5",
@@ -45,6 +49,7 @@ export const sampleContacts: Contact[] = [
     company: "HealthTech",
     role: "Research Lead",
     tags: ["healthcare", "research"],
+    description: "Leads clinical trial coordination and research partnerships",
   },
   {
     id: "6",
@@ -54,6 +59,7 @@ export const sampleContacts: Contact[] = [
     company: "CloudBase",
     role: "DevOps Engineer",
     tags: ["tech", "infrastructure"],
+    description: "Handles cloud infrastructure, CI/CD pipelines, and server maintenance",
   },
   {
     id: "7",
@@ -63,6 +69,7 @@ export const sampleContacts: Contact[] = [
     company: "Legal Partners LLP",
     role: "Senior Attorney",
     tags: ["legal", "priority"],
+    description: "Handles contract reviews and intellectual property matters",
   },
   {
     id: "8",
@@ -72,5 +79,6 @@ export const sampleContacts: Contact[] = [
     company: "MediaHub",
     role: "Content Producer",
     tags: ["media", "creative"],
+    description: "Produces video content and manages social media campaigns",
   },
 ];

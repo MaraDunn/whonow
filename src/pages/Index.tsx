@@ -4,15 +4,25 @@ import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { sampleContacts } from "@/data/contacts";
 import { useActionSearch } from "@/hooks/useActionSearch";
+import { Contact } from "@/types/contact";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const { contacts: filteredContacts, action, searchTerm } = useActionSearch(sampleContacts, searchQuery);
+  const [contacts, setContacts] = useState<Contact[]>(sampleContacts);
+  const { contacts: filteredContacts, action, searchTerm } = useActionSearch(contacts, searchQuery);
+
+  const handleAddContact = (newContact: Omit<Contact, "id">) => {
+    const contact: Contact = {
+      ...newContact,
+      id: crypto.randomUUID(),
+    };
+    setContacts((prev) => [contact, ...prev]);
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <Header contactCount={filteredContacts.length} />
+        <Header contactCount={filteredContacts.length} onAddContact={handleAddContact} />
         
         <div className="mb-10">
           <SearchBar
