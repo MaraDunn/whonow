@@ -3,28 +3,23 @@ import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
-import { sampleContacts } from "@/data/contacts";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
+import { useContacts } from "@/hooks/useContacts";
 import { Contact } from "@/types/contact";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [contacts, setContacts] = useState<Contact[]>(sampleContacts);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const { contacts: filteredContacts, action, searchTerm, isLoading, aiIntent } = useSmartSearch(contacts, searchQuery);
+  
+  const { contacts, isLoading: contactsLoading, addContact, updateContact } = useContacts();
+  const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(contacts, searchQuery);
 
   const handleSaveContact = (contactData: Omit<Contact, "id">) => {
     if (editingContact) {
-      setContacts((prev) =>
-        prev.map((c) => (c.id === editingContact.id ? { ...contactData, id: editingContact.id } : c))
-      );
+      updateContact({ ...contactData, id: editingContact.id });
     } else {
-      const contact: Contact = {
-        ...contactData,
-        id: crypto.randomUUID(),
-      };
-      setContacts((prev) => [contact, ...prev]);
+      addContact(contactData);
     }
     setEditingContact(null);
   };
@@ -49,14 +44,14 @@ const Index = () => {
             value={searchQuery}
             onChange={setSearchQuery}
             placeholder="Try 'Who handles marketing?' or 'email sarah'..."
-            isLoading={isLoading}
+            isLoading={searchLoading}
           />
         </div>
 
         {searchQuery && (
           <div className="mb-6 animate-fade-in">
             <p className="text-sm text-muted-foreground">
-              {isLoading ? (
+              {searchLoading ? (
                 <span className="flex items-center gap-2">
                   <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                   Understanding your question...
