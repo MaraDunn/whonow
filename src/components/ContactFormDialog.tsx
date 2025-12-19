@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Contact } from "@/types/contact";
 
 const PRESET_TAGS = [
@@ -134,7 +133,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 overflow-auto pr-4">
+        <div className="flex-1 overflow-y-auto pr-2">
           <div className="space-y-4 mt-4">
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
@@ -251,7 +250,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
               />
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
         <form onSubmit={handleSubmit} className="flex justify-end gap-3 pt-4 border-t border-border mt-4">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
