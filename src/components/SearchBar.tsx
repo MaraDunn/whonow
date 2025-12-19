@@ -5,9 +5,10 @@ interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  isLoading?: boolean;
 }
 
-export function SearchBar({ value, onChange, placeholder = "Search contacts..." }: SearchBarProps) {
+export function SearchBar({ value, onChange, placeholder = "Search contacts...", isLoading = false }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -30,7 +31,11 @@ export function SearchBar({ value, onChange, placeholder = "Search contacts..." 
     <div className="relative w-full max-w-2xl mx-auto group">
       <div className="absolute inset-0 rounded-2xl gradient-hero opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500" />
       <div className="relative flex items-center">
-        <Search className="absolute left-5 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+        {isLoading ? (
+          <div className="absolute left-5 h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        ) : (
+          <Search className="absolute left-5 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+        )}
         <input
           ref={inputRef}
           type="text"

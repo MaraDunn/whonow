@@ -4,7 +4,7 @@ import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { sampleContacts } from "@/data/contacts";
-import { useActionSearch } from "@/hooks/useActionSearch";
+import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { Contact } from "@/types/contact";
 
 const Index = () => {
@@ -12,7 +12,7 @@ const Index = () => {
   const [contacts, setContacts] = useState<Contact[]>(sampleContacts);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const { contacts: filteredContacts, action, searchTerm } = useActionSearch(contacts, searchQuery);
+  const { contacts: filteredContacts, action, searchTerm, isLoading, aiIntent } = useSmartSearch(contacts, searchQuery);
 
   const handleSaveContact = (contactData: Omit<Contact, "id">) => {
     if (editingContact) {
@@ -48,14 +48,26 @@ const Index = () => {
           <SearchBar
             value={searchQuery}
             onChange={setSearchQuery}
-            placeholder="Try 'email sarah' or 'call marketing'..."
+            placeholder="Try 'Who handles marketing?' or 'email sarah'..."
+            isLoading={isLoading}
           />
         </div>
 
         {searchQuery && (
           <div className="mb-6 animate-fade-in">
             <p className="text-sm text-muted-foreground">
-              {action ? (
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  Understanding your question...
+                </span>
+              ) : aiIntent ? (
+                <>
+                  <span className="font-medium text-primary">{aiIntent}</span>
+                  {action && <> • Ready to <span className="font-medium">{action}</span></>}
+                  <> • {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""}</>
+                </>
+              ) : action ? (
                 <>
                   Ready to <span className="font-medium text-primary">{action}</span>
                   {searchTerm && (
