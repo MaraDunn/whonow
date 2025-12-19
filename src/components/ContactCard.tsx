@@ -84,6 +84,12 @@ export function ContactCard({ contact, index, action }: ContactCardProps) {
         </div>
       </div>
 
+      {contact.description && (
+        <p className="mt-4 text-sm text-muted-foreground line-clamp-2">
+          {contact.description}
+        </p>
+      )}
+
       <div className="mt-4 flex flex-wrap gap-2">
         {contact.tags.map((tag) => (
           <span

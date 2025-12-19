@@ -46,6 +46,7 @@ export function useActionSearch(contacts: Contact[], query: string): ActionSearc
         contact.phone,
         contact.company,
         contact.role,
+        contact.description || "",
         ...contact.tags,
       ]
         .join(" ")

@@ -1,10 +1,15 @@
+import { useState } from "react";
 import { Users, Plus } from "lucide-react";
+import { AddContactDialog } from "./AddContactDialog";
+import { Contact } from "@/types/contact";
 
 interface HeaderProps {
   contactCount: number;
+  onAddContact: (contact: Omit<Contact, "id">) => void;
 }
 
-export function Header({ contactCount }: HeaderProps) {
+export function Header({ contactCount, onAddContact }: HeaderProps) {
+  const [dialogOpen, setDialogOpen] = useState(false);
   return (
     <header className="flex items-center justify-between mb-8 animate-fade-in">
       <div className="flex items-center gap-4">
@@ -21,10 +26,19 @@ export function Header({ contactCount }: HeaderProps) {
         </div>
       </div>
 
-      <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20">
+      <button
+        onClick={() => setDialogOpen(true)}
+        className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
+      >
         <Plus className="h-4 w-4" />
         <span>Add Contact</span>
       </button>
+
+      <AddContactDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onAddContact={onAddContact}
+      />
     </header>
   );
 }
