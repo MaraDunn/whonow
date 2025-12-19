@@ -13,9 +13,10 @@ interface HeaderProps {
   contactCount: number;
   onOpenAddDialog: () => void;
   onOpenProfile: () => void;
+  onOpenSettings: () => void;
 }
 
-export function Header({ contactCount, onOpenAddDialog, onOpenProfile }: HeaderProps) {
+export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings }: HeaderProps) {
   return (
     <header className="flex items-center justify-between mb-8 animate-fade-in">
       <div className="flex items-center gap-4">
@@ -58,7 +59,7 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile }: HeaderP
               <User className="mr-2 h-4 w-4" />
               My Contact Card
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer">
+            <DropdownMenuItem className="cursor-pointer" onClick={onOpenSettings}>
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>

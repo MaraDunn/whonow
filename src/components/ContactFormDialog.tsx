@@ -13,30 +13,16 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Contact } from "@/types/contact";
 
-const PRESET_TAGS = [
-  "work",
-  "personal",
-  "priority",
-  "tech",
-  "design",
-  "creative",
-  "finance",
-  "legal",
-  "healthcare",
-  "media",
-  "startup",
-  "investor",
-];
-
 interface ContactFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (contact: Omit<Contact, "id">) => void;
   contact?: Contact | null;
   isProfileMode?: boolean;
+  presetKeywords?: string[];
 }
 
-export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfileMode }: ContactFormDialogProps) {
+export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfileMode, presetKeywords = [] }: ContactFormDialogProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -196,7 +182,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
             <div className="space-y-2">
               <Label htmlFor="tags">Keywords</Label>
               <div className="flex flex-wrap gap-1.5 mb-2">
-                {PRESET_TAGS.map((preset) => {
+                {presetKeywords.map((preset) => {
                   const isSelected = tags.includes(preset);
                   return (
                     <Badge

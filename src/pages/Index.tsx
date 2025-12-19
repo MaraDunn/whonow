@@ -3,18 +3,22 @@ import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
+import { useCustomKeywords } from "@/hooks/useCustomKeywords";
 import { Contact } from "@/types/contact";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isProfileMode, setIsProfileMode] = useState(false);
   
   const { contacts, isLoading: contactsLoading, addContact, updateContact } = useContacts();
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(contacts, searchQuery);
+  const { keywords, addKeyword, removeKeyword, resetToDefaults } = useCustomKeywords();
 
   // Find the user's own contact card (marked with isProfile flag or stored separately)
   const myProfile = contacts.find(c => c.tags?.includes("my-profile"));
@@ -63,6 +67,7 @@ const Index = () => {
           contactCount={filteredContacts.length} 
           onOpenAddDialog={handleOpenAddDialog}
           onOpenProfile={handleOpenProfile}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
         
         <div className="mb-10">
@@ -121,6 +126,16 @@ const Index = () => {
           onSave={handleSaveContact}
           contact={editingContact}
           isProfileMode={isProfileMode}
+          presetKeywords={keywords}
+        />
+
+        <SettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          keywords={keywords}
+          onAddKeyword={addKeyword}
+          onRemoveKeyword={removeKeyword}
+          onResetKeywords={resetToDefaults}
         />
       </div>
     </div>
