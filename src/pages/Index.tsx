@@ -3,11 +3,11 @@ import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { sampleContacts } from "@/data/contacts";
-import { useContactSearch } from "@/hooks/useContactSearch";
+import { useActionSearch } from "@/hooks/useActionSearch";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const filteredContacts = useContactSearch(sampleContacts, searchQuery);
+  const { contacts: filteredContacts, action, searchTerm } = useActionSearch(sampleContacts, searchQuery);
 
   return (
     <div className="min-h-screen bg-background">
@@ -18,20 +18,31 @@ const Index = () => {
           <SearchBar
             value={searchQuery}
             onChange={setSearchQuery}
-            placeholder="Search by name, company, email, or tag..."
+            placeholder="Try 'email sarah' or 'call marketing'..."
           />
         </div>
 
         {searchQuery && (
           <div className="mb-6 animate-fade-in">
             <p className="text-sm text-muted-foreground">
-              Showing {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for{" "}
-              <span className="font-medium text-foreground">"{searchQuery}"</span>
+              {action ? (
+                <>
+                  Ready to <span className="font-medium text-primary">{action}</span>
+                  {searchTerm && (
+                    <> • {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for "<span className="font-medium text-foreground">{searchTerm}</span>"</>
+                  )}
+                </>
+              ) : (
+                <>
+                  Showing {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for{" "}
+                  <span className="font-medium text-foreground">"{searchQuery}"</span>
+                </>
+              )}
             </p>
           </div>
         )}
 
-        <ContactGrid contacts={filteredContacts} searchQuery={searchQuery} />
+        <ContactGrid contacts={filteredContacts} searchQuery={searchQuery} action={action} />
       </div>
     </div>
   );

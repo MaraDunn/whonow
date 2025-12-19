@@ -1,17 +1,41 @@
 import { Contact } from "@/types/contact";
-import { Mail, Phone, Building2, Briefcase } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare } from "lucide-react";
+import { ActionType } from "@/hooks/useActionSearch";
 
 interface ContactCardProps {
   contact: Contact;
   index: number;
+  action?: ActionType;
 }
 
-export function ContactCard({ contact, index }: ContactCardProps) {
+export function ContactCard({ contact, index, action }: ContactCardProps) {
   const initials = contact.name
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase();
+
+  const handleAction = (type: ActionType) => {
+    if (!type) return;
+    
+    switch (type) {
+      case "email":
+        window.location.href = `mailto:${contact.email}`;
+        break;
+      case "call":
+        window.location.href = `tel:${contact.phone}`;
+        break;
+      case "text":
+        window.location.href = `sms:${contact.phone}`;
+        break;
+    }
+  };
+
+  const actionConfig = {
+    email: { icon: Mail, label: "Email", color: "bg-primary hover:bg-primary/90" },
+    call: { icon: Phone, label: "Call", color: "bg-green-600 hover:bg-green-700" },
+    text: { icon: MessageSquare, label: "Text", color: "bg-blue-600 hover:bg-blue-700" },
+  };
 
   return (
     <div
@@ -70,6 +94,21 @@ export function ContactCard({ contact, index }: ContactCardProps) {
           </span>
         ))}
       </div>
+
+      {action && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <button
+            onClick={() => handleAction(action)}
+            className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium transition-colors ${actionConfig[action].color}`}
+          >
+            {(() => {
+              const Icon = actionConfig[action].icon;
+              return <Icon className="h-4 w-4" />;
+            })()}
+            {actionConfig[action].label} {contact.name.split(" ")[0]}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
