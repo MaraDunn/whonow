@@ -6,9 +6,10 @@ interface ContactCardProps {
   contact: Contact;
   index: number;
   action?: ActionType;
+  onEdit: () => void;
 }
 
-export function ContactCard({ contact, index, action }: ContactCardProps) {
+export function ContactCard({ contact, index, action, onEdit }: ContactCardProps) {
   const initials = contact.name
     .split(" ")
     .map((n) => n[0])
@@ -39,6 +40,7 @@ export function ContactCard({ contact, index, action }: ContactCardProps) {
 
   return (
     <div
+      onClick={onEdit}
       className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up"
       style={{ animationDelay: `${index * 50}ms` }}
     >
@@ -104,7 +106,10 @@ export function ContactCard({ contact, index, action }: ContactCardProps) {
       {action && (
         <div className="mt-4 pt-4 border-t border-border">
           <button
-            onClick={() => handleAction(action)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAction(action);
+            }}
             className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium transition-colors ${actionConfig[action].color}`}
           >
             {(() => {

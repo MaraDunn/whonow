@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import {
   Dialog,
@@ -13,13 +13,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Contact } from "@/types/contact";
 
-interface AddContactDialogProps {
+interface ContactFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddContact: (contact: Omit<Contact, "id">) => void;
+  onSave: (contact: Omit<Contact, "id">) => void;
+  contact?: Contact | null;
 }
 
-export function AddContactDialog({ open, onOpenChange, onAddContact }: AddContactDialogProps) {
+export function ContactFormDialog({ open, onOpenChange, onSave, contact }: ContactFormDialogProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -28,6 +29,22 @@ export function AddContactDialog({ open, onOpenChange, onAddContact }: AddContac
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
+
+  const isEditing = !!contact;
+
+  useEffect(() => {
+    if (contact) {
+      setName(contact.name);
+      setEmail(contact.email);
+      setPhone(contact.phone);
+      setCompany(contact.company);
+      setRole(contact.role);
+      setTags(contact.tags);
+      setDescription(contact.description || "");
+    } else {
+      resetForm();
+    }
+  }, [contact, open]);
 
   const resetForm = () => {
     setName("");
@@ -62,7 +79,7 @@ export function AddContactDialog({ open, onOpenChange, onAddContact }: AddContac
       return;
     }
 
-    onAddContact({
+    onSave({
       name,
       email,
       phone,
@@ -80,7 +97,9 @@ export function AddContactDialog({ open, onOpenChange, onAddContact }: AddContac
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-display text-xl">Add New Contact</DialogTitle>
+          <DialogTitle className="font-display text-xl">
+            {isEditing ? "Edit Contact" : "Add New Contact"}
+          </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
@@ -184,7 +203,7 @@ export function AddContactDialog({ open, onOpenChange, onAddContact }: AddContac
               Cancel
             </Button>
             <Button type="submit" className="gradient-hero text-primary-foreground">
-              Add Contact
+              {isEditing ? "Save Changes" : "Add Contact"}
             </Button>
           </div>
         </form>
