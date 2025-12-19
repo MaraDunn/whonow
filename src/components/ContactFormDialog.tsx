@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Check } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Contact } from "@/types/contact";
+
+const PRESET_TAGS = [
+  "work",
+  "personal",
+  "priority",
+  "tech",
+  "design",
+  "creative",
+  "finance",
+  "legal",
+  "healthcare",
+  "media",
+  "startup",
+  "investor",
+];
 
 interface ContactFormDialogProps {
   open: boolean;
@@ -70,6 +85,14 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact }: Conta
 
   const removeTag = (tagToRemove: string) => {
     setTags(tags.filter((tag) => tag !== tagToRemove));
+  };
+
+  const togglePresetTag = (preset: string) => {
+    if (tags.includes(preset)) {
+      setTags(tags.filter((tag) => tag !== preset));
+    } else {
+      setTags([...tags, preset]);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -163,12 +186,32 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact }: Conta
 
           <div className="space-y-2">
             <Label htmlFor="tags">Keywords</Label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {PRESET_TAGS.map((preset) => {
+                const isSelected = tags.includes(preset);
+                return (
+                  <Badge
+                    key={preset}
+                    variant={isSelected ? "default" : "outline"}
+                    className={`cursor-pointer transition-colors ${
+                      isSelected
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-accent hover:text-accent-foreground"
+                    }`}
+                    onClick={() => togglePresetTag(preset)}
+                  >
+                    {isSelected && <Check className="h-3 w-3 mr-1" />}
+                    {preset}
+                  </Badge>
+                );
+              })}
+            </div>
             <Input
               id="tags"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={handleAddTag}
-              placeholder="Press Enter to add keywords..."
+              placeholder="Or type custom keywords..."
             />
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
