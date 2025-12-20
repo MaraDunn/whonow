@@ -1,5 +1,17 @@
 import { useState, useMemo } from "react";
-import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, pointerWithin } from "@dnd-kit/core";
+import { 
+  DndContext, 
+  DragEndEvent, 
+  DragStartEvent, 
+  DragOverlay, 
+  pointerWithin,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  DragOverEvent
+} from "@dnd-kit/core";
 import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
@@ -73,15 +85,44 @@ const Index = () => {
   // Find the user's own contact card (marked with isProfile flag or stored separately)
   const myProfile = contacts.find(c => c.tags?.includes("my-profile"));
 
+  // Track which folder is being hovered during drag
+  const [overId, setOverId] = useState<string | null>(null);
+
+  // Configure drag sensors with activation constraints
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 8, // Require 8px movement before starting drag
+    },
+  });
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: {
+      delay: 200, // 200ms hold before drag starts on touch
+      tolerance: 5,
+    },
+  });
+  const keyboardSensor = useSensor(KeyboardSensor);
+
+  const sensors = useSensors(pointerSensor, touchSensor, keyboardSensor);
+
   const handleDragStart = (event: DragStartEvent) => {
     const contact = event.active.data.current?.contact as Contact | undefined;
     if (contact) {
       setActiveContact(contact);
+      // Add haptic feedback for touch devices
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
     }
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const overId = event.over?.id;
+    setOverId(overId ? String(overId) : null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveContact(null);
+    setOverId(null);
     
     const { active, over } = event;
     if (!over) return;
@@ -105,6 +146,16 @@ const Index = () => {
       ? folders.find(f => f.id === targetFolderId)?.name 
       : "No folder";
     toast.success(`Moved "${contact.name}" to ${folderName}`);
+    
+    // Success haptic
+    if (navigator.vibrate) {
+      navigator.vibrate([30, 50, 30]);
+    }
+  };
+
+  const handleDragCancel = () => {
+    setActiveContact(null);
+    setOverId(null);
   };
 
   const handleSaveContact = (contactData: Omit<Contact, "id">) => {
@@ -151,9 +202,12 @@ const Index = () => {
 
   return (
     <DndContext
+      sensors={sensors}
       collisionDetection={pointerWithin}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <div className="min-h-screen bg-background flex">
         {/* Folder Sidebar */}
@@ -267,9 +321,12 @@ const Index = () => {
       </div>
 
       {/* Drag Overlay */}
-      <DragOverlay>
+      <DragOverlay dropAnimation={{
+        duration: 250,
+        easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+      }}>
         {activeContact ? (
-          <div className="opacity-90 rotate-3 scale-105">
+          <div className="rotate-2 scale-105 shadow-2xl cursor-grabbing">
             <ContactCard
               contact={activeContact}
               index={0}
