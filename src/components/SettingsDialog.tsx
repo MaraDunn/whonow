@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, Building2, LogOut } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
   Dialog,
@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { toast } from "sonner";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export function SettingsDialog({
   canEditKeywords = true,
 }: SettingsDialogProps) {
   const [newKeyword, setNewKeyword] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { profile, company, isAdmin } = useProfile(user?.id);
@@ -61,6 +63,19 @@ export function SettingsDialog({
     onOpenChange(false);
   };
 
+  const handleCopyInviteCode = () => {
+    if (company?.inviteCode) {
+      navigator.clipboard.writeText(company.inviteCode);
+      setCopiedCode(true);
+      toast.success("Invite code copied!");
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
+  // Determine number of tabs based on admin status
+  const showAdminTab = isAdmin && company;
+  const tabCount = showAdminTab ? 4 : 3;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
@@ -69,7 +84,7 @@ export function SettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className={`grid w-full grid-cols-${tabCount}`} style={{ gridTemplateColumns: `repeat(${tabCount}, minmax(0, 1fr))` }}>
             <TabsTrigger value="general" className="flex items-center gap-2">
               <Palette className="h-4 w-4" />
               <span className="hidden sm:inline">General</span>
@@ -79,9 +94,15 @@ export function SettingsDialog({
               <span className="hidden sm:inline">Keywords</span>
             </TabsTrigger>
             <TabsTrigger value="account" className="flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
+              <User className="h-4 w-4" />
               <span className="hidden sm:inline">Account</span>
             </TabsTrigger>
+            {showAdminTab && (
+              <TabsTrigger value="admin" className="flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                <span className="hidden sm:inline">Admin</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <div className="flex-1 overflow-y-auto mt-4">
@@ -124,7 +145,7 @@ export function SettingsDialog({
               </div>
             </TabsContent>
 
-            {/* Keywords Tab */}
+            {/* Keywords Tab - View only for company members */}
             <TabsContent value="keywords" className="space-y-4 mt-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -133,7 +154,7 @@ export function SettingsDialog({
                     <Badge variant="outline" className="text-xs">Company</Badge>
                   )}
                 </div>
-                {canEditKeywords && (
+                {!isCompanyKeywords && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -148,14 +169,12 @@ export function SettingsDialog({
               
               <p className="text-sm text-muted-foreground">
                 {isCompanyKeywords 
-                  ? canEditKeywords 
-                    ? "As an admin, you can manage keywords for everyone in your company."
-                    : "These keywords are managed by your company admin."
+                  ? "These keywords are managed by your company admin."
                   : "These keywords will appear as quick-select options when creating or editing contacts."
                 }
               </p>
 
-              {canEditKeywords && (
+              {!isCompanyKeywords && (
                 <div className="flex gap-2">
                   <Input
                     value={newKeyword}
@@ -173,27 +192,27 @@ export function SettingsDialog({
               <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg min-h-[100px]">
                 {keywords.length === 0 ? (
                   <p className="text-sm text-muted-foreground w-full text-center py-4">
-                    No keywords yet. {canEditKeywords ? "Add some above!" : "Ask your admin to add some."}
+                    No keywords yet. {!isCompanyKeywords ? "Add some above!" : "Ask your admin to add some."}
                   </p>
                 ) : (
                   keywords.map((keyword) => (
                     <Badge
                       key={keyword}
                       variant="secondary"
-                      className={canEditKeywords 
+                      className={!isCompanyKeywords 
                         ? "cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
                         : ""
                       }
-                      onClick={canEditKeywords ? () => onRemoveKeyword(keyword) : undefined}
+                      onClick={!isCompanyKeywords ? () => onRemoveKeyword(keyword) : undefined}
                     >
                       {keyword}
-                      {canEditKeywords && <X className="h-3 w-3 ml-1" />}
+                      {!isCompanyKeywords && <X className="h-3 w-3 ml-1" />}
                     </Badge>
                   ))
                 )}
               </div>
               
-              {canEditKeywords && (
+              {!isCompanyKeywords && (
                 <p className="text-xs text-muted-foreground">
                   Click on a keyword to remove it.
                 </p>
@@ -204,7 +223,7 @@ export function SettingsDialog({
             <TabsContent value="account" className="space-y-6 mt-0">
               {/* User Info */}
               <div className="space-y-2">
-                <Label className="text-base font-medium">Account</Label>
+                <Label className="text-base font-medium">Profile</Label>
                 <div className="p-3 bg-muted/50 rounded-lg space-y-1">
                   <p className="text-sm font-medium">{profile?.fullName || "No name set"}</p>
                   <p className="text-sm text-muted-foreground">{profile?.email}</p>
@@ -217,21 +236,11 @@ export function SettingsDialog({
               <div className="space-y-4">
                 <Label className="text-base font-medium">Organization</Label>
                 {company ? (
-                  <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                  <div className="p-3 bg-muted/50 rounded-lg space-y-1">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium">{company.name}</p>
-                      {isAdmin && (
-                        <Badge variant="secondary">Admin</Badge>
-                      )}
+                      <Badge variant="secondary">{isAdmin ? "Admin" : "Member"}</Badge>
                     </div>
-                    {isAdmin && company.inviteCode && (
-                      <div className="pt-2 border-t border-border">
-                        <p className="text-xs text-muted-foreground mb-1">Invite Code</p>
-                        <code className="text-sm bg-background px-2 py-1 rounded">
-                          {company.inviteCode}
-                        </code>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="p-3 bg-muted/50 rounded-lg">
@@ -256,6 +265,96 @@ export function SettingsDialog({
                 </Button>
               </div>
             </TabsContent>
+
+            {/* Admin Tab - Only visible to admins */}
+            {showAdminTab && (
+              <TabsContent value="admin" className="space-y-6 mt-0">
+                {/* Invite Code */}
+                <div className="space-y-4">
+                  <Label className="text-base font-medium">Invite Members</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Share this code with people you want to invite to your company.
+                  </p>
+                  {company?.inviteCode && (
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-sm bg-muted px-3 py-2 rounded-lg font-mono">
+                        {company.inviteCode}
+                      </code>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={handleCopyInviteCode}
+                      >
+                        {copiedCode ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Company Keywords Management */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-medium">Company Keywords</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onResetKeywords}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-1" />
+                      Reset
+                    </Button>
+                  </div>
+                  
+                  <p className="text-sm text-muted-foreground">
+                    Manage preset keywords for everyone in your company.
+                  </p>
+
+                  <div className="flex gap-2">
+                    <Input
+                      value={newKeyword}
+                      onChange={(e) => setNewKeyword(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Add a new keyword..."
+                      className="flex-1"
+                    />
+                    <Button onClick={handleAddKeyword} size="icon" variant="outline">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg min-h-[80px]">
+                    {keywords.length === 0 ? (
+                      <p className="text-sm text-muted-foreground w-full text-center py-4">
+                        No company keywords yet. Add some above!
+                      </p>
+                    ) : (
+                      keywords.map((keyword) => (
+                        <Badge
+                          key={keyword}
+                          variant="secondary"
+                          className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                          onClick={() => onRemoveKeyword(keyword)}
+                        >
+                          {keyword}
+                          <X className="h-3 w-3 ml-1" />
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                  
+                  <p className="text-xs text-muted-foreground">
+                    Click on a keyword to remove it.
+                  </p>
+                </div>
+              </TabsContent>
+            )}
           </div>
         </Tabs>
 
