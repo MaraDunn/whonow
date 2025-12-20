@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { X, Plus, RotateCcw } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor } from "lucide-react";
+import { useTheme } from "next-themes";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ export function SettingsDialog({
   onResetKeywords,
 }: SettingsDialogProps) {
   const [newKeyword, setNewKeyword] = useState("");
+  const { theme, setTheme } = useTheme();
 
   const handleAddKeyword = () => {
     if (newKeyword.trim()) {
@@ -52,6 +54,44 @@ export function SettingsDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto pr-2 space-y-6 mt-4">
+          {/* Appearance Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium">Appearance</Label>
+            <p className="text-sm text-muted-foreground">
+              Choose your preferred theme for the app.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant={theme === "light" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTheme("light")}
+                className="flex-1"
+              >
+                <Sun className="h-4 w-4 mr-2" />
+                Light
+              </Button>
+              <Button
+                variant={theme === "dark" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTheme("dark")}
+                className="flex-1"
+              >
+                <Moon className="h-4 w-4 mr-2" />
+                Dark
+              </Button>
+              <Button
+                variant={theme === "system" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTheme("system")}
+                className="flex-1"
+              >
+                <Monitor className="h-4 w-4 mr-2" />
+                System
+              </Button>
+            </div>
+          </div>
+
+          {/* Keywords Section */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-base font-medium">Preset Keywords</Label>
