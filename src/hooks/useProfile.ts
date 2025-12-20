@@ -152,29 +152,20 @@ export const useProfile = (userId?: string) => {
     mutationFn: async (companyName: string) => {
       if (!userId) throw new Error("No user ID");
 
-      // Create company
-      const { data: newCompany, error: companyError } = await supabase
+      const { data, error } = await supabase.rpc("create_company", {
+        p_name: companyName,
+      });
+
+      if (error) throw error;
+
+      // Fetch newly created company
+      const { data: newCompany, error: fetchError } = await supabase
         .from("companies")
-        .insert({ name: companyName })
-        .select()
+        .select("*")
+        .eq("id", data)
         .single();
 
-      if (companyError) throw companyError;
-
-      // Update user's profile with company_id
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ company_id: newCompany.id })
-        .eq("id", userId);
-
-      if (profileError) throw profileError;
-
-      // Add admin role
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({ user_id: userId, role: "admin" });
-
-      if (roleError) throw roleError;
+      if (fetchError) throw fetchError;
 
       return mapDbToCompany(newCompany as DbCompany);
     },
@@ -194,32 +185,22 @@ export const useProfile = (userId?: string) => {
     mutationFn: async (inviteCode: string) => {
       if (!userId) throw new Error("No user ID");
 
-      // Find company by invite code
-      const { data: foundCompany, error: findError } = await supabase
+      const { data, error } = await supabase.rpc("join_company", {
+        p_invite_code: inviteCode,
+      });
+
+      if (error) throw error;
+
+      // Fetch newly joined company
+      const { data: joinedCompany, error: fetchError } = await supabase
         .from("companies")
         .select("*")
-        .eq("invite_code", inviteCode.toLowerCase())
-        .maybeSingle();
+        .eq("id", data)
+        .single();
 
-      if (findError) throw findError;
-      if (!foundCompany) throw new Error("Invalid invite code");
+      if (fetchError) throw fetchError;
 
-      // Update user's profile with company_id
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ company_id: foundCompany.id })
-        .eq("id", userId);
-
-      if (profileError) throw profileError;
-
-      // Add member role
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({ user_id: userId, role: "member" });
-
-      if (roleError) throw roleError;
-
-      return mapDbToCompany(foundCompany as DbCompany);
+      return mapDbToCompany(joinedCompany as DbCompany);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile", userId] });
