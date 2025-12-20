@@ -58,22 +58,24 @@ export function ContactCard({
   return (
     <div
       onClick={isTrashView ? undefined : onEdit}
-      className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up"
+      className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col"
       style={{ animationDelay: `${index * 50}ms` }}
     >
-      {/* Folder indicator badge - inline above content */}
-      {folder && (
-        <div 
-          className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-secondary/80 w-fit mb-3"
-          style={{ 
-            borderLeft: `3px solid ${folder.color}`,
-          }}
-        >
-          <FolderIcon className="h-3 w-3" style={{ color: folder.color }} />
-          <span className="text-muted-foreground truncate max-w-[120px]">{folder.name}</span>
-        </div>
-      )}
-      <div className="flex items-start gap-4">
+      {/* Folder indicator badge - always reserve space for consistent height */}
+      <div className="h-7 mb-1">
+        {folder && (
+          <div 
+            className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-secondary/80 w-fit"
+            style={{ 
+              borderLeft: `3px solid ${folder.color}`,
+            }}
+          >
+            <FolderIcon className="h-3 w-3" style={{ color: folder.color }} />
+            <span className="text-muted-foreground truncate max-w-[120px]">{folder.name}</span>
+          </div>
+        )}
+      </div>
+      <div className="flex items-start gap-4 flex-1">
         <div className="relative flex-shrink-0">
           <div className="w-14 h-14 rounded-xl gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-lg group-hover:scale-105 transition-transform duration-300">
             {initials}
