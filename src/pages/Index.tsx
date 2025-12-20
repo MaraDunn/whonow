@@ -36,6 +36,7 @@ const Index = () => {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importDefaultTab, setImportDefaultTab] = useState<string | undefined>(undefined);
   const [showTrash, setShowTrash] = useState(false);
   
   const { 
@@ -233,7 +234,10 @@ const Index = () => {
               onOpenAddDialog={handleOpenAddDialog}
               onOpenProfile={handleOpenProfile}
               onOpenSettings={() => setSettingsOpen(true)}
-              onOpenImport={() => setImportDialogOpen(true)}
+              onOpenImport={(tab) => {
+                setImportDefaultTab(tab);
+                setImportDialogOpen(true);
+              }}
               myProfile={myProfile}
             />
             
@@ -315,8 +319,12 @@ const Index = () => {
 
             <ImportContactsDialog
               open={importDialogOpen}
-              onOpenChange={setImportDialogOpen}
+              onOpenChange={(open) => {
+                setImportDialogOpen(open);
+                if (!open) setImportDefaultTab(undefined);
+              }}
               onImport={handleImportContacts}
+              defaultTab={importDefaultTab}
             />
           </div>
         </div>

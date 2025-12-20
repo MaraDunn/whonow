@@ -23,18 +23,20 @@ interface ImportContactsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImport: (contacts: Omit<Contact, "id">[]) => void;
+  defaultTab?: string;
 }
 
 export function ImportContactsDialog({
   open,
   onOpenChange,
   onImport,
+  defaultTab,
 }: ImportContactsDialogProps) {
   const [selectedPhoneContacts, setSelectedPhoneContacts] = useState<Set<number>>(new Set());
   const [selectedGoogleContacts, setSelectedGoogleContacts] = useState<Set<number>>(new Set());
   const [selectedFileContacts, setSelectedFileContacts] = useState<Set<number>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState("scan");
+  const [activeTab, setActiveTab] = useState(defaultTab || "scan");
   const [cameraActive, setCameraActive] = useState(false);
   const [editedContact, setEditedContact] = useState<{
     name: string;
@@ -59,6 +61,13 @@ export function ImportContactsDialog({
       setEditedContact({ ...scanner.scannedContact });
     }
   }, [scanner.scannedContact]);
+
+  // Sync activeTab with defaultTab when dialog opens
+  useEffect(() => {
+    if (open && defaultTab) {
+      setActiveTab(defaultTab);
+    }
+  }, [open, defaultTab]);
 
   // Cleanup camera when dialog closes or tab changes
   useEffect(() => {

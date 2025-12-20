@@ -1,4 +1,4 @@
-import { Users, Plus, User, Settings, LogOut, Download } from "lucide-react";
+import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Smartphone, Chrome, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,7 @@ interface HeaderProps {
   onOpenAddDialog: () => void;
   onOpenProfile: () => void;
   onOpenSettings: () => void;
-  onOpenImport: () => void;
+  onOpenImport: (tab?: string) => void;
   myProfile?: Contact;
 }
 
@@ -46,20 +46,38 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
       </div>
 
       <div className="flex items-center gap-3">
-        <button
-          onClick={onOpenImport}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-muted text-foreground font-medium text-sm hover:bg-muted/80 transition-colors"
-        >
-          <Download className="h-4 w-4" />
-          <span>Import</span>
-        </button>
-        <button
-          onClick={onOpenAddDialog}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add Contact</span>
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20">
+              <Plus className="h-4 w-4" />
+              <span>Add Contact</span>
+              <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52 bg-popover">
+            <DropdownMenuItem className="cursor-pointer" onClick={onOpenAddDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              Manual Entry
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("scan")}>
+              <Camera className="mr-2 h-4 w-4" />
+              Scan Business Card
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("file")}>
+              <FileUp className="mr-2 h-4 w-4" />
+              Import from File
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("phone")}>
+              <Smartphone className="mr-2 h-4 w-4" />
+              Sync from Phone
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("google")}>
+              <Chrome className="mr-2 h-4 w-4" />
+              Sync from Google
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
