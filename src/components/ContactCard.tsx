@@ -1,15 +1,29 @@
 import { Contact } from "@/types/contact";
-import { Mail, Phone, Building2, Briefcase, MessageSquare } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
+import { Button } from "@/components/ui/button";
 
 interface ContactCardProps {
   contact: Contact;
   index: number;
   action?: ActionType;
   onEdit: () => void;
+  isTrashView?: boolean;
+  onDelete?: () => void;
+  onRestore?: () => void;
+  onPermanentlyDelete?: () => void;
 }
 
-export function ContactCard({ contact, index, action, onEdit }: ContactCardProps) {
+export function ContactCard({ 
+  contact, 
+  index, 
+  action, 
+  onEdit,
+  isTrashView = false,
+  onDelete,
+  onRestore,
+  onPermanentlyDelete
+}: ContactCardProps) {
   const initials = contact.name
     .split(" ")
     .map((n) => n[0])
@@ -40,7 +54,7 @@ export function ContactCard({ contact, index, action, onEdit }: ContactCardProps
 
   return (
     <div
-      onClick={onEdit}
+      onClick={isTrashView ? undefined : onEdit}
       className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up"
       style={{ animationDelay: `${index * 50}ms` }}
     >
@@ -49,7 +63,9 @@ export function ContactCard({ contact, index, action, onEdit }: ContactCardProps
           <div className="w-14 h-14 rounded-xl gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-lg group-hover:scale-105 transition-transform duration-300">
             {initials}
           </div>
-          <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-card" />
+          {!isTrashView && (
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-card" />
+          )}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -61,6 +77,21 @@ export function ContactCard({ contact, index, action, onEdit }: ContactCardProps
             {contact.role}
           </p>
         </div>
+
+        {/* Delete button for non-trash view */}
+        {!isTrashView && onDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <div className="mt-4 space-y-2.5">
@@ -103,7 +134,38 @@ export function ContactCard({ contact, index, action, onEdit }: ContactCardProps
         ))}
       </div>
 
-      {action && (
+      {/* Trash view actions */}
+      {isTrashView && (
+        <div className="mt-4 pt-4 border-t border-border flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRestore?.();
+            }}
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Restore
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="flex-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPermanentlyDelete?.();
+            }}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Forever
+          </Button>
+        </div>
+      )}
+
+      {/* Normal action button */}
+      {!isTrashView && action && (
         <div className="mt-4 pt-4 border-t border-border">
           <button
             onClick={(e) => {

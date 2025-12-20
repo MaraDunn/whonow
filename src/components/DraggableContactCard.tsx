@@ -4,17 +4,31 @@ import { ContactCard } from "./ContactCard";
 import { ActionType } from "@/hooks/useActionSearch";
 import { cn } from "@/lib/utils";
 
-interface DraggableContactCardProps {
+export interface DraggableContactCardProps {
   contact: Contact;
   index: number;
   action?: ActionType;
   onEdit: () => void;
+  isTrashView?: boolean;
+  onDelete?: () => void;
+  onRestore?: () => void;
+  onPermanentlyDelete?: () => void;
 }
 
-export function DraggableContactCard({ contact, index, action, onEdit }: DraggableContactCardProps) {
+export function DraggableContactCard({ 
+  contact, 
+  index, 
+  action, 
+  onEdit,
+  isTrashView = false,
+  onDelete,
+  onRestore,
+  onPermanentlyDelete
+}: DraggableContactCardProps) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: contact.id,
     data: { contact },
+    disabled: isTrashView, // Disable dragging for trashed items
   });
 
   const style = transform
@@ -28,10 +42,9 @@ export function DraggableContactCard({ contact, index, action, onEdit }: Draggab
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
+      {...(isTrashView ? {} : { ...listeners, ...attributes })}
       className={cn(
-        "touch-none",
+        !isTrashView && "touch-none",
         isDragging && "opacity-50"
       )}
     >
@@ -40,6 +53,10 @@ export function DraggableContactCard({ contact, index, action, onEdit }: Draggab
         index={index}
         action={action}
         onEdit={onEdit}
+        isTrashView={isTrashView}
+        onDelete={onDelete}
+        onRestore={onRestore}
+        onPermanentlyDelete={onPermanentlyDelete}
       />
     </div>
   );
