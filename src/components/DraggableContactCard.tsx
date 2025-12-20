@@ -44,8 +44,9 @@ export function DraggableContactCard({
       style={style}
       {...(isTrashView ? {} : { ...listeners, ...attributes })}
       className={cn(
-        !isTrashView && "touch-none",
-        isDragging && "opacity-50"
+        !isTrashView && "touch-none cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-30 scale-95 transition-all duration-200",
+        !isDragging && "transition-transform duration-200"
       )}
     >
       <ContactCard
