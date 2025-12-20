@@ -19,6 +19,7 @@ export type Database = {
           avatar: string | null
           company: string | null
           created_at: string
+          deleted_at: string | null
           description: string | null
           email: string | null
           folder_id: string | null
@@ -33,6 +34,7 @@ export type Database = {
           avatar?: string | null
           company?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           email?: string | null
           folder_id?: string | null
@@ -47,6 +49,7 @@ export type Database = {
           avatar?: string | null
           company?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           email?: string | null
           folder_id?: string | null

@@ -24,18 +24,40 @@ const Index = () => {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
   
-  const { contacts, isLoading: contactsLoading, addContact, updateContact } = useContacts();
+  const { 
+    contacts, 
+    trashedContacts,
+    isLoading: contactsLoading, 
+    addContact, 
+    updateContact,
+    deleteContact,
+    restoreContact,
+    permanentlyDeleteContact,
+    emptyTrash
+  } = useContacts();
   const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults } = useCustomKeywords();
 
-  // Filter contacts by folder first
+  // Filter contacts by folder first (only for non-trash view)
   const folderFilteredContacts = useMemo(() => {
+    if (showTrash) return trashedContacts;
     if (selectedFolderId === null) return contacts;
     return contacts.filter(c => c.folderId === selectedFolderId);
-  }, [contacts, selectedFolderId]);
+  }, [contacts, trashedContacts, selectedFolderId, showTrash]);
 
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(folderFilteredContacts, searchQuery);
+
+  const handleSelectTrash = () => {
+    setShowTrash(true);
+    setSelectedFolderId(null);
+  };
+
+  const handleSelectFolder = (folderId: string | null) => {
+    setShowTrash(false);
+    setSelectedFolderId(folderId);
+  };
 
   // Calculate contact count per folder
   const contactCountByFolder = useMemo(() => {
@@ -138,12 +160,15 @@ const Index = () => {
         <FolderSidebar
           folders={folders}
           selectedFolderId={selectedFolderId}
-          onSelectFolder={setSelectedFolderId}
+          onSelectFolder={handleSelectFolder}
           onAddFolder={addFolder}
           onUpdateFolder={updateFolder}
           onDeleteFolder={deleteFolder}
           contactCountByFolder={contactCountByFolder}
           totalContacts={contacts.length}
+          trashCount={trashedContacts.length}
+          showTrash={showTrash}
+          onSelectTrash={handleSelectTrash}
         />
 
         {/* Main Content */}
@@ -200,8 +225,13 @@ const Index = () => {
             <ContactGrid
               contacts={filteredContacts}
               searchQuery={searchQuery}
-              action={action}
+              action={showTrash ? undefined : action}
               onEditContact={handleEditContact}
+              isTrashView={showTrash}
+              onDeleteContact={deleteContact}
+              onRestoreContact={restoreContact}
+              onPermanentlyDelete={permanentlyDeleteContact}
+              onEmptyTrash={emptyTrash}
             />
 
             <ContactFormDialog

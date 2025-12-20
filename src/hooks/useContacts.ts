@@ -16,6 +16,7 @@ type DbContact = {
   folder_id: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 };
 
 const mapDbToContact = (db: DbContact): Contact => ({
@@ -46,13 +47,30 @@ const mapContactToDb = (contact: Omit<Contact, "id">) => ({
 export const useContacts = () => {
   const queryClient = useQueryClient();
 
+  // Fetch active contacts (not deleted)
   const { data: contacts = [], isLoading } = useQuery({
     queryKey: ["contacts"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("contacts")
         .select("*")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return (data as DbContact[]).map(mapDbToContact);
+    },
+  });
+
+  // Fetch trashed contacts
+  const { data: trashedContacts = [], isLoading: trashLoading } = useQuery({
+    queryKey: ["contacts", "trash"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contacts")
+        .select("*")
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false });
 
       if (error) throw error;
       return (data as DbContact[]).map(mapDbToContact);
@@ -100,25 +118,85 @@ export const useContacts = () => {
     },
   });
 
+  // Soft delete - move to trash
   const deleteContact = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("contacts").delete().eq("id", id);
+      const { error } = await supabase
+        .from("contacts")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      toast.success("Contact deleted successfully");
+      toast.success("Contact moved to trash");
     },
     onError: (error) => {
       toast.error("Failed to delete contact: " + error.message);
     },
   });
 
+  // Restore from trash
+  const restoreContact = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("contacts")
+        .update({ deleted_at: null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      toast.success("Contact restored");
+    },
+    onError: (error) => {
+      toast.error("Failed to restore contact: " + error.message);
+    },
+  });
+
+  // Permanently delete
+  const permanentlyDeleteContact = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("contacts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      toast.success("Contact permanently deleted");
+    },
+    onError: (error) => {
+      toast.error("Failed to delete contact: " + error.message);
+    },
+  });
+
+  // Empty trash - delete all trashed contacts
+  const emptyTrash = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("contacts")
+        .delete()
+        .not("deleted_at", "is", null);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      toast.success("Trash emptied");
+    },
+    onError: (error) => {
+      toast.error("Failed to empty trash: " + error.message);
+    },
+  });
+
   return {
     contacts,
+    trashedContacts,
     isLoading,
+    trashLoading,
     addContact: addContact.mutate,
     updateContact: updateContact.mutate,
     deleteContact: deleteContact.mutate,
+    restoreContact: restoreContact.mutate,
+    permanentlyDeleteContact: permanentlyDeleteContact.mutate,
+    emptyTrash: emptyTrash.mutate,
   };
 };
