@@ -27,29 +27,37 @@ serve(async (req) => {
     }
 
     // Build context from contacts for better matching
-    const contactContext = contacts?.map((c: any) => 
-      `${c.name} (${c.role} at ${c.company}): ${c.description || ''} - Tags: ${c.tags?.join(', ') || 'none'}`
+    const contactContext = contacts?.map((c: any, i: number) => 
+      `[${i + 1}] ${c.name} | Role: ${c.role || 'N/A'} | Company: ${c.company || 'N/A'} | Description: ${c.description || 'N/A'} | Tags: ${c.tags?.join(', ') || 'none'}`
     ).join('\n') || '';
 
-    const systemPrompt = `You are a search query interpreter for a contacts app. Your job is to understand natural language questions and extract:
-1. The intent (what the user is looking for)
-2. Keywords to match against contact names, roles, companies, descriptions, and tags
+    const systemPrompt = `You are an intelligent search assistant for a contacts directory. Analyze the user's query and find the BEST matching contacts.
 
-Available contacts:
+CONTACTS DATABASE:
 ${contactContext}
 
-Respond with JSON only, no other text. Format:
+YOUR TASK:
+1. Understand what the user is looking for (role, skill, department, responsibility, etc.)
+2. Match against ALL contact fields: name, role, company, description, and tags
+3. Use semantic understanding - "art decisions" matches "Art Director", "handles HR" matches "HR Manager"
+4. Include related/synonymous terms when matching
+
+RESPOND WITH ONLY THIS JSON (no markdown, no extra text):
 {
-  "isQuestion": true/false,
-  "intent": "brief description of what user is looking for",
-  "keywords": ["keyword1", "keyword2"],
-  "matchingContactNames": ["name1", "name2"] // Names of contacts that match the query
+  "isQuestion": true,
+  "intent": "brief description of what user seeks",
+  "keywords": ["primary_keyword", "related_term1", "related_term2"],
+  "matchingContactNames": ["Exact Name 1", "Exact Name 2"],
+  "confidence": "high|medium|low"
 }
 
-Examples:
-- "Who handles marketing?" → {"isQuestion": true, "intent": "find marketing contact", "keywords": ["marketing"], "matchingContactNames": ["Sarah Johnson"]}
-- "Find someone for React" → {"isQuestion": true, "intent": "find React developer", "keywords": ["react", "frontend", "developer"], "matchingContactNames": ["Michael Chen"]}
-- "Who can help with design?" → {"isQuestion": true, "intent": "find designer", "keywords": ["design", "ui", "ux"], "matchingContactNames": ["Emily Davis"]}`;
+MATCHING RULES:
+- If query asks about a DEPARTMENT/FUNCTION (HR, marketing, art, engineering), match people in that area
+- If query asks about DECISIONS/AUTHORITY, look for managers, directors, leads, or descriptions mentioning authority
+- Match partial terms: "art" matches "Art Director", "Artist", "Art Department"
+- Use descriptions carefully - they often contain the most relevant context
+- Return empty matchingContactNames array if no good matches exist
+- Always return the EXACT name as it appears in the database`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
