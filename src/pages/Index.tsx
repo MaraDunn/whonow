@@ -34,7 +34,7 @@ import { toast } from "sonner";
 
 const Index = () => {
   const { user } = useAuth();
-  const { needsCompanySetup, createCompany, joinCompany } = useProfile(user?.id);
+  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup } = useProfile(user?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -349,6 +349,7 @@ const Index = () => {
                 open={needsCompanySetup}
                 onCreateCompany={createCompany}
                 onJoinCompany={joinCompany}
+                onSkipCompanySetup={skipCompanySetup}
               />
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, Users, ArrowRight } from "lucide-react";
+import { Building2, Users, ArrowRight, User } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,17 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 
 interface CompanySetupDialogProps {
   open: boolean;
   onCreateCompany: (name: string) => void;
   onJoinCompany: (inviteCode: string) => void;
+  onSkipCompanySetup: () => void;
 }
 
 export function CompanySetupDialog({
   open,
   onCreateCompany,
   onJoinCompany,
+  onSkipCompanySetup,
 }: CompanySetupDialogProps) {
   const [companyName, setCompanyName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -41,13 +44,19 @@ export function CompanySetupDialog({
     setIsSubmitting(false);
   };
 
+  const handleSkip = async () => {
+    setIsSubmitting(true);
+    await onSkipCompanySetup();
+    setIsSubmitting(false);
+  };
+
   return (
     <Dialog open={open}>
       <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="text-xl">Welcome! Let's get you set up</DialogTitle>
           <DialogDescription>
-            Create a new company or join an existing one to start managing contacts.
+            Join a company to collaborate with your team, or continue as an individual user.
           </DialogDescription>
         </DialogHeader>
 
@@ -127,6 +136,26 @@ export function CompanySetupDialog({
             </Button>
           </TabsContent>
         </Tabs>
+
+        <div className="relative my-4">
+          <Separator />
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs text-muted-foreground">
+            or
+          </span>
+        </div>
+
+        <Button
+          variant="outline"
+          onClick={handleSkip}
+          disabled={isSubmitting}
+          className="w-full"
+        >
+          <User className="h-4 w-4 mr-2" />
+          Continue as Individual
+        </Button>
+        <p className="text-xs text-center text-muted-foreground">
+          You can join or create a company later from settings
+        </p>
       </DialogContent>
     </Dialog>
   );

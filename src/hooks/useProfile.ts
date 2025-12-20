@@ -13,6 +13,7 @@ type DbProfile = {
   avatar_url: string | null;
   description: string | null;
   is_visible_in_directory: boolean | null;
+  has_completed_company_setup: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -35,6 +36,7 @@ const mapDbToProfile = (db: DbProfile): Profile => ({
   avatarUrl: db.avatar_url || undefined,
   description: db.description || undefined,
   isVisibleInDirectory: db.is_visible_in_directory ?? true,
+  hasCompletedCompanySetup: db.has_completed_company_setup ?? false,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });
@@ -213,6 +215,27 @@ export const useProfile = (userId?: string) => {
     },
   });
 
+  // Skip company setup (continue as individual)
+  const skipCompanySetup = useMutation({
+    mutationFn: async () => {
+      if (!userId) throw new Error("No user ID");
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ has_completed_company_setup: true })
+        .eq("id", userId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+      toast.success("You can join a company anytime from settings");
+    },
+    onError: (error) => {
+      toast.error("Failed to continue: " + error.message);
+    },
+  });
+
   return {
     profile,
     company,
@@ -223,6 +246,7 @@ export const useProfile = (userId?: string) => {
     updateProfile: updateProfile.mutate,
     createCompany: createCompany.mutate,
     joinCompany: joinCompany.mutate,
-    needsCompanySetup: !!profile && !profile.companyId,
+    skipCompanySetup: skipCompanySetup.mutate,
+    needsCompanySetup: !!profile && !profile.companyId && !profile.hasCompletedCompanySetup,
   };
 };
