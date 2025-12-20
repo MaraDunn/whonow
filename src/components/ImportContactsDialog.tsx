@@ -341,8 +341,8 @@ export function ImportContactsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col overflow-hidden">
+          <TabsList className="grid w-full grid-cols-4 shrink-0">
             <TabsTrigger value="scan" className="flex items-center gap-2">
               <Camera className="h-4 w-4" />
               Scan
@@ -362,7 +362,7 @@ export function ImportContactsDialog({
           </TabsList>
 
           {/* Scan Tab */}
-          <TabsContent value="scan" className="space-y-4">
+          <TabsContent value="scan" className="flex-1 overflow-y-auto mt-4">
             {!scanner.scannedContact && !scanner.capturedImage ? (
               <div className="space-y-4">
                 {cameraActive ? (
@@ -437,8 +437,7 @@ export function ImportContactsDialog({
                 <p className="text-sm text-muted-foreground">Analyzing business card...</p>
               </div>
             ) : scanner.scannedContact && editedContact ? (
-              <ScrollArea className="max-h-[50vh] pr-4">
-                <div className="space-y-4">
+              <div className="space-y-4 pb-2">
                   
                   {/* Avatar Upload */}
                   <div className="flex flex-col items-center gap-2">
@@ -630,8 +629,7 @@ export function ImportContactsDialog({
                       Add Contact
                     </Button>
                   </div>
-                </div>
-              </ScrollArea>
+              </div>
             ) : scanner.capturedImage && scanner.error ? (
               <div className="space-y-4">
                 <div className="rounded-lg overflow-hidden bg-muted">
