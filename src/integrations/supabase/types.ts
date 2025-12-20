@@ -221,6 +221,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_company: { Args: { p_name: string }; Returns: string }
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -229,6 +230,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      join_company: { Args: { p_invite_code: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "member"
