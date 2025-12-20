@@ -61,16 +61,16 @@ export function ContactCard({
       className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up"
       style={{ animationDelay: `${index * 50}ms` }}
     >
-      {/* Folder indicator badge */}
+      {/* Folder indicator badge - inline above content */}
       {folder && (
         <div 
-          className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-secondary/80 backdrop-blur-sm"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-secondary/80 w-fit mb-3"
           style={{ 
             borderLeft: `3px solid ${folder.color}`,
           }}
         >
           <FolderIcon className="h-3 w-3" style={{ color: folder.color }} />
-          <span className="text-muted-foreground truncate max-w-[80px]">{folder.name}</span>
+          <span className="text-muted-foreground truncate max-w-[120px]">{folder.name}</span>
         </div>
       )}
       <div className="flex items-start gap-4">
