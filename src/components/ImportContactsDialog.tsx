@@ -86,7 +86,7 @@ export function ImportContactsDialog({
       setEditedContact({ 
         ...scanner.scannedContact,
         description: "",
-        tags: ["scanned-card"],
+        tags: [],
         avatar: undefined,
         folderId: defaultFolderId || undefined,
       });
