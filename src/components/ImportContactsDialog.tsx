@@ -439,15 +439,6 @@ export function ImportContactsDialog({
             ) : scanner.scannedContact && editedContact ? (
               <ScrollArea className="max-h-[50vh] pr-4">
                 <div className="space-y-4">
-                  {scanner.capturedImage && (
-                    <div className="rounded-lg overflow-hidden bg-muted">
-                      <img
-                        src={scanner.capturedImage}
-                        alt="Captured business card"
-                        className="w-full h-24 object-cover"
-                      />
-                    </div>
-                  )}
                   
                   {/* Avatar Upload */}
                   <div className="flex flex-col items-center gap-2">
