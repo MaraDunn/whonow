@@ -89,13 +89,6 @@ export function FolderSidebar({
           <span className="text-xs opacity-70">{totalContacts}</span>
         </button>
 
-        {/* No Folder Drop Target */}
-        <DroppableFolder
-          folder={null}
-          isSelected={false}
-          contactCount={unfolderedCount}
-          onClick={() => {}}
-        />
 
         {/* Folder List */}
         {folders.map((folder) => (
