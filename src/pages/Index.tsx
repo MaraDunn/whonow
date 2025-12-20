@@ -20,6 +20,7 @@ import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
 import { ContactCard } from "@/components/ContactCard";
+import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -34,7 +35,7 @@ import { toast } from "sonner";
 
 const Index = () => {
   const { user } = useAuth();
-  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup } = useProfile(user?.id);
+  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, companyMembers, company } = useProfile(user?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -45,6 +46,7 @@ const Index = () => {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importDefaultTab, setImportDefaultTab] = useState<string | undefined>(undefined);
   const [showTrash, setShowTrash] = useState(false);
+  const [showDirectory, setShowDirectory] = useState(false);
   
   const { 
     contacts, 
@@ -71,12 +73,20 @@ const Index = () => {
 
   const handleSelectTrash = () => {
     setShowTrash(true);
+    setShowDirectory(false);
     setSelectedFolderId(null);
   };
 
   const handleSelectFolder = (folderId: string | null) => {
     setShowTrash(false);
+    setShowDirectory(false);
     setSelectedFolderId(folderId);
+  };
+
+  const handleSelectDirectory = () => {
+    setShowDirectory(true);
+    setShowTrash(false);
+    setSelectedFolderId(null);
   };
 
   // Calculate contact count per folder
@@ -232,6 +242,9 @@ const Index = () => {
             trashCount={trashedContacts.length}
             showTrash={showTrash}
             onSelectTrash={handleSelectTrash}
+            companyMembers={companyMembers}
+            showDirectory={showDirectory}
+            onSelectDirectory={company ? handleSelectDirectory : undefined}
           />
 
           {/* Main Content */}
@@ -296,18 +309,30 @@ const Index = () => {
                 </div>
               )}
 
-              <ContactGrid
-                contacts={filteredContacts}
-                searchQuery={searchQuery}
-                action={showTrash ? undefined : action}
-                onEditContact={handleEditContact}
-                isTrashView={showTrash}
-                onDeleteContact={deleteContact}
-                onRestoreContact={restoreContact}
-                onPermanentlyDelete={permanentlyDeleteContact}
-                onEmptyTrash={emptyTrash}
-                folders={folders}
-              />
+              {showDirectory ? (
+                <>
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-display font-semibold">Team Directory</h2>
+                    <p className="text-muted-foreground mt-1">
+                      {company?.name} • {companyMembers.length} member{companyMembers.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <TeamDirectoryGrid members={companyMembers} />
+                </>
+              ) : (
+                <ContactGrid
+                  contacts={filteredContacts}
+                  searchQuery={searchQuery}
+                  action={showTrash ? undefined : action}
+                  onEditContact={handleEditContact}
+                  isTrashView={showTrash}
+                  onDeleteContact={deleteContact}
+                  onRestoreContact={restoreContact}
+                  onPermanentlyDelete={permanentlyDeleteContact}
+                  onEmptyTrash={emptyTrash}
+                  folders={folders}
+                />
+              )}
 
               <ContactFormDialog
                 open={dialogOpen}
