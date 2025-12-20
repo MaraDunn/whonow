@@ -50,21 +50,44 @@ function isQuestion(query: string): boolean {
 }
 
 function basicSearch(contacts: Contact[], searchTerms: string[]): Contact[] {
-  return contacts.filter((contact) => {
-    const searchableText = [
-      contact.name,
-      contact.email,
-      contact.phone,
-      contact.company,
-      contact.role,
-      contact.description || "",
-      ...contact.tags,
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    return searchTerms.every((term) => searchableText.includes(term));
+  // Score each contact based on how well they match
+  const scoredContacts = contacts.map((contact) => {
+    const fields = {
+      name: (contact.name || "").toLowerCase(),
+      email: (contact.email || "").toLowerCase(),
+      phone: (contact.phone || "").toLowerCase(),
+      company: (contact.company || "").toLowerCase(),
+      role: (contact.role || "").toLowerCase(),
+      description: (contact.description || "").toLowerCase(),
+      tags: contact.tags.join(" ").toLowerCase(),
+    };
+    
+    const allText = Object.values(fields).join(" ");
+    
+    let score = 0;
+    for (const term of searchTerms) {
+      // Exact match in name = highest priority
+      if (fields.name.includes(term)) score += 10;
+      // Match in role = high priority
+      if (fields.role.includes(term)) score += 8;
+      // Match in tags = high priority
+      if (fields.tags.includes(term)) score += 7;
+      // Match in description = medium priority
+      if (fields.description.includes(term)) score += 5;
+      // Match in company = medium priority
+      if (fields.company.includes(term)) score += 4;
+      // Match anywhere
+      if (allText.includes(term)) score += 1;
+    }
+    
+    return { contact, score };
   });
+  
+  // Return contacts with any match, sorted by score
+  return scoredContacts
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(({ contact }) => contact);
 }
 
 export function useSmartSearch(contacts: Contact[], query: string): SmartSearchResult {
@@ -173,23 +196,35 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
       return contacts;
     }
 
-    // If AI returned matching names, use those
+    // If AI returned matching names, use those with exact matching
     if (aiResult?.matchingNames && aiResult.matchingNames.length > 0) {
-      return contacts.filter(c => 
-        aiResult.matchingNames.some(name => 
-          c.name.toLowerCase().includes(name.toLowerCase()) ||
-          name.toLowerCase().includes(c.name.toLowerCase())
-        )
+      const aiMatches = contacts.filter(c => 
+        aiResult.matchingNames.some(name => {
+          const contactName = c.name.toLowerCase().trim();
+          const matchName = name.toLowerCase().trim();
+          // Exact match or close enough
+          return contactName === matchName || 
+                 contactName.includes(matchName) ||
+                 matchName.includes(contactName);
+        })
       );
+      
+      // If AI found matches, return them; otherwise fall back to keyword search
+      if (aiMatches.length > 0) {
+        return aiMatches;
+      }
     }
 
-    // If AI returned keywords but no names, search with keywords
+    // If AI returned keywords, combine with basic search
     if (aiResult?.keywords && aiResult.keywords.length > 0) {
-      return basicSearch(contacts, aiResult.keywords);
+      const keywordResults = basicSearch(contacts, aiResult.keywords.map(k => k.toLowerCase()));
+      if (keywordResults.length > 0) {
+        return keywordResults;
+      }
     }
 
     // Fall back to basic search with the search term
-    const searchTerms = searchTerm.toLowerCase().split(" ").filter(Boolean);
+    const searchTerms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean);
     if (searchTerms.length === 0 && action) {
       return contacts; // Just action word, show all
     }
