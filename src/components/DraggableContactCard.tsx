@@ -34,22 +34,35 @@ export function DraggableContactCard({
     disabled: isTrashView, // Disable dragging for trashed items
   });
 
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        zIndex: 1000,
-      }
-    : undefined;
+  // Hide the original element completely when dragging - the DragOverlay shows the preview
+  if (isDragging) {
+    return (
+      <div
+        ref={setNodeRef}
+        className="opacity-0 pointer-events-none"
+      >
+        <ContactCard
+          contact={contact}
+          index={index}
+          action={action}
+          onEdit={onEdit}
+          isTrashView={isTrashView}
+          onDelete={onDelete}
+          onRestore={onRestore}
+          onPermanentlyDelete={onPermanentlyDelete}
+          folder={folder}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
       {...(isTrashView ? {} : { ...listeners, ...attributes })}
       className={cn(
         !isTrashView && "touch-none cursor-grab active:cursor-grabbing",
-        isDragging && "opacity-30 scale-95 transition-all duration-200",
-        !isDragging && "transition-transform duration-200"
+        "transition-transform duration-200"
       )}
     >
       <ContactCard
