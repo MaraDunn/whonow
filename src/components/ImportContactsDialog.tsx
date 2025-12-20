@@ -13,17 +13,32 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { usePhoneContacts } from "@/hooks/usePhoneContacts";
 import { useGoogleContacts } from "@/hooks/useGoogleContacts";
 import { useFileContacts } from "@/hooks/useFileContacts";
 import { useBusinessCardScanner } from "@/hooks/useBusinessCardScanner";
+import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { Contact } from "@/types/contact";
+import { Folder } from "@/types/folder";
 
 interface ImportContactsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImport: (contacts: Omit<Contact, "id">[]) => void;
   defaultTab?: string;
+  folders?: Folder[];
+  presetKeywords?: string[];
+  defaultFolderId?: string | null;
 }
 
 export function ImportContactsDialog({
@@ -31,6 +46,9 @@ export function ImportContactsDialog({
   onOpenChange,
   onImport,
   defaultTab,
+  folders = [],
+  presetKeywords = [],
+  defaultFolderId,
 }: ImportContactsDialogProps) {
   const [selectedPhoneContacts, setSelectedPhoneContacts] = useState<Set<number>>(new Set());
   const [selectedGoogleContacts, setSelectedGoogleContacts] = useState<Set<number>>(new Set());
@@ -44,7 +62,14 @@ export function ImportContactsDialog({
     phone: string;
     company: string;
     role: string;
+    description: string;
+    tags: string[];
+    avatar?: string;
+    folderId?: string;
   } | null>(null);
+  const [tagInput, setTagInput] = useState("");
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const { uploadAvatar, uploading: avatarUploading } = useAvatarUpload();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanFileInputRef = useRef<HTMLInputElement>(null);
@@ -58,9 +83,15 @@ export function ImportContactsDialog({
   // Update edited contact when scanned contact changes
   useEffect(() => {
     if (scanner.scannedContact) {
-      setEditedContact({ ...scanner.scannedContact });
+      setEditedContact({ 
+        ...scanner.scannedContact,
+        description: "",
+        tags: ["scanned-card"],
+        avatar: undefined,
+        folderId: defaultFolderId || undefined,
+      });
     }
-  }, [scanner.scannedContact]);
+  }, [scanner.scannedContact, defaultFolderId]);
 
   // Sync activeTab with defaultTab when dialog opens
   useEffect(() => {
@@ -141,13 +172,53 @@ export function ImportContactsDialog({
       phone: editedContact.phone,
       company: editedContact.company,
       role: editedContact.role,
-      tags: ["scanned-card"],
+      description: editedContact.description || undefined,
+      tags: editedContact.tags,
+      avatar: editedContact.avatar,
+      folderId: editedContact.folderId,
     }]);
 
     scanner.reset();
     setEditedContact(null);
+    setTagInput("");
     setCameraActive(false);
     onOpenChange(false);
+  };
+
+  const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      if (!editedContact) return;
+      const newTag = tagInput.trim().toLowerCase();
+      if (newTag && !editedContact.tags.includes(newTag)) {
+        setEditedContact({ ...editedContact, tags: [...editedContact.tags, newTag] });
+      }
+      setTagInput("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    if (!editedContact) return;
+    setEditedContact({ ...editedContact, tags: editedContact.tags.filter((t) => t !== tagToRemove) });
+  };
+
+  const togglePresetTag = (preset: string) => {
+    if (!editedContact) return;
+    if (editedContact.tags.includes(preset)) {
+      setEditedContact({ ...editedContact, tags: editedContact.tags.filter((t) => t !== preset) });
+    } else {
+      setEditedContact({ ...editedContact, tags: [...editedContact.tags, preset] });
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editedContact) return;
+    if (!file.type.startsWith("image/")) return;
+    const url = await uploadAvatar(file);
+    if (url) {
+      setEditedContact({ ...editedContact, avatar: url });
+    }
   };
 
   const togglePhoneContact = (index: number) => {
@@ -251,14 +322,18 @@ export function ImportContactsDialog({
   const handleScanReset = () => {
     scanner.reset();
     setEditedContact(null);
+    setTagInput("");
     if (scanFileInputRef.current) {
       scanFileInputRef.current.value = "";
+    }
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = "";
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Import Contacts</DialogTitle>
           <DialogDescription>
@@ -362,89 +437,210 @@ export function ImportContactsDialog({
                 <p className="text-sm text-muted-foreground">Analyzing business card...</p>
               </div>
             ) : scanner.scannedContact && editedContact ? (
-              <div className="space-y-4">
-                {scanner.capturedImage && (
-                  <div className="rounded-lg overflow-hidden bg-muted">
-                    <img
-                      src={scanner.capturedImage}
-                      alt="Captured business card"
-                      className="w-full h-32 object-cover"
+              <ScrollArea className="max-h-[50vh] pr-4">
+                <div className="space-y-4">
+                  {scanner.capturedImage && (
+                    <div className="rounded-lg overflow-hidden bg-muted">
+                      <img
+                        src={scanner.capturedImage}
+                        alt="Captured business card"
+                        className="w-full h-24 object-cover"
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Avatar Upload */}
+                  <div className="flex flex-col items-center gap-2">
+                    <div 
+                      className="relative cursor-pointer group"
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      <Avatar className="h-16 w-16 border-2 border-border">
+                        <AvatarImage src={editedContact.avatar} alt={editedContact.name || "Avatar"} />
+                        <AvatarFallback className="text-sm bg-muted">
+                          {editedContact.name ? editedContact.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {avatarUploading ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Camera className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    </div>
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                      disabled={avatarUploading}
                     />
+                    <span className="text-xs text-muted-foreground">Click to add photo</span>
                   </div>
-                )}
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="scan-name">Name</Label>
-                    <Input
-                      id="scan-name"
-                      value={editedContact.name}
-                      onChange={(e) => setEditedContact({ ...editedContact, name: e.target.value })}
-                      placeholder="Full name"
-                    />
+
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="scan-name">Name *</Label>
+                      <Input
+                        id="scan-name"
+                        value={editedContact.name}
+                        onChange={(e) => setEditedContact({ ...editedContact, name: e.target.value })}
+                        placeholder="Full name"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="scan-email">Email</Label>
+                        <Input
+                          id="scan-email"
+                          type="email"
+                          value={editedContact.email}
+                          onChange={(e) => setEditedContact({ ...editedContact, email: e.target.value })}
+                          placeholder="email@example.com"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="scan-phone">Phone</Label>
+                        <Input
+                          id="scan-phone"
+                          value={editedContact.phone}
+                          onChange={(e) => setEditedContact({ ...editedContact, phone: e.target.value })}
+                          placeholder="+1 555-1234"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="scan-company">Company</Label>
+                        <Input
+                          id="scan-company"
+                          value={editedContact.company}
+                          onChange={(e) => setEditedContact({ ...editedContact, company: e.target.value })}
+                          placeholder="Company name"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="scan-role">Role</Label>
+                        <Input
+                          id="scan-role"
+                          value={editedContact.role}
+                          onChange={(e) => setEditedContact({ ...editedContact, role: e.target.value })}
+                          placeholder="Job title"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Folder Selector */}
+                    {folders.length > 0 && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="scan-folder">Folder</Label>
+                        <Select 
+                          value={editedContact.folderId || "none"} 
+                          onValueChange={(val) => setEditedContact({ ...editedContact, folderId: val === "none" ? undefined : val })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a folder..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No folder</SelectItem>
+                            {folders.map((folder) => (
+                              <SelectItem key={folder.id} value={folder.id}>
+                                <span className="flex items-center gap-2">
+                                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: folder.color }} />
+                                  {folder.name}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* Keywords */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="scan-tags">Keywords</Label>
+                      {presetKeywords.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {presetKeywords.map((preset) => {
+                            const isSelected = editedContact.tags.includes(preset);
+                            return (
+                              <Badge
+                                key={preset}
+                                variant={isSelected ? "default" : "outline"}
+                                className={`cursor-pointer transition-colors text-xs ${
+                                  isSelected
+                                    ? "bg-primary text-primary-foreground"
+                                    : "hover:bg-accent hover:text-accent-foreground"
+                                }`}
+                                onClick={() => togglePresetTag(preset)}
+                              >
+                                {isSelected && <Check className="h-2.5 w-2.5 mr-1" />}
+                                {preset}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <Input
+                        id="scan-tags"
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={handleAddTag}
+                        placeholder="Type custom keywords..."
+                      />
+                      {editedContact.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {editedContact.tags.map((tag) => (
+                            <Badge
+                              key={tag}
+                              variant="secondary"
+                              className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground text-xs"
+                              onClick={() => removeTag(tag)}
+                            >
+                              {tag}
+                              <X className="h-2.5 w-2.5 ml-1" />
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Description */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="scan-description">Description</Label>
+                      <Textarea
+                        id="scan-description"
+                        value={editedContact.description}
+                        onChange={(e) => setEditedContact({ ...editedContact, description: e.target.value })}
+                        placeholder="What do they handle? (e.g., 'Handles all marketing campaigns')"
+                        rows={2}
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="scan-email">Email</Label>
-                      <Input
-                        id="scan-email"
-                        type="email"
-                        value={editedContact.email}
-                        onChange={(e) => setEditedContact({ ...editedContact, email: e.target.value })}
-                        placeholder="email@example.com"
-                      />
+                  {scanner.error && (
+                    <div className="flex items-center gap-2 text-destructive text-sm">
+                      <AlertCircle className="h-4 w-4" />
+                      {scanner.error}
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="scan-phone">Phone</Label>
-                      <Input
-                        id="scan-phone"
-                        value={editedContact.phone}
-                        onChange={(e) => setEditedContact({ ...editedContact, phone: e.target.value })}
-                        placeholder="+1 555-1234"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="scan-company">Company</Label>
-                      <Input
-                        id="scan-company"
-                        value={editedContact.company}
-                        onChange={(e) => setEditedContact({ ...editedContact, company: e.target.value })}
-                        placeholder="Company name"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="scan-role">Role</Label>
-                      <Input
-                        id="scan-role"
-                        value={editedContact.role}
-                        onChange={(e) => setEditedContact({ ...editedContact, role: e.target.value })}
-                        placeholder="Job title"
-                      />
-                    </div>
+                  )}
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={handleScanReset} variant="outline" className="gap-2">
+                      <RotateCcw className="h-4 w-4" />
+                      Scan Another
+                    </Button>
+                    <Button
+                      onClick={handleScannedImport}
+                      disabled={!editedContact.name}
+                      className="flex-1 gap-2"
+                    >
+                      <Check className="h-4 w-4" />
+                      Add Contact
+                    </Button>
                   </div>
                 </div>
-                {scanner.error && (
-                  <div className="flex items-center gap-2 text-destructive text-sm">
-                    <AlertCircle className="h-4 w-4" />
-                    {scanner.error}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <Button onClick={handleScanReset} variant="outline" className="gap-2">
-                    <RotateCcw className="h-4 w-4" />
-                    Scan Another
-                  </Button>
-                  <Button
-                    onClick={handleScannedImport}
-                    disabled={!editedContact.name}
-                    className="flex-1 gap-2"
-                  >
-                    <Check className="h-4 w-4" />
-                    Add Contact
-                  </Button>
-                </div>
-              </div>
+              </ScrollArea>
             ) : scanner.capturedImage && scanner.error ? (
               <div className="space-y-4">
                 <div className="rounded-lg overflow-hidden bg-muted">
