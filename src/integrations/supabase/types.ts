@@ -156,6 +156,7 @@ export type Database = {
           description: string | null
           email: string | null
           full_name: string | null
+          has_completed_company_setup: boolean | null
           id: string
           is_visible_in_directory: boolean | null
           phone: string | null
@@ -169,6 +170,7 @@ export type Database = {
           description?: string | null
           email?: string | null
           full_name?: string | null
+          has_completed_company_setup?: boolean | null
           id: string
           is_visible_in_directory?: boolean | null
           phone?: string | null
@@ -182,6 +184,7 @@ export type Database = {
           description?: string | null
           email?: string | null
           full_name?: string | null
+          has_completed_company_setup?: boolean | null
           id?: string
           is_visible_in_directory?: boolean | null
           phone?: string | null

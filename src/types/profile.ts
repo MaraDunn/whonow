@@ -8,6 +8,7 @@ export interface Profile {
   avatarUrl?: string;
   description?: string;
   isVisibleInDirectory: boolean;
+  hasCompletedCompanySetup: boolean;
   createdAt: string;
   updatedAt: string;
 }
