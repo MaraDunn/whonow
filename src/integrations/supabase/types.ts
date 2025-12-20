@@ -38,6 +38,35 @@ export type Database = {
         }
         Relationships: []
       }
+      company_keywords: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          keyword: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          keyword: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          keyword?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_keywords_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           avatar: string | null

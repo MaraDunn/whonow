@@ -58,7 +58,7 @@ const Index = () => {
     emptyTrash
   } = useContacts();
   const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
-  const { keywords, addKeyword, removeKeyword, resetToDefaults } = useCustomKeywords();
+  const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
 
   // Filter contacts by folder first (only for non-trash view)
   const folderFilteredContacts = useMemo(() => {
@@ -330,6 +330,8 @@ const Index = () => {
                 onAddKeyword={addKeyword}
                 onRemoveKeyword={removeKeyword}
                 onResetKeywords={resetToDefaults}
+                isCompanyKeywords={isCompanyKeywords}
+                canEditKeywords={canEditKeywords}
               />
 
               <ImportContactsDialog
