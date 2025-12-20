@@ -12,6 +12,7 @@ import {
   KeyboardSensor,
   DragOverEvent
 } from "@dnd-kit/core";
+import { PanelLeft } from "lucide-react";
 import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
@@ -20,6 +21,7 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
 import { ContactCard } from "@/components/ContactCard";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
@@ -202,153 +204,162 @@ const Index = () => {
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={pointerWithin}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-      onDragCancel={handleDragCancel}
-    >
-      <div className="min-h-screen bg-background flex">
-        {/* Folder Sidebar */}
-        <FolderSidebar
-          folders={folders}
-          selectedFolderId={selectedFolderId}
-          onSelectFolder={handleSelectFolder}
-          onAddFolder={addFolder}
-          onUpdateFolder={updateFolder}
-          onDeleteFolder={deleteFolder}
-          contactCountByFolder={contactCountByFolder}
-          totalContacts={contacts.length}
-          trashCount={trashedContacts.length}
-          showTrash={showTrash}
-          onSelectTrash={handleSelectTrash}
-        />
+    <SidebarProvider>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <div className="min-h-screen bg-background flex w-full">
+          {/* Folder Sidebar */}
+          <FolderSidebar
+            folders={folders}
+            selectedFolderId={selectedFolderId}
+            onSelectFolder={handleSelectFolder}
+            onAddFolder={addFolder}
+            onUpdateFolder={updateFolder}
+            onDeleteFolder={deleteFolder}
+            contactCountByFolder={contactCountByFolder}
+            totalContacts={contacts.length}
+            trashCount={trashedContacts.length}
+            showTrash={showTrash}
+            onSelectTrash={handleSelectTrash}
+          />
 
-        {/* Main Content */}
-        <div className="flex-1">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-            <Header 
-              contactCount={filteredContacts.length} 
-              onOpenAddDialog={handleOpenAddDialog}
-              onOpenProfile={handleOpenProfile}
-              onOpenSettings={() => setSettingsOpen(true)}
-              onOpenImport={(tab) => {
-                setImportDefaultTab(tab);
-                setImportDialogOpen(true);
-              }}
-              myProfile={myProfile}
-            />
+          {/* Main Content */}
+          <div className="flex-1">
+            {/* Sidebar Toggle */}
+            <div className="p-2 border-b border-border">
+              <SidebarTrigger className="h-8 w-8">
+                <PanelLeft className="h-4 w-4" />
+              </SidebarTrigger>
+            </div>
             
-            <div className="mb-10">
-              <SearchBar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder="Try 'Who handles marketing?' or 'email sarah'..."
-                isLoading={searchLoading}
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+              <Header 
+                contactCount={filteredContacts.length} 
+                onOpenAddDialog={handleOpenAddDialog}
+                onOpenProfile={handleOpenProfile}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenImport={(tab) => {
+                  setImportDefaultTab(tab);
+                  setImportDialogOpen(true);
+                }}
+                myProfile={myProfile}
+              />
+              
+              <div className="mb-10">
+                <SearchBar
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Try 'Who handles marketing?' or 'email sarah'..."
+                  isLoading={searchLoading}
+                />
+              </div>
+
+              {searchQuery && (
+                <div className="mb-6 animate-fade-in">
+                  <p className="text-sm text-muted-foreground">
+                    {searchLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        Understanding your question...
+                      </span>
+                    ) : aiIntent ? (
+                      <>
+                        <span className="font-medium text-primary">{aiIntent}</span>
+                        {action && <> • Ready to <span className="font-medium">{action}</span></>}
+                        <> • {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""}</>
+                      </>
+                    ) : action ? (
+                      <>
+                        Ready to <span className="font-medium text-primary">{action}</span>
+                        {searchTerm && (
+                          <> • {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for "<span className="font-medium text-foreground">{searchTerm}</span>"</>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Showing {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for{" "}
+                        <span className="font-medium text-foreground">"{searchQuery}"</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              <ContactGrid
+                contacts={filteredContacts}
+                searchQuery={searchQuery}
+                action={showTrash ? undefined : action}
+                onEditContact={handleEditContact}
+                isTrashView={showTrash}
+                onDeleteContact={deleteContact}
+                onRestoreContact={restoreContact}
+                onPermanentlyDelete={permanentlyDeleteContact}
+                onEmptyTrash={emptyTrash}
+                folders={folders}
+              />
+
+              <ContactFormDialog
+                open={dialogOpen}
+                onOpenChange={(open) => {
+                  setDialogOpen(open);
+                  if (!open) setIsProfileMode(false);
+                }}
+                onSave={handleSaveContact}
+                contact={editingContact}
+                isProfileMode={isProfileMode}
+                presetKeywords={keywords}
+                folders={folders}
+                defaultFolderId={selectedFolderId}
+              />
+
+              <SettingsDialog
+                open={settingsOpen}
+                onOpenChange={setSettingsOpen}
+                keywords={keywords}
+                onAddKeyword={addKeyword}
+                onRemoveKeyword={removeKeyword}
+                onResetKeywords={resetToDefaults}
+              />
+
+              <ImportContactsDialog
+                open={importDialogOpen}
+                onOpenChange={(open) => {
+                  setImportDialogOpen(open);
+                  if (!open) setImportDefaultTab(undefined);
+                }}
+                onImport={handleImportContacts}
+                defaultTab={importDefaultTab}
+                folders={folders}
+                presetKeywords={keywords}
+                defaultFolderId={selectedFolderId}
               />
             </div>
-
-            {searchQuery && (
-              <div className="mb-6 animate-fade-in">
-                <p className="text-sm text-muted-foreground">
-                  {searchLoading ? (
-                    <span className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      Understanding your question...
-                    </span>
-                  ) : aiIntent ? (
-                    <>
-                      <span className="font-medium text-primary">{aiIntent}</span>
-                      {action && <> • Ready to <span className="font-medium">{action}</span></>}
-                      <> • {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""}</>
-                    </>
-                  ) : action ? (
-                    <>
-                      Ready to <span className="font-medium text-primary">{action}</span>
-                      {searchTerm && (
-                        <> • {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for "<span className="font-medium text-foreground">{searchTerm}</span>"</>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      Showing {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for{" "}
-                      <span className="font-medium text-foreground">"{searchQuery}"</span>
-                    </>
-                  )}
-                </p>
-              </div>
-            )}
-
-            <ContactGrid
-              contacts={filteredContacts}
-              searchQuery={searchQuery}
-              action={showTrash ? undefined : action}
-              onEditContact={handleEditContact}
-              isTrashView={showTrash}
-              onDeleteContact={deleteContact}
-              onRestoreContact={restoreContact}
-              onPermanentlyDelete={permanentlyDeleteContact}
-              onEmptyTrash={emptyTrash}
-              folders={folders}
-            />
-
-            <ContactFormDialog
-              open={dialogOpen}
-              onOpenChange={(open) => {
-                setDialogOpen(open);
-                if (!open) setIsProfileMode(false);
-              }}
-              onSave={handleSaveContact}
-              contact={editingContact}
-              isProfileMode={isProfileMode}
-              presetKeywords={keywords}
-              folders={folders}
-              defaultFolderId={selectedFolderId}
-            />
-
-            <SettingsDialog
-              open={settingsOpen}
-              onOpenChange={setSettingsOpen}
-              keywords={keywords}
-              onAddKeyword={addKeyword}
-              onRemoveKeyword={removeKeyword}
-              onResetKeywords={resetToDefaults}
-            />
-
-            <ImportContactsDialog
-              open={importDialogOpen}
-              onOpenChange={(open) => {
-                setImportDialogOpen(open);
-                if (!open) setImportDefaultTab(undefined);
-              }}
-              onImport={handleImportContacts}
-              defaultTab={importDefaultTab}
-              folders={folders}
-              presetKeywords={keywords}
-              defaultFolderId={selectedFolderId}
-            />
           </div>
         </div>
-      </div>
 
-      {/* Drag Overlay */}
-      <DragOverlay dropAnimation={{
-        duration: 250,
-        easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-      }}>
-        {activeContact ? (
-          <div className="rotate-2 scale-105 shadow-2xl cursor-grabbing">
-            <ContactCard
-              contact={activeContact}
-              index={0}
-              onEdit={() => {}}
-            />
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+        {/* Drag Overlay */}
+        <DragOverlay dropAnimation={{
+          duration: 250,
+          easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+        }}>
+          {activeContact ? (
+            <div className="rotate-2 scale-105 shadow-2xl cursor-grabbing">
+              <ContactCard
+                contact={activeContact}
+                index={0}
+                onEdit={() => {}}
+              />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </SidebarProvider>
   );
 };
 
