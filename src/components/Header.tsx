@@ -7,7 +7,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Contact } from "@/types/contact";
 
 interface HeaderProps {
   contactCount: number;
@@ -15,9 +16,19 @@ interface HeaderProps {
   onOpenProfile: () => void;
   onOpenSettings: () => void;
   onOpenImport: () => void;
+  myProfile?: Contact;
 }
 
-export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings, onOpenImport }: HeaderProps) {
+export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings, onOpenImport, myProfile }: HeaderProps) {
+  const profileInitials = myProfile?.name
+    ? myProfile.name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "U";
+
   return (
     <header className="flex items-center justify-between mb-8 animate-fade-in">
       <div className="flex items-center gap-4">
@@ -54,18 +65,41 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
           <DropdownMenuTrigger asChild>
             <button className="flex items-center justify-center w-10 h-10 rounded-full bg-muted hover:bg-muted/80 transition-colors">
               <Avatar className="h-9 w-9">
+                {myProfile?.avatar && <AvatarImage src={myProfile.avatar} alt={myProfile.name} />}
                 <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                  U
+                  {profileInitials}
                 </AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 bg-popover">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
+          <DropdownMenuContent align="end" className="w-56 bg-popover">
+            {myProfile ? (
+              <>
+                <div className="px-2 py-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      {myProfile.avatar && <AvatarImage src={myProfile.avatar} alt={myProfile.name} />}
+                      <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                        {profileInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-foreground truncate">{myProfile.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{myProfile.email}</p>
+                    </div>
+                  </div>
+                </div>
+                <DropdownMenuSeparator />
+              </>
+            ) : (
+              <>
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuItem className="cursor-pointer" onClick={onOpenProfile}>
               <User className="mr-2 h-4 w-4" />
-              My Contact Card
+              {myProfile ? "Edit My Card" : "Create My Card"}
             </DropdownMenuItem>
             <DropdownMenuItem className="cursor-pointer" onClick={onOpenSettings}>
               <Settings className="mr-2 h-4 w-4" />
