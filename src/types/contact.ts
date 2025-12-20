@@ -8,4 +8,5 @@ export interface Contact {
   avatar?: string;
   tags: string[];
   description?: string;
+  folderId?: string;
 }

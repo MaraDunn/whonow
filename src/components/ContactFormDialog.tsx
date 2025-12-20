@@ -12,7 +12,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Contact } from "@/types/contact";
+import { Folder } from "@/types/folder";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 
 interface ContactFormDialogProps {
@@ -22,9 +30,11 @@ interface ContactFormDialogProps {
   contact?: Contact | null;
   isProfileMode?: boolean;
   presetKeywords?: string[];
+  folders?: Folder[];
+  defaultFolderId?: string | null;
 }
 
-export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfileMode, presetKeywords = [] }: ContactFormDialogProps) {
+export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfileMode, presetKeywords = [], folders = [], defaultFolderId }: ContactFormDialogProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -34,6 +44,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
   const [tags, setTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [avatar, setAvatar] = useState<string | undefined>(undefined);
+  const [folderId, setFolderId] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadAvatar, uploading } = useAvatarUpload();
 
@@ -56,10 +67,12 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
       setTags(contact.tags);
       setDescription(contact.description || "");
       setAvatar(contact.avatar);
+      setFolderId(contact.folderId);
     } else {
       resetForm();
+      setFolderId(defaultFolderId || undefined);
     }
-  }, [contact, open]);
+  }, [contact, open, defaultFolderId]);
 
   const resetForm = () => {
     setName("");
@@ -71,6 +84,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
     setTags([]);
     setDescription("");
     setAvatar(undefined);
+    setFolderId(undefined);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,6 +140,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
       tags,
       description: description || undefined,
       avatar,
+      folderId,
     });
 
     resetForm();
@@ -231,6 +246,29 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
                 />
               </div>
             </div>
+
+            {/* Folder Selector - only show if folders exist and not profile mode */}
+            {folders.length > 0 && !isProfileMode && (
+              <div className="space-y-2">
+                <Label htmlFor="folder">Folder</Label>
+                <Select value={folderId || "none"} onValueChange={(val) => setFolderId(val === "none" ? undefined : val)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a folder..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No folder</SelectItem>
+                    {folders.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        <span className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: folder.color }} />
+                          {folder.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="tags">Keywords</Label>

@@ -13,6 +13,7 @@ type DbContact = {
   description: string | null;
   tags: string[] | null;
   avatar: string | null;
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -27,6 +28,7 @@ const mapDbToContact = (db: DbContact): Contact => ({
   description: db.description || "",
   tags: db.tags || [],
   avatar: db.avatar || undefined,
+  folderId: db.folder_id || undefined,
 });
 
 const mapContactToDb = (contact: Omit<Contact, "id">) => ({
@@ -38,6 +40,7 @@ const mapContactToDb = (contact: Omit<Contact, "id">) => ({
   description: contact.description || null,
   tags: contact.tags || [],
   avatar: contact.avatar || null,
+  folder_id: contact.folderId || null,
 });
 
 export const useContacts = () => {

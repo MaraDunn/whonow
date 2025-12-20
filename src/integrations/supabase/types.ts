@@ -21,6 +21,7 @@ export type Database = {
           created_at: string
           description: string | null
           email: string | null
+          folder_id: string | null
           id: string
           name: string
           phone: string | null
@@ -34,6 +35,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           email?: string | null
+          folder_id?: string | null
           id?: string
           name: string
           phone?: string | null
@@ -47,11 +49,44 @@ export type Database = {
           created_at?: string
           description?: string | null
           email?: string | null
+          folder_id?: string | null
           id?: string
           name?: string
           phone?: string | null
           role?: string | null
           tags?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      folders: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
           updated_at?: string
         }
         Relationships: []
