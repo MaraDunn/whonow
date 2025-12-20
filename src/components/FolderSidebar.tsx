@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,6 +21,9 @@ interface FolderSidebarProps {
   onDeleteFolder: (id: string) => void;
   contactCountByFolder: Record<string, number>;
   totalContacts: number;
+  trashCount?: number;
+  showTrash?: boolean;
+  onSelectTrash?: () => void;
 }
 
 export function FolderSidebar({
@@ -32,6 +35,9 @@ export function FolderSidebar({
   onDeleteFolder,
   contactCountByFolder,
   totalContacts,
+  trashCount = 0,
+  showTrash = false,
+  onSelectTrash,
 }: FolderSidebarProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
@@ -128,6 +134,25 @@ export function FolderSidebar({
             </DropdownMenu>
           </div>
         ))}
+
+        {/* Trash */}
+        <div className="mt-4 pt-4 border-t border-border">
+          <button
+            onClick={onSelectTrash}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              showTrash
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}
+          >
+            <Trash className="h-4 w-4" />
+            <span className="flex-1 text-left">Trash</span>
+            {trashCount > 0 && (
+              <span className="text-xs opacity-70">{trashCount}</span>
+            )}
+          </button>
+        </div>
       </nav>
 
       <FolderFormDialog
