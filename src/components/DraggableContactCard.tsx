@@ -1,5 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { Contact } from "@/types/contact";
+import { Folder } from "@/types/folder";
 import { ContactCard } from "./ContactCard";
 import { ActionType } from "@/hooks/useActionSearch";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,7 @@ export interface DraggableContactCardProps {
   onDelete?: () => void;
   onRestore?: () => void;
   onPermanentlyDelete?: () => void;
+  folder?: Folder;
 }
 
 export function DraggableContactCard({ 
@@ -23,7 +25,8 @@ export function DraggableContactCard({
   isTrashView = false,
   onDelete,
   onRestore,
-  onPermanentlyDelete
+  onPermanentlyDelete,
+  folder
 }: DraggableContactCardProps) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: contact.id,
@@ -58,6 +61,7 @@ export function DraggableContactCard({
         onDelete={onDelete}
         onRestore={onRestore}
         onPermanentlyDelete={onPermanentlyDelete}
+        folder={folder}
       />
     </div>
   );

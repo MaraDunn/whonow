@@ -1,5 +1,6 @@
 import { Contact } from "@/types/contact";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw } from "lucide-react";
+import { Folder } from "@/types/folder";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 
@@ -12,6 +13,7 @@ interface ContactCardProps {
   onDelete?: () => void;
   onRestore?: () => void;
   onPermanentlyDelete?: () => void;
+  folder?: Folder;
 }
 
 export function ContactCard({ 
@@ -22,7 +24,8 @@ export function ContactCard({
   isTrashView = false,
   onDelete,
   onRestore,
-  onPermanentlyDelete
+  onPermanentlyDelete,
+  folder
 }: ContactCardProps) {
   const initials = contact.name
     .split(" ")
@@ -58,6 +61,18 @@ export function ContactCard({
       className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up"
       style={{ animationDelay: `${index * 50}ms` }}
     >
+      {/* Folder indicator badge */}
+      {folder && (
+        <div 
+          className="absolute top-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-secondary/80 backdrop-blur-sm"
+          style={{ 
+            borderLeft: `3px solid ${folder.color}`,
+          }}
+        >
+          <FolderIcon className="h-3 w-3" style={{ color: folder.color }} />
+          <span className="text-muted-foreground truncate max-w-[80px]">{folder.name}</span>
+        </div>
+      )}
       <div className="flex items-start gap-4">
         <div className="relative flex-shrink-0">
           <div className="w-14 h-14 rounded-xl gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-lg group-hover:scale-105 transition-transform duration-300">
