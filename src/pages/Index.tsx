@@ -286,6 +286,7 @@ const Index = () => {
               onRestoreContact={restoreContact}
               onPermanentlyDelete={permanentlyDeleteContact}
               onEmptyTrash={emptyTrash}
+              folders={folders}
             />
 
             <ContactFormDialog

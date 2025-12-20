@@ -1,4 +1,5 @@
 import { Contact } from "@/types/contact";
+import { Folder } from "@/types/folder";
 import { DraggableContactCard } from "./DraggableContactCard";
 import { Users, Trash2 } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
@@ -14,6 +15,7 @@ interface ContactGridProps {
   onRestoreContact?: (id: string) => void;
   onPermanentlyDelete?: (id: string) => void;
   onEmptyTrash?: () => void;
+  folders?: Folder[];
 }
 
 export function ContactGrid({ 
@@ -25,8 +27,12 @@ export function ContactGrid({
   onDeleteContact,
   onRestoreContact,
   onPermanentlyDelete,
-  onEmptyTrash
+  onEmptyTrash,
+  folders = []
 }: ContactGridProps) {
+  // Create a map for quick folder lookup
+  const folderMap = new Map(folders.map(f => [f.id, f]));
+
   if (contacts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
@@ -80,6 +86,7 @@ export function ContactGrid({
             onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
             onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
             onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
+            folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
           />
         ))}
       </div>
