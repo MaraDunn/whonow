@@ -234,6 +234,7 @@ const Index = () => {
               onOpenProfile={handleOpenProfile}
               onOpenSettings={() => setSettingsOpen(true)}
               onOpenImport={() => setImportDialogOpen(true)}
+              myProfile={myProfile}
             />
             
             <div className="mb-10">
