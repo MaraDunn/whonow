@@ -1,4 +1,4 @@
-import { Users, Plus, User, Settings, LogOut } from "lucide-react";
+import { Users, Plus, User, Settings, LogOut, Download } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,9 +14,10 @@ interface HeaderProps {
   onOpenAddDialog: () => void;
   onOpenProfile: () => void;
   onOpenSettings: () => void;
+  onOpenImport: () => void;
 }
 
-export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings }: HeaderProps) {
+export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings, onOpenImport }: HeaderProps) {
   return (
     <header className="flex items-center justify-between mb-8 animate-fade-in">
       <div className="flex items-center gap-4">
@@ -34,6 +35,13 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
       </div>
 
       <div className="flex items-center gap-3">
+        <button
+          onClick={onOpenImport}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-muted text-foreground font-medium text-sm hover:bg-muted/80 transition-colors"
+        >
+          <Download className="h-4 w-4" />
+          <span>Import</span>
+        </button>
         <button
           onClick={onOpenAddDialog}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"

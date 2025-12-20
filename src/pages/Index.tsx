@@ -7,6 +7,7 @@ import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
 import { ContactCard } from "@/components/ContactCard";
+import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
@@ -22,6 +23,7 @@ const Index = () => {
   const [isProfileMode, setIsProfileMode] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   
   const { contacts, isLoading: contactsLoading, addContact, updateContact } = useContacts();
   const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
@@ -120,6 +122,11 @@ const Index = () => {
     setDialogOpen(true);
   };
 
+  const handleImportContacts = (contacts: Omit<Contact, "id">[]) => {
+    contacts.forEach((contact) => addContact(contact));
+    toast.success(`Imported ${contacts.length} contacts`);
+  };
+
   return (
     <DndContext
       collisionDetection={pointerWithin}
@@ -147,6 +154,7 @@ const Index = () => {
               onOpenAddDialog={handleOpenAddDialog}
               onOpenProfile={handleOpenProfile}
               onOpenSettings={() => setSettingsOpen(true)}
+              onOpenImport={() => setImportDialogOpen(true)}
             />
             
             <div className="mb-10">
@@ -217,6 +225,12 @@ const Index = () => {
               onAddKeyword={addKeyword}
               onRemoveKeyword={removeKeyword}
               onResetKeywords={resetToDefaults}
+            />
+
+            <ImportContactsDialog
+              open={importDialogOpen}
+              onOpenChange={setImportDialogOpen}
+              onImport={handleImportContacts}
             />
           </div>
         </div>
