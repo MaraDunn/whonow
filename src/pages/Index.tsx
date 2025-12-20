@@ -21,15 +21,20 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
 import { ContactCard } from "@/components/ContactCard";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
+import { CompanySetupDialog } from "@/components/CompanySetupDialog";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
 import { useCustomKeywords } from "@/hooks/useCustomKeywords";
+import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { Contact } from "@/types/contact";
 import { toast } from "sonner";
 
 const Index = () => {
+  const { user } = useAuth();
+  const { needsCompanySetup, createCompany, joinCompany } = useProfile(user?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -338,6 +343,12 @@ const Index = () => {
                 folders={folders}
                 presetKeywords={keywords}
                 defaultFolderId={selectedFolderId}
+              />
+
+              <CompanySetupDialog
+                open={needsCompanySetup}
+                onCreateCompany={createCompany}
+                onJoinCompany={joinCompany}
               />
             </div>
           </div>
