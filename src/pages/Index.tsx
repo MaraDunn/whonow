@@ -325,6 +325,9 @@ const Index = () => {
               }}
               onImport={handleImportContacts}
               defaultTab={importDefaultTab}
+              folders={folders}
+              presetKeywords={keywords}
+              defaultFolderId={selectedFolderId}
             />
           </div>
         </div>
