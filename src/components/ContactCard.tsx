@@ -64,7 +64,7 @@ export function ContactCard({
       {/* Folder indicator badge */}
       {folder && (
         <div 
-          className="absolute top-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-secondary/80 backdrop-blur-sm"
+          className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-secondary/80 backdrop-blur-sm"
           style={{ 
             borderLeft: `3px solid ${folder.color}`,
           }}
