@@ -23,6 +23,8 @@ interface SettingsDialogProps {
   onAddKeyword: (keyword: string) => void;
   onRemoveKeyword: (keyword: string) => void;
   onResetKeywords: () => void;
+  isCompanyKeywords?: boolean;
+  canEditKeywords?: boolean;
 }
 
 export function SettingsDialog({
@@ -32,6 +34,8 @@ export function SettingsDialog({
   onAddKeyword,
   onRemoveKeyword,
   onResetKeywords,
+  isCompanyKeywords = false,
+  canEditKeywords = true,
 }: SettingsDialogProps) {
   const [newKeyword, setNewKeyword] = useState("");
   const { theme, setTheme } = useTheme();
@@ -123,58 +127,77 @@ export function SettingsDialog({
             {/* Keywords Tab */}
             <TabsContent value="keywords" className="space-y-4 mt-0">
               <div className="flex items-center justify-between">
-                <Label className="text-base font-medium">Preset Keywords</Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onResetKeywords}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <RotateCcw className="h-4 w-4 mr-1" />
-                  Reset
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Label className="text-base font-medium">Preset Keywords</Label>
+                  {isCompanyKeywords && (
+                    <Badge variant="outline" className="text-xs">Company</Badge>
+                  )}
+                </div>
+                {canEditKeywords && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onResetKeywords}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Reset
+                  </Button>
+                )}
               </div>
               
               <p className="text-sm text-muted-foreground">
-                These keywords will appear as quick-select options when creating or editing contacts.
+                {isCompanyKeywords 
+                  ? canEditKeywords 
+                    ? "As an admin, you can manage keywords for everyone in your company."
+                    : "These keywords are managed by your company admin."
+                  : "These keywords will appear as quick-select options when creating or editing contacts."
+                }
               </p>
 
-              <div className="flex gap-2">
-                <Input
-                  value={newKeyword}
-                  onChange={(e) => setNewKeyword(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Add a new keyword..."
-                  className="flex-1"
-                />
-                <Button onClick={handleAddKeyword} size="icon" variant="outline">
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+              {canEditKeywords && (
+                <div className="flex gap-2">
+                  <Input
+                    value={newKeyword}
+                    onChange={(e) => setNewKeyword(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Add a new keyword..."
+                    className="flex-1"
+                  />
+                  <Button onClick={handleAddKeyword} size="icon" variant="outline">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg min-h-[100px]">
                 {keywords.length === 0 ? (
                   <p className="text-sm text-muted-foreground w-full text-center py-4">
-                    No keywords yet. Add some above!
+                    No keywords yet. {canEditKeywords ? "Add some above!" : "Ask your admin to add some."}
                   </p>
                 ) : (
                   keywords.map((keyword) => (
                     <Badge
                       key={keyword}
                       variant="secondary"
-                      className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                      onClick={() => onRemoveKeyword(keyword)}
+                      className={canEditKeywords 
+                        ? "cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                        : ""
+                      }
+                      onClick={canEditKeywords ? () => onRemoveKeyword(keyword) : undefined}
                     >
                       {keyword}
-                      <X className="h-3 w-3 ml-1" />
+                      {canEditKeywords && <X className="h-3 w-3 ml-1" />}
                     </Badge>
                   ))
                 )}
               </div>
               
-              <p className="text-xs text-muted-foreground">
-                Click on a keyword to remove it.
-              </p>
+              {canEditKeywords && (
+                <p className="text-xs text-muted-foreground">
+                  Click on a keyword to remove it.
+                </p>
+              )}
             </TabsContent>
 
             {/* Account Tab */}
