@@ -39,16 +39,16 @@ export function DroppableFolder({ folder, isSelected, contactCount, onClick, chi
         <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/5 animate-pulse" />
       )}
       
-      <div className="relative z-10 flex items-center gap-3 w-full">
+      <div className="relative z-10 flex items-center gap-3 w-full pr-6">
         {isOver ? (
           <FolderInput 
-            className="h-4 w-4 animate-scale-in"
+            className="h-4 w-4 animate-scale-in shrink-0"
             style={{ color: isSelected ? undefined : folder?.color }}
           />
         ) : (
           <FolderIcon
             className={cn(
-              "h-4 w-4 transition-transform duration-200",
+              "h-4 w-4 shrink-0 transition-transform duration-200",
               isDragging && !isSelected && "scale-110"
             )}
             style={{ color: isSelected ? undefined : folder?.color }}
@@ -56,7 +56,7 @@ export function DroppableFolder({ folder, isSelected, contactCount, onClick, chi
         )}
         <span className="flex-1 text-left truncate">{folder?.name || "No folder"}</span>
         <span className={cn(
-          "text-xs transition-all duration-200",
+          "text-xs shrink-0 transition-all duration-200",
           isOver ? "opacity-100 font-medium" : "opacity-70"
         )}>
           {isOver ? `+1` : contactCount}
