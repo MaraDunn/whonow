@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Folder, FolderPlus, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FolderFormDialog } from "@/components/FolderFormDialog";
+import { DroppableFolder } from "@/components/DroppableFolder";
 import { Folder as FolderType } from "@/types/folder";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +55,9 @@ export function FolderSidebar({
     setDialogOpen(true);
   };
 
+  // Calculate contacts without a folder
+  const unfolderedCount = totalContacts - Object.values(contactCountByFolder).reduce((a, b) => a + b, 0);
+
   return (
     <aside className="w-56 shrink-0 border-r border-border bg-muted/30 p-4">
       <div className="flex items-center justify-between mb-4">
@@ -79,22 +83,23 @@ export function FolderSidebar({
           <span className="text-xs opacity-70">{totalContacts}</span>
         </button>
 
+        {/* No Folder Drop Target */}
+        <DroppableFolder
+          folder={null}
+          isSelected={false}
+          contactCount={unfolderedCount}
+          onClick={() => {}}
+        />
+
         {/* Folder List */}
         {folders.map((folder) => (
           <div key={folder.id} className="group relative">
-            <button
+            <DroppableFolder
+              folder={folder}
+              isSelected={selectedFolderId === folder.id}
+              contactCount={contactCountByFolder[folder.id] || 0}
               onClick={() => onSelectFolder(folder.id)}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                selectedFolderId === folder.id
-                  ? "bg-primary text-primary-foreground"
-                  : "text-foreground hover:bg-accent"
-              )}
-            >
-              <Folder className="h-4 w-4" style={{ color: selectedFolderId === folder.id ? undefined : folder.color }} />
-              <span className="flex-1 text-left truncate">{folder.name}</span>
-              <span className="text-xs opacity-70">{contactCountByFolder[folder.id] || 0}</span>
-            </button>
+            />
 
             {/* Folder Menu */}
             <DropdownMenu>
