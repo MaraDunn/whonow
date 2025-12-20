@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, Check } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Check, Camera, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Contact } from "@/types/contact";
+import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 
 interface ContactFormDialogProps {
   open: boolean;
@@ -31,6 +33,9 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [description, setDescription] = useState("");
+  const [avatar, setAvatar] = useState<string | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadAvatar, uploading } = useAvatarUpload();
 
   const isEditing = !!contact;
   
@@ -50,6 +55,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
       setRole(contact.role);
       setTags(contact.tags);
       setDescription(contact.description || "");
+      setAvatar(contact.avatar);
     } else {
       resetForm();
     }
@@ -64,6 +70,21 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
     setTagInput("");
     setTags([]);
     setDescription("");
+    setAvatar(undefined);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      return;
+    }
+
+    const url = await uploadAvatar(file);
+    if (url) {
+      setAvatar(url);
+    }
   };
 
   const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -104,6 +125,7 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
       role,
       tags,
       description: description || undefined,
+      avatar,
     });
 
     resetForm();
@@ -121,6 +143,37 @@ export function ContactFormDialog({ open, onOpenChange, onSave, contact, isProfi
 
         <div className="flex-1 overflow-y-auto pr-2">
           <div className="space-y-4 mt-4">
+            {/* Avatar Upload */}
+            <div className="flex flex-col items-center gap-3">
+              <div 
+                className="relative cursor-pointer group"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Avatar className="h-20 w-20 border-2 border-border">
+                  <AvatarImage src={avatar} alt={name || "Avatar"} />
+                  <AvatarFallback className="text-lg bg-muted">
+                    {name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {uploading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Camera className="h-6 w-6 text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+                disabled={uploading}
+              />
+              <span className="text-xs text-muted-foreground">Click to upload photo</span>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
               <Input
