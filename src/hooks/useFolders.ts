@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Folder } from "@/types/folder";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 
 type DbFolder = {
   id: string;
@@ -9,6 +11,8 @@ type DbFolder = {
   color: string | null;
   created_at: string;
   updated_at: string;
+  owner_id: string | null;
+  company_id: string | null;
 };
 
 const mapDbToFolder = (db: DbFolder): Folder => ({
@@ -18,16 +22,24 @@ const mapDbToFolder = (db: DbFolder): Folder => ({
   createdAt: db.created_at,
 });
 
-const mapFolderToDb = (folder: Omit<Folder, "id" | "createdAt">) => ({
+const mapFolderToDb = (
+  folder: Omit<Folder, "id" | "createdAt">,
+  userId?: string,
+  companyId?: string
+) => ({
   name: folder.name,
   color: folder.color || "#6366f1",
+  owner_id: userId || null,
+  company_id: companyId || null,
 });
 
 export const useFolders = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { profile } = useProfile(user?.id);
 
   const { data: folders = [], isLoading } = useQuery({
-    queryKey: ["folders"],
+    queryKey: ["folders", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("folders")
@@ -37,13 +49,14 @@ export const useFolders = () => {
       if (error) throw error;
       return (data as DbFolder[]).map(mapDbToFolder);
     },
+    enabled: !!user,
   });
 
   const addFolder = useMutation({
     mutationFn: async (folder: Omit<Folder, "id" | "createdAt">) => {
       const { data, error } = await supabase
         .from("folders")
-        .insert(mapFolderToDb(folder))
+        .insert(mapFolderToDb(folder, user?.id, profile?.companyId))
         .select()
         .single();
 
@@ -63,7 +76,10 @@ export const useFolders = () => {
     mutationFn: async ({ id, ...folder }: Folder) => {
       const { data, error } = await supabase
         .from("folders")
-        .update(mapFolderToDb(folder))
+        .update({
+          name: folder.name,
+          color: folder.color || "#6366f1",
+        })
         .eq("id", id)
         .select()
         .single();

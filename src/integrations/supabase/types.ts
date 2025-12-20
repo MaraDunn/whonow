@@ -14,17 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          created_at: string
+          id: string
+          invite_code: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invite_code?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invite_code?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           avatar: string | null
           company: string | null
+          company_id: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           email: string | null
           folder_id: string | null
           id: string
+          is_shared: boolean | null
           name: string
+          owner_id: string | null
           phone: string | null
           role: string | null
           tags: string[] | null
@@ -33,13 +60,16 @@ export type Database = {
         Insert: {
           avatar?: string | null
           company?: string | null
+          company_id?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
           email?: string | null
           folder_id?: string | null
           id?: string
+          is_shared?: boolean | null
           name: string
+          owner_id?: string | null
           phone?: string | null
           role?: string | null
           tags?: string[] | null
@@ -48,19 +78,29 @@ export type Database = {
         Update: {
           avatar?: string | null
           company?: string | null
+          company_id?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
           email?: string | null
           folder_id?: string | null
           id?: string
+          is_shared?: boolean | null
           name?: string
+          owner_id?: string | null
           phone?: string | null
           role?: string | null
           tags?: string[] | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "contacts_folder_id_fkey"
             columns: ["folder_id"]
@@ -73,24 +113,106 @@ export type Database = {
       folders: {
         Row: {
           color: string | null
+          company_id: string | null
           created_at: string
           id: string
           name: string
+          owner_id: string | null
           updated_at: string
         }
         Insert: {
           color?: string | null
+          company_id?: string | null
           created_at?: string
           id?: string
           name: string
+          owner_id?: string | null
           updated_at?: string
         }
         Update: {
           color?: string | null
+          company_id?: string | null
           created_at?: string
           id?: string
           name?: string
+          owner_id?: string | null
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folders_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          company_id: string | null
+          created_at: string
+          description: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          is_visible_in_directory: boolean | null
+          phone: string | null
+          role: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          company_id?: string | null
+          created_at?: string
+          description?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          is_visible_in_directory?: boolean | null
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          company_id?: string | null
+          created_at?: string
+          description?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          is_visible_in_directory?: boolean | null
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -99,10 +221,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_company_id: { Args: { _user_id: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "member"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -229,6 +358,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "member"],
+    },
   },
 } as const

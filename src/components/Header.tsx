@@ -1,4 +1,4 @@
-import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Smartphone, Chrome, ChevronDown } from "lucide-react";
+import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Smartphone, Chrome, ChevronDown, Building2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +9,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Contact } from "@/types/contact";
+import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
+import { toast } from "sonner";
 
 interface HeaderProps {
   contactCount: number;
@@ -20,14 +23,23 @@ interface HeaderProps {
 }
 
 export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings, onOpenImport, myProfile }: HeaderProps) {
-  const profileInitials = myProfile?.name
-    ? myProfile.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "U";
+  const { user, signOut } = useAuth();
+  const { profile, company } = useProfile(user?.id);
+
+  const handleSignOut = async () => {
+    const { error } = await signOut();
+    if (error) {
+      toast.error("Failed to sign out");
+    }
+  };
+
+  const displayName = profile?.fullName || user?.email || "User";
+  const profileInitials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <header className="flex items-center justify-between mb-8 animate-fade-in">
@@ -91,30 +103,27 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-popover">
-            {myProfile ? (
-              <>
-                <div className="px-2 py-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      {myProfile.avatar && <AvatarImage src={myProfile.avatar} alt={myProfile.name} />}
-                      <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                        {profileInitials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm text-foreground truncate">{myProfile.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{myProfile.email}</p>
-                    </div>
-                  </div>
+            <div className="px-2 py-3">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt={displayName} />}
+                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                    {profileInitials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm text-foreground truncate">{displayName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                 </div>
-                <DropdownMenuSeparator />
-              </>
-            ) : (
-              <>
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-              </>
-            )}
+              </div>
+              {company && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Building2 className="h-3 w-3" />
+                  <span className="truncate">{company.name}</span>
+                </div>
+              )}
+            </div>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer" onClick={onOpenProfile}>
               <User className="mr-2 h-4 w-4" />
               {myProfile ? "Edit My Card" : "Create My Card"}
@@ -124,7 +133,7 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive">
+            <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={handleSignOut}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign out
             </DropdownMenuItem>
