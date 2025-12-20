@@ -1,6 +1,6 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 
@@ -84,9 +84,17 @@ export function ContactCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className="font-display font-semibold text-lg text-foreground truncate group-hover:text-primary transition-colors">
-            {contact.name}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-display font-semibold text-lg text-foreground truncate group-hover:text-primary transition-colors">
+              {contact.name}
+            </h3>
+            {contact.tags?.includes("my-profile") && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                <User className="h-3 w-3" />
+                You
+              </span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
             <Briefcase className="h-3.5 w-3.5" />
             {contact.role}
