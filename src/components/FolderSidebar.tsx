@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,6 +29,7 @@ import {
 import { FolderFormDialog } from "@/components/FolderFormDialog";
 import { DroppableFolder } from "@/components/DroppableFolder";
 import { Folder as FolderType } from "@/types/folder";
+import { Profile } from "@/types/profile";
 import { cn } from "@/lib/utils";
 
 interface FolderSidebarProps {
@@ -43,6 +44,9 @@ interface FolderSidebarProps {
   trashCount?: number;
   showTrash?: boolean;
   onSelectTrash?: () => void;
+  companyMembers?: Profile[];
+  showDirectory?: boolean;
+  onSelectDirectory?: () => void;
 }
 
 export function FolderSidebar({
@@ -57,6 +61,9 @@ export function FolderSidebar({
   trashCount = 0,
   showTrash = false,
   onSelectTrash,
+  companyMembers = [],
+  showDirectory = false,
+  onSelectDirectory,
 }: FolderSidebarProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
@@ -211,6 +218,45 @@ export function FolderSidebar({
         </SidebarGroup>
 
         <SidebarSeparator />
+
+        {/* Team Directory - only show if company members exist */}
+        {companyMembers.length > 0 && onSelectDirectory && (
+          <>
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton
+                            onClick={onSelectDirectory}
+                            isActive={showDirectory}
+                            className="w-full"
+                          >
+                            <Building2 className="h-4 w-4" />
+                            {!isCollapsed && (
+                              <>
+                                <span className="flex-1 text-left">Team Directory</span>
+                                <span className="text-xs opacity-70">{companyMembers.length}</span>
+                              </>
+                            )}
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        {isCollapsed && (
+                          <TooltipContent side="right">
+                            <p>Team Directory ({companyMembers.length})</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            <SidebarSeparator />
+          </>
+        )}
 
         {/* Trash */}
         <SidebarGroup>
