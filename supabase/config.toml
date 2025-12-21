@@ -2,3 +2,9 @@ project_id = "kzivlasydxnhbqduqpjb"
 
 [functions.parse-search-query]
 verify_jwt = false
+
+[functions.generate-test-contacts]
+verify_jwt = false
+
+[functions.scan-business-card]
+verify_jwt = false
