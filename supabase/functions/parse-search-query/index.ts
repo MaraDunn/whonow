@@ -31,43 +31,33 @@ serve(async (req) => {
       `[${i + 1}] ${c.name} | Role: ${c.role || 'N/A'} | Company: ${c.company || 'N/A'} | Description: ${c.description || 'N/A'} | Tags: ${c.tags?.join(', ') || 'none'}`
     ).join('\n') || '';
 
-    const systemPrompt = `You are a PRECISE search assistant for a contacts directory. Your job is to find ONLY contacts that DIRECTLY match the user's query.
+    const systemPrompt = `You are an intelligent search assistant for a contacts directory. Analyze the user's query and find the BEST matching contacts.
 
 CONTACTS DATABASE:
 ${contactContext}
 
-CRITICAL MATCHING RULES:
-1. **STRICT COMPANY MATCHING**: If a company name is mentioned, ONLY return contacts who work at that EXACT company. "Precision Manufacturing" means ONLY contacts where Company = "Precision Manufacturing".
-
-2. **STRICT ROLE/FUNCTION MATCHING**: If a role or function is mentioned (sales, HR, engineering, contracts), ONLY return contacts whose Role or Description EXPLICITLY mentions that function.
-
-3. **NO ASSUMPTIONS**: Do NOT assume someone handles something unless their Role or Description explicitly says so. A "Sales Manager" handles sales. A "Software Engineer" does NOT handle sales contracts.
-
-4. **FEWER IS BETTER**: Return MAXIMUM 10 contacts. If unsure, return FEWER matches with high confidence rather than many loose matches.
-
-5. **VERIFY EACH MATCH**: Before including a contact, verify:
-   - Does their company MATCH if a company was specified?
-   - Does their role/description ACTUALLY mention the requested function?
-
-6. **EMPTY IS OK**: If no contacts clearly match, return an empty array. This is better than returning wrong matches.
+YOUR TASK:
+1. Understand what the user is looking for (role, skill, department, responsibility, etc.)
+2. Match against ALL contact fields: name, role, company, description, and tags
+3. Use semantic understanding - "art decisions" matches "Art Director", "handles HR" matches "HR Manager"
+4. Include related/synonymous terms when matching
 
 RESPOND WITH ONLY THIS JSON (no markdown, no extra text):
 {
   "isQuestion": true,
   "intent": "brief description of what user seeks",
-  "keywords": ["only_the_most_specific_terms"],
+  "keywords": ["primary_keyword", "related_term1", "related_term2"],
   "matchingContactNames": ["Exact Name 1", "Exact Name 2"],
-  "confidence": "high|medium|low",
-  "companyFilter": "exact company name if mentioned, or null",
-  "roleFilter": "exact role/function if mentioned, or null"
+  "confidence": "high|medium|low"
 }
 
-EXAMPLES:
-- "who handles sales contracts at Precision Manufacturing" → ONLY contacts at Precision Manufacturing with sales/contracts in their role/description
-- "who makes art decisions" → ONLY contacts with Art Director, Creative Director, or similar in their role
-- "HR contacts" → ONLY contacts with HR in their role/description
-
-Return EXACT names as they appear in the database. Maximum 10 matches.`;
+MATCHING RULES:
+- If query asks about a DEPARTMENT/FUNCTION (HR, marketing, art, engineering), match people in that area
+- If query asks about DECISIONS/AUTHORITY, look for managers, directors, leads, or descriptions mentioning authority
+- Match partial terms: "art" matches "Art Director", "Artist", "Art Department"
+- Use descriptions carefully - they often contain the most relevant context
+- Return empty matchingContactNames array if no good matches exist
+- Always return the EXACT name as it appears in the database`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',

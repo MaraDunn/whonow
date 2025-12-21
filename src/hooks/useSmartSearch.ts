@@ -96,9 +96,6 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     matchingNames: string[];
     intent: string;
     keywords: string[];
-    confidence: string;
-    companyFilter: string | null;
-    roleFilter: string | null;
   } | null>(null);
   const lastQueryRef = useRef<string>("");
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -151,10 +148,7 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
       return {
         matchingNames: data.matchingContactNames || [],
         intent: data.intent || '',
-        keywords: data.keywords || [],
-        confidence: data.confidence || 'low',
-        companyFilter: data.companyFilter || null,
-        roleFilter: data.roleFilter || null
+        keywords: data.keywords || []
       };
     } catch (err) {
       console.error('AI search failed:', err);
@@ -196,75 +190,36 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     };
   }, [searchTerm, shouldUseAI, contacts, performAISearch]);
 
-  // Compute filtered contacts with stricter matching
+  // Compute filtered contacts
   const filteredContacts = useMemo(() => {
     if (!query.trim()) {
       return contacts;
     }
 
-    // Only use AI results if confidence is high or medium
-    const useAiResults = aiResult && (aiResult.confidence === 'high' || aiResult.confidence === 'medium');
-
-    // If AI returned matching names with good confidence, use strict matching
-    if (useAiResults && aiResult.matchingNames && aiResult.matchingNames.length > 0) {
+    // If AI returned matching names, use those with exact matching
+    if (aiResult?.matchingNames && aiResult.matchingNames.length > 0) {
       const aiMatches = contacts.filter(c => 
         aiResult.matchingNames.some(name => {
           const contactName = c.name.toLowerCase().trim();
           const matchName = name.toLowerCase().trim();
-          // Require exact match
-          return contactName === matchName;
+          // Exact match or close enough
+          return contactName === matchName || 
+                 contactName.includes(matchName) ||
+                 matchName.includes(contactName);
         })
       );
       
-      // Apply additional filters if AI detected them
-      let filtered = aiMatches;
-      
-      // Strict company filter
-      if (aiResult.companyFilter) {
-        const companyLower = aiResult.companyFilter.toLowerCase();
-        filtered = filtered.filter(c => 
-          c.company?.toLowerCase() === companyLower
-        );
-      }
-      
-      // Strict role filter
-      if (aiResult.roleFilter) {
-        const roleLower = aiResult.roleFilter.toLowerCase();
-        filtered = filtered.filter(c => 
-          c.role?.toLowerCase().includes(roleLower) ||
-          c.description?.toLowerCase().includes(roleLower)
-        );
-      }
-      
-      if (filtered.length > 0) {
-        // Limit results to 20 max
-        return filtered.slice(0, 20);
+      // If AI found matches, return them; otherwise fall back to keyword search
+      if (aiMatches.length > 0) {
+        return aiMatches;
       }
     }
 
-    // If AI had low confidence or no matches, try keyword search
+    // If AI returned keywords, combine with basic search
     if (aiResult?.keywords && aiResult.keywords.length > 0) {
       const keywordResults = basicSearch(contacts, aiResult.keywords.map(k => k.toLowerCase()));
       if (keywordResults.length > 0) {
-        // Apply company/role filters if detected
-        let filtered = keywordResults;
-        if (aiResult.companyFilter) {
-          const companyLower = aiResult.companyFilter.toLowerCase();
-          filtered = filtered.filter(c => 
-            c.company?.toLowerCase() === companyLower
-          );
-        }
-        if (aiResult.roleFilter) {
-          const roleLower = aiResult.roleFilter.toLowerCase();
-          filtered = filtered.filter(c => 
-            c.role?.toLowerCase().includes(roleLower) ||
-            c.description?.toLowerCase().includes(roleLower)
-          );
-        }
-        if (filtered.length > 0) {
-          return filtered.slice(0, 20);
-        }
-        return keywordResults.slice(0, 20);
+        return keywordResults;
       }
     }
 
@@ -274,7 +229,7 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
       return contacts; // Just action word, show all
     }
     
-    return basicSearch(contacts, searchTerms).slice(0, 30);
+    return basicSearch(contacts, searchTerms);
   }, [contacts, query, searchTerm, action, aiResult]);
 
   return {
