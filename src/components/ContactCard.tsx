@@ -120,12 +120,18 @@ export function ContactCard({
       </div>
 
       <div className="mt-4 space-y-2.5">
-        <div className="flex items-center gap-3 text-sm text-secondary-foreground">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <span className="truncate">{contact.email}</span>
-        </div>
+        {contact.email && (
+          <a
+            href={`mailto:${contact.email}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-3 text-sm text-secondary-foreground hover:text-primary transition-colors group/email"
+          >
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/email:bg-primary/10 transition-colors">
+              <Mail className="h-4 w-4 text-muted-foreground group-hover/email:text-primary" />
+            </div>
+            <span className="truncate hover:underline">{contact.email}</span>
+          </a>
+        )}
 
         <div className="flex items-center gap-3 text-sm text-secondary-foreground">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary">
