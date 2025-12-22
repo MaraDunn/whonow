@@ -49,8 +49,10 @@ function isQuestion(query: string): boolean {
   return false;
 }
 
+// Require ALL search terms to match (AND logic) with minimum score threshold
 function basicSearch(contacts: Contact[], searchTerms: string[]): Contact[] {
-  // Score each contact based on how well they match
+  if (searchTerms.length === 0) return [];
+  
   const scoredContacts = contacts.map((contact) => {
     const fields = {
       name: (contact.name || "").toLowerCase(),
@@ -65,28 +67,39 @@ function basicSearch(contacts: Contact[], searchTerms: string[]): Contact[] {
     const allText = Object.values(fields).join(" ");
     
     let score = 0;
+    let matchedTerms = 0;
+    
     for (const term of searchTerms) {
+      let termMatched = false;
+      
       // Exact match in name = highest priority
-      if (fields.name.includes(term)) score += 10;
+      if (fields.name.includes(term)) { score += 10; termMatched = true; }
       // Match in role = high priority
-      if (fields.role.includes(term)) score += 8;
+      if (fields.role.includes(term)) { score += 8; termMatched = true; }
       // Match in tags = high priority
-      if (fields.tags.includes(term)) score += 7;
+      if (fields.tags.includes(term)) { score += 7; termMatched = true; }
       // Match in description = medium priority
-      if (fields.description.includes(term)) score += 5;
+      if (fields.description.includes(term)) { score += 5; termMatched = true; }
       // Match in company = medium priority
-      if (fields.company.includes(term)) score += 4;
-      // Match anywhere
-      if (allText.includes(term)) score += 1;
+      if (fields.company.includes(term)) { score += 4; termMatched = true; }
+      // Match anywhere (only count if not already matched above)
+      if (!termMatched && allText.includes(term)) { score += 1; termMatched = true; }
+      
+      if (termMatched) matchedTerms++;
     }
     
-    return { contact, score };
+    // Require ALL terms to match for multi-term searches, or primary term for single
+    const requiredMatches = searchTerms.length === 1 ? 1 : Math.ceil(searchTerms.length * 0.8);
+    const passesThreshold = matchedTerms >= requiredMatches && score >= 4;
+    
+    return { contact, score, passesThreshold };
   });
   
-  // Return contacts with any match, sorted by score
+  // Return only contacts that pass the threshold, sorted by score, max 15
   return scoredContacts
-    .filter(({ score }) => score > 0)
+    .filter(({ passesThreshold }) => passesThreshold)
     .sort((a, b) => b.score - a.score)
+    .slice(0, 15)
     .map(({ contact }) => contact);
 }
 
@@ -122,7 +135,7 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     return isQuestion(searchTerm);
   }, [searchTerm]);
 
-  // AI search function
+  // AI search function with confidence filtering
   const performAISearch = useCallback(async (searchQuery: string, contactList: Contact[]) => {
     try {
       setIsLoading(true);
@@ -145,10 +158,23 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
         return null;
       }
 
+      // Filter out low confidence results - fall back to keyword search instead
+      const confidence = data.confidence || 'low';
+      if (confidence === 'low') {
+        console.log('AI confidence low, falling back to keyword search');
+        return {
+          matchingNames: [],
+          intent: data.intent || '',
+          keywords: data.keywords || [],
+          confidence: 'low'
+        };
+      }
+
       return {
         matchingNames: data.matchingContactNames || [],
         intent: data.intent || '',
-        keywords: data.keywords || []
+        keywords: data.keywords || [],
+        confidence
       };
     } catch (err) {
       console.error('AI search failed:', err);
@@ -190,46 +216,45 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     };
   }, [searchTerm, shouldUseAI, contacts, performAISearch]);
 
-  // Compute filtered contacts
+  // Compute filtered contacts with strict matching and result limits
   const filteredContacts = useMemo(() => {
     if (!query.trim()) {
       return contacts;
     }
 
-    // If AI returned matching names, use those with exact matching
+    const MAX_RESULTS = 15;
+
+    // If AI returned matching names with good confidence, use STRICT exact matching
     if (aiResult?.matchingNames && aiResult.matchingNames.length > 0) {
       const aiMatches = contacts.filter(c => 
         aiResult.matchingNames.some(name => {
           const contactName = c.name.toLowerCase().trim();
           const matchName = name.toLowerCase().trim();
-          // Exact match or close enough
-          return contactName === matchName || 
-                 contactName.includes(matchName) ||
-                 matchName.includes(contactName);
+          // STRICT: Only exact match or the AI name is contained in contact name
+          return contactName === matchName || contactName.startsWith(matchName + " ") || contactName.endsWith(" " + matchName);
         })
       );
       
-      // If AI found matches, return them; otherwise fall back to keyword search
       if (aiMatches.length > 0) {
-        return aiMatches;
+        return aiMatches.slice(0, MAX_RESULTS);
       }
     }
 
-    // If AI returned keywords, combine with basic search
+    // If AI returned keywords (even with low confidence), use them for basic search
     if (aiResult?.keywords && aiResult.keywords.length > 0) {
       const keywordResults = basicSearch(contacts, aiResult.keywords.map(k => k.toLowerCase()));
       if (keywordResults.length > 0) {
-        return keywordResults;
+        return keywordResults.slice(0, MAX_RESULTS);
       }
     }
 
     // Fall back to basic search with the search term
     const searchTerms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean);
     if (searchTerms.length === 0 && action) {
-      return contacts; // Just action word, show all
+      return contacts;
     }
     
-    return basicSearch(contacts, searchTerms);
+    return basicSearch(contacts, searchTerms).slice(0, MAX_RESULTS);
   }, [contacts, query, searchTerm, action, aiResult]);
 
   return {
