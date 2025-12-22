@@ -133,12 +133,18 @@ export function ContactCard({
           </a>
         )}
 
-        <div className="flex items-center gap-3 text-sm text-secondary-foreground">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary">
-            <Phone className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <span>{contact.phone}</span>
-        </div>
+        {contact.phone && (
+          <a
+            href={`tel:${contact.phone}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-3 text-sm text-secondary-foreground hover:text-primary transition-colors group/phone"
+          >
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/phone:bg-primary/10 transition-colors">
+              <Phone className="h-4 w-4 text-muted-foreground group-hover/phone:text-primary" />
+            </div>
+            <span className="hover:underline">{contact.phone}</span>
+          </a>
+        )}
 
         <div className="flex items-center gap-3 text-sm text-secondary-foreground">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary">
