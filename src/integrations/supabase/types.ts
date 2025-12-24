@@ -177,6 +177,94 @@ export type Database = {
           },
         ]
       }
+      integration_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          integration_id: string | null
+          status: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          integration_id?: string | null
+          status: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          integration_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_logs_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integrations: {
+        Row: {
+          access_token: string | null
+          company_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          provider: string
+          refresh_token: string | null
+          settings: Json | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+          webhook_url: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          provider: string
+          refresh_token?: string | null
+          settings?: Json | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+          webhook_url?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          provider?: string
+          refresh_token?: string | null
+          settings?: Json | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+          webhook_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integrations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
