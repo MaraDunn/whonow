@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.scan-business-card]
 verify_jwt = false
+
+[functions.slack-integration]
+verify_jwt = true
+
+[functions.outlook-integration]
+verify_jwt = true

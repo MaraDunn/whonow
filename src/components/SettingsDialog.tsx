@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Link2 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import {
   Dialog,
   DialogContent,
@@ -74,7 +75,7 @@ export function SettingsDialog({
 
   // Determine number of tabs based on admin status
   const showAdminTab = isAdmin && company;
-  const tabCount = showAdminTab ? 4 : 3;
+  const tabCount = showAdminTab ? 5 : 4;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,6 +97,10 @@ export function SettingsDialog({
             <TabsTrigger value="account" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Account</span>
+            </TabsTrigger>
+            <TabsTrigger value="integrations" className="flex items-center gap-2">
+              <Link2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Integrations</span>
             </TabsTrigger>
             {showAdminTab && (
               <TabsTrigger value="admin" className="flex items-center gap-2">
@@ -266,6 +271,10 @@ export function SettingsDialog({
               </div>
             </TabsContent>
 
+            {/* Integrations Tab */}
+            <TabsContent value="integrations" className="mt-0">
+              <IntegrationsPanel />
+            </TabsContent>
             {/* Admin Tab - Only visible to admins */}
             {showAdminTab && (
               <TabsContent value="admin" className="space-y-6 mt-0">
