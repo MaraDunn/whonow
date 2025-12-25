@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2 } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -89,8 +89,10 @@ export function FolderSidebar({
     setDialogOpen(true);
   };
 
+  const { toggleSidebar } = useSidebar();
+
   return (
-    <Sidebar collapsible="icon" className="border-r border-border">
+    <Sidebar collapsible="icon" className="border-r border-border relative group/sidebar">
       <SidebarHeader className="p-2">
         <div className={cn(
           "flex items-center",
@@ -294,6 +296,19 @@ export function FolderSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      {/* Collapse Toggle Arrow */}
+      <button
+        onClick={toggleSidebar}
+        className="absolute top-3 -right-3 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background shadow-sm opacity-0 transition-opacity group-hover/sidebar:opacity-100 hover:bg-accent"
+        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {isCollapsed ? (
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
 
       <FolderFormDialog
         open={dialogOpen}

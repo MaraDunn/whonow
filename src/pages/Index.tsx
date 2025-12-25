@@ -13,7 +13,7 @@ import {
   KeyboardSensor,
   DragOverEvent
 } from "@dnd-kit/core";
-import { PanelLeft } from "lucide-react";
+
 import { useSearchParams } from "react-router-dom";
 import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
@@ -25,7 +25,7 @@ import { ContactCard } from "@/components/ContactCard";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
@@ -282,13 +282,6 @@ const Index = () => {
 
           {/* Main Content */}
           <div className="flex-1">
-            {/* Sidebar Toggle */}
-            <div className="p-2 border-b border-border">
-              <SidebarTrigger className="h-8 w-8">
-                <PanelLeft className="h-4 w-4" />
-              </SidebarTrigger>
-            </div>
-            
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
               <Header 
                 contactCount={filteredContacts.length} 
