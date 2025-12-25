@@ -40,6 +40,7 @@ const Index = () => {
   const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, companyMembers, company } = useProfile(user?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"quick" | "full">("full");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isProfileMode, setIsProfileMode] = useState(false);
@@ -215,9 +216,10 @@ const Index = () => {
     setIsProfileMode(false);
   };
 
-  const handleOpenAddDialog = () => {
+  const handleOpenAddDialog = (mode: "quick" | "full" = "full") => {
     setEditingContact(null);
     setIsProfileMode(false);
+    setDialogMode(mode);
     setDialogOpen(true);
   };
 
@@ -370,6 +372,7 @@ const Index = () => {
                 presetKeywords={keywords}
                 folders={folders}
                 defaultFolderId={selectedFolderId}
+                initialMode={dialogMode}
               />
 
               <SettingsDialog
