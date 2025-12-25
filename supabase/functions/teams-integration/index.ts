@@ -38,7 +38,7 @@ serve(async (req) => {
     }
 
     const { action, ...params } = await req.json();
-    console.log(`Outlook integration action: ${action}`, params);
+    console.log(`Teams integration action: ${action}`, params);
 
     const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID");
     const MICROSOFT_CLIENT_SECRET = Deno.env.get("MICROSOFT_CLIENT_SECRET");
@@ -48,15 +48,15 @@ serve(async (req) => {
       case "get-oauth-url": {
         if (!MICROSOFT_CLIENT_ID) {
           return new Response(JSON.stringify({ 
-            error: "Outlook integration not configured. Please add MICROSOFT_CLIENT_ID secret." 
+            error: "Teams integration not configured. Please add MICROSOFT_CLIENT_ID secret." 
           }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
-        const redirectUri = `${supabaseUrl}/functions/v1/outlook-integration?action=oauth-callback`;
-        const scopes = "offline_access User.Read Contacts.ReadWrite Calendars.ReadWrite";
+        const redirectUri = `${supabaseUrl}/functions/v1/teams-integration?action=oauth-callback`;
+        const scopes = "offline_access User.Read Team.ReadBasic.All Channel.ReadBasic.All Chat.ReadWrite OnlineMeetings.ReadWrite";
         const oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?` +
           `client_id=${MICROSOFT_CLIENT_ID}` +
           `&response_type=code` +
@@ -84,7 +84,7 @@ serve(async (req) => {
           return new Response("Missing code or credentials", { status: 400 });
         }
 
-        const redirectUri = `${supabaseUrl}/functions/v1/outlook-integration?action=oauth-callback`;
+        const redirectUri = `${supabaseUrl}/functions/v1/teams-integration?action=oauth-callback`;
 
         // Exchange code for tokens
         const tokenResponse = await fetch(
@@ -121,7 +121,7 @@ serve(async (req) => {
         // Store the integration
         await supabase.from("integrations").upsert({
           user_id: state,
-          provider: "outlook",
+          provider: "teams",
           access_token: tokenData.access_token,
           refresh_token: tokenData.refresh_token,
           token_expires_at: expiresAt.toISOString(),
@@ -135,7 +135,7 @@ serve(async (req) => {
         // Redirect back to the app
         return new Response(null, {
           status: 302,
-          headers: { Location: "/settings?integration=outlook&status=success" },
+          headers: { Location: "/settings?integration=teams&status=success" },
         });
       }
 
@@ -144,7 +144,7 @@ serve(async (req) => {
           .from("integrations")
           .select("*")
           .eq("user_id", user.id)
-          .eq("provider", "outlook")
+          .eq("provider", "teams")
           .single();
 
         if (!integration?.refresh_token || !MICROSOFT_CLIENT_ID || !MICROSOFT_CLIENT_SECRET) {
@@ -190,26 +190,90 @@ serve(async (req) => {
         });
       }
 
-      case "import-contacts": {
+      case "get-teams": {
         const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
 
         if (!integration) {
-          return new Response(JSON.stringify({ error: "Outlook not connected" }), {
+          return new Response(JSON.stringify({ error: "Teams not connected" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
-        // Fetch Outlook contacts
-        const contactsResponse = await fetch(
-          `${GRAPH_API_BASE}/me/contacts?$top=100&$select=displayName,emailAddresses,businessPhones,mobilePhone,companyName,jobTitle`,
-          { headers: { Authorization: `Bearer ${integration.access_token}` } }
-        );
+        const teamsResponse = await fetch(`${GRAPH_API_BASE}/me/joinedTeams`, {
+          headers: { Authorization: `Bearer ${integration.access_token}` },
+        });
 
-        const contactsData = await contactsResponse.json();
+        const teamsData = await teamsResponse.json();
 
-        if (contactsData.error) {
-          return new Response(JSON.stringify({ error: contactsData.error.message }), {
+        if (teamsData.error) {
+          return new Response(JSON.stringify({ error: teamsData.error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        return new Response(JSON.stringify({ teams: teamsData.value }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "get-channels": {
+        const { teamId } = params;
+
+        if (!teamId) {
+          return new Response(JSON.stringify({ error: "Team ID required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
+
+        if (!integration) {
+          return new Response(JSON.stringify({ error: "Teams not connected" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const channelsResponse = await fetch(`${GRAPH_API_BASE}/teams/${teamId}/channels`, {
+          headers: { Authorization: `Bearer ${integration.access_token}` },
+        });
+
+        const channelsData = await channelsResponse.json();
+
+        if (channelsData.error) {
+          return new Response(JSON.stringify({ error: channelsData.error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        return new Response(JSON.stringify({ channels: channelsData.value }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "import-members": {
+        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
+
+        if (!integration) {
+          return new Response(JSON.stringify({ error: "Teams not connected" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Fetch user's joined teams
+        const teamsResponse = await fetch(`${GRAPH_API_BASE}/me/joinedTeams`, {
+          headers: { Authorization: `Bearer ${integration.access_token}` },
+        });
+
+        const teamsData = await teamsResponse.json();
+
+        if (teamsData.error) {
+          return new Response(JSON.stringify({ error: teamsData.error.message }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -222,21 +286,44 @@ serve(async (req) => {
           .eq("id", user.id)
           .single();
 
-        // Map to contacts
-        const contacts = contactsData.value.map((contact: any) => ({
-          name: contact.displayName,
-          email: contact.emailAddresses?.[0]?.address,
-          phone: contact.mobilePhone || contact.businessPhones?.[0],
-          company: contact.companyName,
-          role: contact.jobTitle,
-          owner_id: user.id,
-          company_id: profile?.company_id,
-          tags: ["outlook-import"],
-        }));
+        const allMembers: any[] = [];
+
+        // Fetch members from each team
+        for (const team of teamsData.value || []) {
+          const membersResponse = await fetch(
+            `${GRAPH_API_BASE}/teams/${team.id}/members`,
+            { headers: { Authorization: `Bearer ${integration.access_token}` } }
+          );
+
+          const membersData = await membersResponse.json();
+
+          if (membersData.value) {
+            for (const member of membersData.value) {
+              // Avoid duplicates
+              if (!allMembers.find(m => m.email === member.email)) {
+                allMembers.push({
+                  name: member.displayName,
+                  email: member.email,
+                  role: member.roles?.join(", ") || "Member",
+                  company: team.displayName,
+                  owner_id: user.id,
+                  company_id: profile?.company_id,
+                  tags: ["teams-import", team.displayName],
+                });
+              }
+            }
+          }
+        }
+
+        if (allMembers.length === 0) {
+          return new Response(JSON.stringify({ success: true, imported: 0 }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
         const { data: inserted, error: insertError } = await supabase
           .from("contacts")
-          .insert(contacts)
+          .insert(allMembers)
           .select();
 
         if (insertError) {
@@ -250,7 +337,7 @@ serve(async (req) => {
         // Log the action
         await supabase.from("integration_logs").insert({
           integration_id: integration.id,
-          action: "import-contacts",
+          action: "import-members",
           status: "success",
           details: { imported_count: inserted?.length || 0 },
         });
@@ -264,135 +351,137 @@ serve(async (req) => {
         });
       }
 
-      case "sync-contacts": {
-        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
+      case "send-to-channel": {
+        const { teamId, channelId, message } = params;
 
-        if (!integration) {
-          return new Response(JSON.stringify({ error: "Outlook not connected" }), {
+        if (!teamId || !channelId || !message) {
+          return new Response(JSON.stringify({ error: "Team ID, channel ID, and message are required" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
-        // Get local contacts to sync
-        const { data: localContacts } = await supabase
-          .from("contacts")
-          .select("*")
-          .eq("owner_id", user.id)
-          .is("deleted_at", null);
+        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
 
-        let synced = 0;
+        if (!integration) {
+          return new Response(JSON.stringify({ error: "Teams not connected" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
-        for (const contact of localContacts || []) {
-          // Create contact in Outlook
-          const outlookContact = {
-            displayName: contact.name,
-            emailAddresses: contact.email ? [{ address: contact.email }] : [],
-            businessPhones: contact.phone ? [contact.phone] : [],
-            companyName: contact.company,
-            jobTitle: contact.role,
-          };
-
-          const response = await fetch(`${GRAPH_API_BASE}/me/contacts`, {
+        const response = await fetch(
+          `${GRAPH_API_BASE}/teams/${teamId}/channels/${channelId}/messages`,
+          {
             method: "POST",
             headers: {
               Authorization: `Bearer ${integration.access_token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(outlookContact),
-          });
-
-          if (response.ok) {
-            synced++;
+            body: JSON.stringify({
+              body: {
+                contentType: "html",
+                content: message,
+              },
+            }),
           }
+        );
+
+        const messageData = await response.json();
+
+        if (messageData.error) {
+          return new Response(JSON.stringify({ error: messageData.error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
 
         await supabase.from("integration_logs").insert({
           integration_id: integration.id,
-          action: "sync-contacts",
+          action: "send-to-channel",
           status: "success",
-          details: { synced_count: synced },
+          details: { team_id: teamId, channel_id: channelId },
         });
 
-        return new Response(JSON.stringify({ success: true, synced }), {
+        return new Response(JSON.stringify({ success: true, messageId: messageData.id }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      case "schedule-meeting": {
+      case "create-meeting": {
         const { contactId, subject, startTime, endTime, message } = params;
 
         const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
 
         if (!integration) {
-          return new Response(JSON.stringify({ error: "Outlook not connected" }), {
+          return new Response(JSON.stringify({ error: "Teams not connected" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
-        // Get contact details
-        const { data: contact } = await supabase
-          .from("contacts")
-          .select("*")
-          .eq("id", contactId)
-          .single();
+        // Get contact details if provided
+        let attendees: any[] = [];
+        if (contactId) {
+          const { data: contact } = await supabase
+            .from("contacts")
+            .select("*")
+            .eq("id", contactId)
+            .single();
 
-        if (!contact?.email) {
-          return new Response(JSON.stringify({ error: "Contact has no email" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Create calendar event
-        const event = {
-          subject,
-          body: {
-            contentType: "text",
-            content: message || `Meeting with ${contact.name}`,
-          },
-          start: {
-            dateTime: startTime,
-            timeZone: "UTC",
-          },
-          end: {
-            dateTime: endTime,
-            timeZone: "UTC",
-          },
-          attendees: [
-            {
+          if (contact?.email) {
+            attendees = [{
               emailAddress: {
                 address: contact.email,
                 name: contact.name,
               },
               type: "required",
-            },
-          ],
+            }];
+          }
+        }
+
+        // Create online meeting
+        const meeting = {
+          subject: subject || "Teams Meeting",
+          startDateTime: startTime,
+          endDateTime: endTime,
+          participants: attendees.length > 0 ? {
+            attendees: attendees.map(a => ({
+              upn: a.emailAddress.address,
+              role: "attendee",
+            })),
+          } : undefined,
         };
 
-        const response = await fetch(`${GRAPH_API_BASE}/me/events`, {
+        const response = await fetch(`${GRAPH_API_BASE}/me/onlineMeetings`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${integration.access_token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(event),
+          body: JSON.stringify(meeting),
         });
 
-        const eventData = await response.json();
+        const meetingData = await response.json();
 
-        if (eventData.error) {
-          return new Response(JSON.stringify({ error: eventData.error.message }), {
+        if (meetingData.error) {
+          return new Response(JSON.stringify({ error: meetingData.error.message }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
+        await supabase.from("integration_logs").insert({
+          integration_id: integration.id,
+          action: "create-meeting",
+          status: "success",
+          details: { meeting_id: meetingData.id, join_url: meetingData.joinWebUrl },
+        });
+
         return new Response(JSON.stringify({ 
           success: true, 
-          eventId: eventData.id,
-          webLink: eventData.webLink,
+          meetingId: meetingData.id,
+          joinUrl: meetingData.joinWebUrl,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -403,7 +492,7 @@ serve(async (req) => {
           .from("integrations")
           .select("*")
           .eq("user_id", user.id)
-          .eq("provider", "outlook")
+          .eq("provider", "teams")
           .single();
 
         return new Response(JSON.stringify({
@@ -419,7 +508,7 @@ serve(async (req) => {
           .from("integrations")
           .delete()
           .eq("user_id", user.id)
-          .eq("provider", "outlook");
+          .eq("provider", "teams");
 
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -433,7 +522,7 @@ serve(async (req) => {
         });
     }
   } catch (error: unknown) {
-    console.error("Outlook integration error:", error);
+    console.error("Teams integration error:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
@@ -454,7 +543,7 @@ async function getValidIntegration(
     .from("integrations")
     .select("*")
     .eq("user_id", userId)
-    .eq("provider", "outlook")
+    .eq("provider", "teams")
     .single();
 
   if (!integration?.access_token) return null;
