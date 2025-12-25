@@ -26,19 +26,33 @@ export function useSlackIntegration() {
   const getStatus = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      // Use refreshSession to ensure we have a valid token
+      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+      if (sessionError || !session) {
+        // User is not authenticated, return silently
+        setStatus({ connected: false });
+        return { connected: false };
+      }
 
       const { data, error } = await supabase.functions.invoke("slack-integration", {
         body: { action: "get-status" },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Handle auth errors silently - user may not be authenticated
+        console.log("Slack status check failed:", error.message);
+        setStatus({ connected: false });
+        return { connected: false };
+      }
       setStatus(data);
       return data;
     } catch (error) {
       console.error("Error getting Slack status:", error);
-      return null;
+      setStatus({ connected: false });
+      return { connected: false };
     } finally {
       setIsLoading(false);
     }
