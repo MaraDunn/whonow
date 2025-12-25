@@ -130,9 +130,10 @@ export function useSlackIntegration() {
         return null;
       }
 
+      const skippedMsg = data.skipped > 0 ? ` (${data.skipped} duplicates skipped)` : "";
       toast({
         title: "Import successful",
-        description: `Imported ${data.imported} contacts from Slack`,
+        description: `Imported ${data.imported} contacts from Slack${skippedMsg}`,
       });
       return data;
     } catch (error) {

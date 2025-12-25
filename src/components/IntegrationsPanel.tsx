@@ -264,7 +264,7 @@ export function IntegrationsPanel() {
             <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
               <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">api.slack.com/apps</a> and create a new app</li>
               <li>Under "OAuth & Permissions", add these scopes: <code className="bg-muted px-1 rounded">users:read</code>, <code className="bg-muted px-1 rounded">users:read.email</code>, <code className="bg-muted px-1 rounded">chat:write</code>, <code className="bg-muted px-1 rounded">channels:read</code></li>
-              <li>Add a redirect URL: <code className="bg-muted px-1 rounded text-[10px]">{window.location.origin}/functions/v1/slack-integration?action=oauth-callback</code></li>
+              <li>Add a redirect URL: <code className="bg-muted px-1 rounded text-[10px]">https://kzivlasydxnhbqduqpjb.supabase.co/functions/v1/slack-integration</code></li>
               <li>Copy Client ID and Client Secret to your secrets</li>
             </ol>
           </div>

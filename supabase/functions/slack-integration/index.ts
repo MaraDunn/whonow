@@ -154,20 +154,29 @@ serve(async (req) => {
       }
 
       case "import-members": {
+        console.log("Starting import-members for user:", user.id);
+        
         // Get user's Slack integration
-        const { data: integration } = await supabase
+        const { data: integration, error: integrationError } = await supabase
           .from("integrations")
           .select("*")
           .eq("user_id", user.id)
           .eq("provider", "slack")
           .single();
 
+        if (integrationError) {
+          console.error("Error fetching integration:", integrationError);
+        }
+
         if (!integration?.access_token) {
+          console.error("No Slack integration found for user:", user.id);
           return new Response(JSON.stringify({ error: "Slack not connected" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
+        console.log("Found Slack integration:", integration.id, "Team:", integration.settings?.team_name);
 
         // Fetch Slack workspace members
         const membersResponse = await fetch("https://slack.com/api/users.list", {
@@ -175,7 +184,10 @@ serve(async (req) => {
         });
         const membersData = await membersResponse.json();
 
+        console.log("Slack users.list response ok:", membersData.ok, "Member count:", membersData.members?.length);
+
         if (!membersData.ok) {
+          console.error("Slack API error:", membersData.error);
           return new Response(JSON.stringify({ error: membersData.error }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -187,6 +199,8 @@ serve(async (req) => {
           (m: any) => !m.is_bot && !m.deleted && m.id !== "USLACKBOT"
         );
 
+        console.log("Valid members after filtering:", validMembers.length);
+
         // Get user's company_id
         const { data: profile } = await supabase
           .from("profiles")
@@ -194,22 +208,59 @@ serve(async (req) => {
           .eq("id", user.id)
           .single();
 
-        // Import as contacts
-        const contacts = validMembers.map((member: any) => ({
+        // Build contacts to import
+        const contactsToImport = validMembers.map((member: any) => ({
           name: member.real_name || member.name,
-          email: member.profile?.email,
-          phone: member.profile?.phone,
-          role: member.profile?.title,
-          avatar: member.profile?.image_192,
+          email: member.profile?.email || null,
+          phone: member.profile?.phone || null,
+          role: member.profile?.title || null,
+          avatar: member.profile?.image_192 || null,
           company: integration.settings?.team_name,
           owner_id: user.id,
           company_id: profile?.company_id,
           tags: ["slack-import"],
         }));
 
+        // Check for existing contacts by email to avoid duplicates
+        const emailsToCheck = contactsToImport
+          .filter((c: any) => c.email)
+          .map((c: any) => c.email);
+
+        let existingEmailSet = new Set<string>();
+        
+        if (emailsToCheck.length > 0) {
+          const { data: existingContacts } = await supabase
+            .from("contacts")
+            .select("email")
+            .eq("owner_id", user.id)
+            .in("email", emailsToCheck);
+          
+          existingEmailSet = new Set(existingContacts?.map((c: any) => c.email) || []);
+          console.log("Found existing contacts:", existingEmailSet.size);
+        }
+
+        // Filter out duplicates
+        const newContacts = contactsToImport.filter(
+          (c: any) => !c.email || !existingEmailSet.has(c.email)
+        );
+        const skippedCount = contactsToImport.length - newContacts.length;
+
+        console.log("New contacts to insert:", newContacts.length, "Skipped duplicates:", skippedCount);
+
+        if (newContacts.length === 0) {
+          return new Response(JSON.stringify({ 
+            success: true, 
+            imported: 0,
+            skipped: skippedCount,
+            message: "All contacts already exist",
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         const { data: inserted, error: insertError } = await supabase
           .from("contacts")
-          .insert(contacts)
+          .insert(newContacts)
           .select();
 
         if (insertError) {
@@ -220,17 +271,23 @@ serve(async (req) => {
           });
         }
 
+        console.log("Successfully inserted contacts:", inserted?.length);
+
         // Log the action
         await supabase.from("integration_logs").insert({
           integration_id: integration.id,
           action: "import-members",
           status: "success",
-          details: { imported_count: inserted?.length || 0 },
+          details: { 
+            imported_count: inserted?.length || 0,
+            skipped_count: skippedCount,
+          },
         });
 
         return new Response(JSON.stringify({ 
           success: true, 
           imported: inserted?.length || 0,
+          skipped: skippedCount,
           contacts: inserted,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
