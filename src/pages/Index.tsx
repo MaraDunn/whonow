@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { 
   DndContext, 
   DragEndEvent, 
@@ -35,6 +36,7 @@ import { Contact } from "@/types/contact";
 import { toast } from "sonner";
 
 const Index = () => {
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, companyMembers, company } = useProfile(user?.id);
@@ -244,6 +246,11 @@ const Index = () => {
     toast.success(`Imported ${contacts.length} contacts`);
   };
 
+  const handleContactsImported = useCallback(() => {
+    // Invalidate the contacts query to refresh the list
+    queryClient.invalidateQueries({ queryKey: ["contacts"] });
+  }, [queryClient]);
+
   return (
     <SidebarProvider>
       <DndContext
@@ -292,6 +299,7 @@ const Index = () => {
                   setImportDefaultTab(tab);
                   setImportDialogOpen(true);
                 }}
+                onContactsImported={handleContactsImported}
                 myProfile={myProfile}
               />
               

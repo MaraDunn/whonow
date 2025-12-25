@@ -1,4 +1,4 @@
-import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, Sparkles } from "lucide-react";
+import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, Sparkles, MessageSquare, Video } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +11,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Contact } from "@/types/contact";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useSlackIntegration } from "@/hooks/useSlackIntegration";
+import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
 import { toast } from "sonner";
 
 interface HeaderProps {
@@ -19,12 +21,15 @@ interface HeaderProps {
   onOpenProfile: () => void;
   onOpenSettings: () => void;
   onOpenImport: (tab?: string) => void;
+  onContactsImported?: () => void;
   myProfile?: Contact;
 }
 
-export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings, onOpenImport, myProfile }: HeaderProps) {
+export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings, onOpenImport, onContactsImported, myProfile }: HeaderProps) {
   const { user, signOut } = useAuth();
   const { profile, company } = useProfile(user?.id);
+  const slack = useSlackIntegration();
+  const teams = useTeamsIntegration();
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -32,6 +37,40 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
       toast.error("Failed to sign out. Please try again.");
     } else {
       toast.success("Signed out successfully");
+    }
+  };
+
+  const handleSlackImport = async () => {
+    const status = await slack.getStatus();
+    if (!status?.connected) {
+      toast.error("Slack not connected. Please connect Slack in Settings first.", {
+        action: {
+          label: "Settings",
+          onClick: onOpenSettings,
+        },
+      });
+      return;
+    }
+    const result = await slack.importMembers();
+    if (result?.imported > 0) {
+      onContactsImported?.();
+    }
+  };
+
+  const handleTeamsImport = async () => {
+    const status = await teams.getStatus();
+    if (!status?.connected) {
+      toast.error("Teams not connected. Please connect Microsoft Teams in Settings first.", {
+        action: {
+          label: "Settings",
+          onClick: onOpenSettings,
+        },
+      });
+      return;
+    }
+    const result = await teams.importMembers();
+    if (result?.imported > 0) {
+      onContactsImported?.();
     }
   };
 
@@ -86,9 +125,26 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
               <FileUp className="mr-2 h-4 w-4" />
               Import from File
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("google")}>
               <Chrome className="mr-2 h-4 w-4" />
               Sync from Google
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              className="cursor-pointer" 
+              onClick={handleSlackImport}
+              disabled={slack.isLoading}
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              {slack.isLoading ? "Importing..." : "Import from Slack"}
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              className="cursor-pointer" 
+              onClick={handleTeamsImport}
+              disabled={teams.isLoading}
+            >
+              <Video className="mr-2 h-4 w-4" />
+              {teams.isLoading ? "Importing..." : "Import from Teams"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
