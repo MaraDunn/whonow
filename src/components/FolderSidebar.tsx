@@ -300,7 +300,7 @@ export function FolderSidebar({
       {/* Collapse Toggle Arrow */}
       <button
         onClick={toggleSidebar}
-        className="absolute top-3 -right-3 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background shadow-sm opacity-0 transition-opacity group-hover/sidebar:opacity-100 hover:bg-accent"
+        className="absolute top-3 -right-3 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background shadow-sm hover:bg-accent transition-colors"
         aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {isCollapsed ? (
