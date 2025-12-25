@@ -108,31 +108,41 @@ serve(async (req) => {
     }
 
     // For all other requests, require authentication
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const reqAuthHeader = req.headers.get("Authorization");
+    console.log("[slack-integration] Checking auth header:", reqAuthHeader ? "present" : "missing");
+    
+    if (!reqAuthHeader) {
+      console.log("[slack-integration] Returning 401 - no auth header");
       return new Response(JSON.stringify({ error: "No authorization header" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    console.log("[slack-integration] Verifying user token...");
     const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
+      reqAuthHeader.replace("Bearer ", "")
     );
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      console.log("[slack-integration] Auth failed:", authError?.message || "no user");
+      return new Response(JSON.stringify({ error: "Unauthorized", details: authError?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { action, ...params } = await req.json();
-    console.log(`Slack integration action: ${action}`, params);
+    console.log("[slack-integration] User verified:", user.id);
+
+    const body = await req.json();
+    const { action, ...params } = body;
+    console.log(`[slack-integration] Action: ${action}`, JSON.stringify(params));
 
     const SLACK_CLIENT_ID = Deno.env.get("SLACK_CLIENT_ID");
     const SLACK_CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
     const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN");
+    
+    console.log("[slack-integration] Secrets check - CLIENT_ID:", !!SLACK_CLIENT_ID, "CLIENT_SECRET:", !!SLACK_CLIENT_SECRET);
 
     switch (action) {
       case "get-oauth-url": {
