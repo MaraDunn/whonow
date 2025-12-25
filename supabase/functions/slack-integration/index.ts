@@ -7,6 +7,10 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  const url = new URL(req.url);
+  const authHeader = req.headers.get("Authorization");
+  console.log(`[slack-integration] ${req.method} ${url.pathname}${url.search} | Auth: ${authHeader ? "present" : "missing"}`);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

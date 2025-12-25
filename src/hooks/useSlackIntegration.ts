@@ -57,13 +57,29 @@ export function useSlackIntegration() {
         return;
       }
 
+      console.log("Calling slack-integration with action: get-oauth-url");
+      
       const { data, error } = await supabase.functions.invoke("slack-integration", {
         body: { action: "get-oauth-url" },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
-      if (error) throw error;
+      console.log("Slack connect response:", { data, error });
 
-      if (data.error) {
+      if (error) {
+        console.error("Slack function error details:", error);
+        const errorMsg = error.message || "Unknown error occurred";
+        toast({
+          title: "Connection failed",
+          description: errorMsg,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data?.error) {
         toast({
           title: "Configuration required",
           description: data.error,
@@ -72,13 +88,24 @@ export function useSlackIntegration() {
         return;
       }
 
+      if (!data?.url) {
+        toast({
+          title: "Connection failed",
+          description: "No OAuth URL returned from server",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Redirect to Slack OAuth
+      console.log("Redirecting to Slack OAuth:", data.url);
       window.location.href = data.url;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error connecting Slack:", error);
+      const errorMsg = error?.message || error?.toString() || "Could not initiate Slack connection";
       toast({
         title: "Connection failed",
-        description: "Could not initiate Slack connection",
+        description: errorMsg,
         variant: "destructive",
       });
     } finally {
