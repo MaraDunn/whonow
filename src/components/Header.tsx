@@ -1,5 +1,4 @@
-import { Plus, User, Settings, LogOut, FileUp, Camera, Smartphone, Chrome, ChevronDown, Building2 } from "lucide-react";
-import whoNowLogo from "@/assets/whonow-logo.png";
+import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Smartphone, Chrome, ChevronDown, Building2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,15 +45,13 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
 
   return (
     <header className="flex items-center justify-between mb-8 animate-fade-in">
-      <div className="flex items-center gap-3">
-        <img 
-          src={whoNowLogo} 
-          alt="WhoNow" 
-          className="h-11 w-auto"
-        />
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-xl gradient-hero flex items-center justify-center">
+          <Users className="h-6 w-6 text-primary-foreground" />
+        </div>
         <div>
           <h1 className="font-display font-bold text-2xl text-foreground">
-            WhoNow
+            Contacts
           </h1>
           <p className="text-sm text-muted-foreground">
             {contactCount} {contactCount === 1 ? "contact" : "contacts"}
