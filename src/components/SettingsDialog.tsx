@@ -60,8 +60,13 @@ export function SettingsDialog({
   };
 
   const handleSignOut = async () => {
-    await signOut();
+    const { error } = await signOut();
     onOpenChange(false);
+    if (error) {
+      toast.error("Failed to sign out. Please try again.");
+    } else {
+      toast.success("Signed out successfully");
+    }
   };
 
   const handleCopyInviteCode = () => {
