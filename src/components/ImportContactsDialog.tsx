@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Smartphone, Chrome, Check, AlertCircle, Loader2, FileUp, Upload, X, Camera, RotateCcw } from "lucide-react";
+import { Chrome, Check, AlertCircle, Loader2, FileUp, Upload, X, Camera, RotateCcw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePhoneContacts } from "@/hooks/usePhoneContacts";
+
 import { useGoogleContacts } from "@/hooks/useGoogleContacts";
 import { useFileContacts } from "@/hooks/useFileContacts";
 import { useBusinessCardScanner } from "@/hooks/useBusinessCardScanner";
@@ -50,7 +50,7 @@ export function ImportContactsDialog({
   presetKeywords = [],
   defaultFolderId,
 }: ImportContactsDialogProps) {
-  const [selectedPhoneContacts, setSelectedPhoneContacts] = useState<Set<number>>(new Set());
+  
   const [selectedGoogleContacts, setSelectedGoogleContacts] = useState<Set<number>>(new Set());
   const [selectedFileContacts, setSelectedFileContacts] = useState<Set<number>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
@@ -75,7 +75,7 @@ export function ImportContactsDialog({
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   
-  const phone = usePhoneContacts();
+  
   const google = useGoogleContacts();
   const fileImport = useFileContacts();
   const scanner = useBusinessCardScanner();
@@ -108,23 +108,6 @@ export function ImportContactsDialog({
     }
   }, [open, activeTab, scanner.stopCamera]);
 
-  const handlePhoneImport = () => {
-    const contactsToImport: Omit<Contact, "id">[] = phone.contacts
-      .filter((_, i) => selectedPhoneContacts.has(i))
-      .map((c) => ({
-        name: c.name,
-        email: c.email,
-        phone: c.phone,
-        company: "",
-        role: "",
-        tags: ["imported-phone"],
-      }));
-    
-    onImport(contactsToImport);
-    phone.clearContacts();
-    setSelectedPhoneContacts(new Set());
-    onOpenChange(false);
-  };
 
   const handleGoogleImport = () => {
     const contactsToImport: Omit<Contact, "id">[] = google.contacts
@@ -221,15 +204,6 @@ export function ImportContactsDialog({
     }
   };
 
-  const togglePhoneContact = (index: number) => {
-    const next = new Set(selectedPhoneContacts);
-    if (next.has(index)) {
-      next.delete(index);
-    } else {
-      next.add(index);
-    }
-    setSelectedPhoneContacts(next);
-  };
 
   const toggleGoogleContact = (index: number) => {
     const next = new Set(selectedGoogleContacts);
@@ -251,9 +225,6 @@ export function ImportContactsDialog({
     setSelectedFileContacts(next);
   };
 
-  const selectAllPhone = () => {
-    setSelectedPhoneContacts(new Set(phone.contacts.map((_, i) => i)));
-  };
 
   const selectAllGoogle = () => {
     setSelectedGoogleContacts(new Set(google.contacts.map((_, i) => i)));
@@ -342,7 +313,7 @@ export function ImportContactsDialog({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-4 shrink-0">
+          <TabsList className="grid w-full grid-cols-3 shrink-0">
             <TabsTrigger value="scan" className="flex items-center gap-2">
               <Camera className="h-4 w-4" />
               Scan
@@ -350,10 +321,6 @@ export function ImportContactsDialog({
             <TabsTrigger value="file" className="flex items-center gap-2">
               <FileUp className="h-4 w-4" />
               File
-            </TabsTrigger>
-            <TabsTrigger value="phone" className="flex items-center gap-2">
-              <Smartphone className="h-4 w-4" />
-              Phone
             </TabsTrigger>
             <TabsTrigger value="google" className="flex items-center gap-2">
               <Chrome className="h-4 w-4" />
@@ -754,81 +721,6 @@ export function ImportContactsDialog({
             )}
           </TabsContent>
 
-          {/* Phone Tab */}
-          <TabsContent value="phone" className="space-y-4">
-            {!phone.isSupported ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-sm text-muted-foreground">
-                  Contact Picker is only supported on Chrome for Android.
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Try opening this app on your Android phone.
-                </p>
-              </div>
-            ) : phone.contacts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8">
-                <Button
-                  onClick={phone.pickContacts}
-                  disabled={phone.isLoading}
-                  size="lg"
-                  className="gap-2"
-                >
-                  {phone.isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Smartphone className="h-4 w-4" />
-                  )}
-                  Select Contacts from Phone
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    {phone.contacts.length} contacts found
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={selectAllPhone}>
-                    Select All
-                  </Button>
-                </div>
-                <ScrollArea className="h-64 rounded-md border">
-                  <div className="p-4 space-y-2">
-                    {phone.contacts.map((contact, i) => (
-                      <label
-                        key={i}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer"
-                      >
-                        <Checkbox
-                          checked={selectedPhoneContacts.has(i)}
-                          onCheckedChange={() => togglePhoneContact(i)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{contact.name}</p>
-                          <p className="text-sm text-muted-foreground truncate">
-                            {contact.email || contact.phone || "No details"}
-                          </p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </ScrollArea>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    {selectedPhoneContacts.size} selected
-                  </span>
-                  <Button
-                    onClick={handlePhoneImport}
-                    disabled={selectedPhoneContacts.size === 0}
-                    className="gap-2"
-                  >
-                    <Check className="h-4 w-4" />
-                    Import Selected
-                  </Button>
-                </div>
-              </>
-            )}
-          </TabsContent>
 
           {/* Google Tab */}
           <TabsContent value="google" className="space-y-4">
