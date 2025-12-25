@@ -1,4 +1,4 @@
-import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Smartphone, Chrome, ChevronDown, Building2, Sparkles } from "lucide-react";
+import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, Sparkles } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,10 +85,6 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
             <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("file")}>
               <FileUp className="mr-2 h-4 w-4" />
               Import from File
-            </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("phone")}>
-              <Smartphone className="mr-2 h-4 w-4" />
-              Sync from Phone
             </DropdownMenuItem>
             <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("google")}>
               <Chrome className="mr-2 h-4 w-4" />
