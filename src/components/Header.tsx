@@ -29,7 +29,9 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
   const handleSignOut = async () => {
     const { error } = await signOut();
     if (error) {
-      toast.error("Failed to sign out");
+      toast.error("Failed to sign out. Please try again.");
+    } else {
+      toast.success("Signed out successfully");
     }
   };
 
