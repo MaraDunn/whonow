@@ -12,5 +12,5 @@ verify_jwt = false
 [functions.slack-integration]
 verify_jwt = true
 
-[functions.outlook-integration]
+[functions.teams-integration]
 verify_jwt = true

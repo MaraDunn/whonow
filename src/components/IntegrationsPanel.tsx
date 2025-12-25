@@ -1,23 +1,22 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
-import { useOutlookIntegration } from "@/hooks/useOutlookIntegration";
-import { Loader2, Link2, Unlink, Download, Upload, Calendar, MessageSquare, Check, ExternalLink } from "lucide-react";
+import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
+import { Loader2, Link2, Unlink, Download, Video, Check, ExternalLink } from "lucide-react";
 
 export function IntegrationsPanel() {
   const [webhookUrl, setWebhookUrl] = useState("");
   const slack = useSlackIntegration();
-  const outlook = useOutlookIntegration();
+  const teams = useTeamsIntegration();
 
   useEffect(() => {
     slack.getStatus();
-    outlook.getStatus();
+    teams.getStatus();
   }, []);
 
   // Check URL params for integration callback
@@ -29,8 +28,8 @@ export function IntegrationsPanel() {
     if (integration && status === "success") {
       if (integration === "slack") {
         slack.getStatus();
-      } else if (integration === "outlook") {
-        outlook.getStatus();
+      } else if (integration === "teams") {
+        teams.getStatus();
       }
       // Clean up URL
       window.history.replaceState({}, "", window.location.pathname);
@@ -161,24 +160,24 @@ export function IntegrationsPanel() {
           </CardContent>
         </Card>
 
-        {/* Outlook Integration */}
+        {/* Microsoft Teams Integration */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0078D4]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#6264A7]">
                   <svg viewBox="0 0 24 24" className="h-6 w-6 text-white" fill="currentColor">
-                    <path d="M24 7.387v10.478c0 .23-.08.424-.238.576-.158.156-.354.234-.586.234h-8.29v-6.182l1.58 1.18a.39.39 0 0 0 .475.002l6.823-5.076c.074-.05.153-.067.236-.05zm0-1.584c-.003-.28-.224-.47-.523-.31l-8.59 6.394-1.9-1.42V4.324h-2.5v6.142l-1.9 1.42L0 5.494c-.3-.16-.52.03-.523.31 0 0 .003 11.587.003 11.889 0 .232.08.426.24.58.16.153.35.23.58.23l2.5.001V11.67l8.55 6.385a.45.45 0 0 0 .3.12.45.45 0 0 0 .3-.12l3.05-2.28v2.72l2.5.001V11.67l6.5 4.835v-10.7z"/>
+                    <path d="M20.625 8.073c.574 0 1.125.111 1.646.334a4.312 4.312 0 0 1 1.354.912c.388.388.695.847.922 1.375.227.528.34 1.087.34 1.677v5.317a.483.483 0 0 1-.146.354.483.483 0 0 1-.354.146h-4.262v-4.04c0-.574-.111-1.112-.334-1.615a4.213 4.213 0 0 0-.912-1.323 4.312 4.312 0 0 0-1.354-.891 4.09 4.09 0 0 0-1.635-.334H13.5V8.073h7.125zM16.5 6.01a1.977 1.977 0 0 0 1.448-.594 1.977 1.977 0 0 0 .594-1.448c0-.574-.198-1.062-.594-1.464A1.955 1.955 0 0 0 16.5 1.92c-.563 0-1.047.198-1.453.594a1.996 1.996 0 0 0-.589 1.454c0 .563.193 1.047.58 1.448.386.401.87.594 1.462.594zM12 4.01c.813 0 1.568.159 2.266.475a5.903 5.903 0 0 1 1.86 1.29 6.156 6.156 0 0 1 1.26 1.885c.307.719.469 1.484.489 2.297v7.73a.483.483 0 0 1-.146.355.483.483 0 0 1-.354.146H6.75a.483.483 0 0 1-.354-.146.483.483 0 0 1-.146-.354v-7.73c.02-.813.182-1.578.49-2.298a6.15 6.15 0 0 1 1.259-1.885 5.902 5.902 0 0 1 1.86-1.29A5.665 5.665 0 0 1 12 4.01zm0-2.094a2.943 2.943 0 0 0-2.156.891 2.942 2.942 0 0 0-.89 2.156c0 .844.296 1.563.89 2.157.594.593 1.312.89 2.156.89a2.942 2.942 0 0 0 2.156-.89 2.942 2.942 0 0 0 .89-2.157c0-.844-.297-1.562-.89-2.156A2.943 2.943 0 0 0 12 1.916zM4.875 8.073c.813 0 1.5.286 2.063.86.562.573.843 1.265.843 2.077v6.677a.483.483 0 0 1-.146.354.483.483 0 0 1-.354.146H.5a.483.483 0 0 1-.354-.146.483.483 0 0 1-.146-.354V11.01c0-.813.28-1.5.843-2.063a2.816 2.816 0 0 1 2.063-.875h1.969zm-.375-2.063a1.977 1.977 0 0 0 1.448-.594 1.977 1.977 0 0 0 .594-1.448c0-.574-.198-1.062-.594-1.464a1.955 1.955 0 0 0-1.448-.584c-.563 0-1.047.198-1.453.594a1.996 1.996 0 0 0-.589 1.454c0 .563.193 1.047.58 1.448.386.401.87.594 1.462.594z"/>
                   </svg>
                 </div>
                 <div>
-                  <CardTitle className="text-base">Outlook</CardTitle>
+                  <CardTitle className="text-base">Microsoft Teams</CardTitle>
                   <CardDescription className="text-xs">
-                    Sync contacts & schedule meetings
+                    Import members & schedule meetings
                   </CardDescription>
                 </div>
               </div>
-              {outlook.status?.connected && (
+              {teams.status?.connected && (
                 <Badge variant="secondary" className="bg-green-500/10 text-green-600">
                   <Check className="h-3 w-3 mr-1" /> Connected
                 </Badge>
@@ -186,39 +185,45 @@ export function IntegrationsPanel() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {outlook.status?.connected ? (
+            {teams.status?.connected ? (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Connected as <strong>{outlook.status.settings?.email}</strong>
+                  Connected as <strong>{teams.status.settings?.email}</strong>
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => outlook.importContacts()}
-                    disabled={outlook.isLoading}
+                    onClick={() => teams.importMembers()}
+                    disabled={teams.isLoading}
                   >
-                    {outlook.isLoading ? (
+                    {teams.isLoading ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
                       <Download className="h-4 w-4 mr-2" />
                     )}
-                    Import
+                    Import Members
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => outlook.syncContacts()}
-                    disabled={outlook.isLoading}
+                    onClick={() => {
+                      teams.createMeeting({
+                        subject: "Quick Meeting",
+                        startTime: new Date().toISOString(),
+                        endTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+                      });
+                    }}
+                    disabled={teams.isLoading}
                   >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Sync to Outlook
+                    <Video className="h-4 w-4 mr-2" />
+                    New Meeting
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => outlook.disconnect()}
-                    disabled={outlook.isLoading}
+                    onClick={() => teams.disconnect()}
+                    disabled={teams.isLoading}
                   >
                     <Unlink className="h-4 w-4 mr-2" />
                     Disconnect
@@ -228,19 +233,19 @@ export function IntegrationsPanel() {
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Connect Outlook to sync contacts, import from your address book, and schedule meetings directly.
+                  Connect Microsoft Teams to import team members as contacts and schedule Teams meetings directly.
                 </p>
                 <Button
                   size="sm"
-                  onClick={() => outlook.connect()}
-                  disabled={outlook.isLoading}
+                  onClick={() => teams.connect()}
+                  disabled={teams.isLoading}
                 >
-                  {outlook.isLoading ? (
+                  {teams.isLoading ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Link2 className="h-4 w-4 mr-2" />
                   )}
-                  Connect Outlook
+                  Connect Teams
                 </Button>
               </>
             )}
@@ -267,11 +272,11 @@ export function IntegrationsPanel() {
           <Separator />
 
           <div>
-            <h4 className="font-medium mb-2">Outlook Setup</h4>
+            <h4 className="font-medium mb-2">Microsoft Teams Setup</h4>
             <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
               <li>Go to <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Azure AD Portal</a> and register a new app</li>
-              <li>Add API permissions: <code className="bg-muted px-1 rounded">User.Read</code>, <code className="bg-muted px-1 rounded">Contacts.ReadWrite</code>, <code className="bg-muted px-1 rounded">Calendars.ReadWrite</code></li>
-              <li>Add a redirect URI (Web): <code className="bg-muted px-1 rounded text-[10px]">{window.location.origin}/functions/v1/outlook-integration?action=oauth-callback</code></li>
+              <li>Add API permissions: <code className="bg-muted px-1 rounded">User.Read</code>, <code className="bg-muted px-1 rounded">Team.ReadBasic.All</code>, <code className="bg-muted px-1 rounded">Channel.ReadBasic.All</code>, <code className="bg-muted px-1 rounded">Chat.ReadWrite</code>, <code className="bg-muted px-1 rounded">OnlineMeetings.ReadWrite</code></li>
+              <li>Add a redirect URI (Web): <code className="bg-muted px-1 rounded text-[10px]">https://kzivlasydxnhbqduqpjb.supabase.co/functions/v1/teams-integration?action=oauth-callback</code></li>
               <li>Create a client secret and copy it along with Client ID</li>
             </ol>
           </div>
