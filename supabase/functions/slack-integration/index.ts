@@ -15,7 +15,95 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Get app URL from environment or use a default
+    const appUrl = Deno.env.get("APP_URL") || "https://4bf33c78-836d-463a-a955-3c63d9df84b3.lovableproject.com";
 
+    // Check if this is an OAuth callback (GET request with code parameter)
+    const url = new URL(req.url);
+    const isOAuthCallback = req.method === "GET" && url.searchParams.has("code");
+    
+    if (isOAuthCallback) {
+      // Handle OAuth callback separately - no auth required
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state"); // user_id
+      const errorParam = url.searchParams.get("error");
+      
+      if (errorParam) {
+        console.error("Slack OAuth error:", errorParam);
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/?integration=slack&status=error&message=${encodeURIComponent(errorParam)}` },
+        });
+      }
+
+      const SLACK_CLIENT_ID = Deno.env.get("SLACK_CLIENT_ID");
+      const SLACK_CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
+      
+      if (!code || !SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET || !state) {
+        console.error("Missing OAuth params:", { hasCode: !!code, hasClientId: !!SLACK_CLIENT_ID, hasSecret: !!SLACK_CLIENT_SECRET, hasState: !!state });
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/?integration=slack&status=error&message=missing_params` },
+        });
+      }
+
+      const redirectUri = `${supabaseUrl}/functions/v1/slack-integration`;
+      console.log("Exchanging code for token with redirect URI:", redirectUri);
+      
+      const tokenResponse = await fetch("https://slack.com/api/oauth.v2.access", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: SLACK_CLIENT_ID,
+          client_secret: SLACK_CLIENT_SECRET,
+          code,
+          redirect_uri: redirectUri,
+        }),
+      });
+
+      const tokenData = await tokenResponse.json();
+      console.log("Slack OAuth token response:", JSON.stringify(tokenData));
+
+      if (!tokenData.ok) {
+        console.error("Slack OAuth failed:", tokenData.error);
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/?integration=slack&status=error&message=${encodeURIComponent(tokenData.error)}` },
+        });
+      }
+
+      // Store the integration
+      const { error: upsertError } = await supabase.from("integrations").upsert({
+        user_id: state,
+        provider: "slack",
+        access_token: tokenData.access_token,
+        is_active: true,
+        settings: {
+          team_id: tokenData.team?.id,
+          team_name: tokenData.team?.name,
+          bot_user_id: tokenData.bot_user_id,
+        },
+      }, { onConflict: "user_id,provider" });
+
+      if (upsertError) {
+        console.error("Error storing integration:", upsertError);
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/?integration=slack&status=error&message=storage_error` },
+        });
+      }
+
+      console.log("Slack integration stored successfully, redirecting to:", `${appUrl}/?integration=slack&status=success`);
+      
+      // Redirect back to the app
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${appUrl}/?integration=slack&status=success` },
+      });
+    }
+
+    // For all other requests, require authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header" }), {
@@ -53,60 +141,15 @@ serve(async (req) => {
           });
         }
         
-        const redirectUri = `${supabaseUrl}/functions/v1/slack-integration?action=oauth-callback`;
+        // Redirect URI should NOT include query params - Slack will add code & state
+        const redirectUri = `${supabaseUrl}/functions/v1/slack-integration`;
         const scopes = "users:read,users:read.email,chat:write,channels:read,groups:read";
         const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${user.id}`;
         
+        console.log("Generated OAuth URL with redirect:", redirectUri);
+        
         return new Response(JSON.stringify({ url: oauthUrl }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      case "oauth-callback": {
-        const url = new URL(req.url);
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state"); // user_id
-        
-        if (!code || !SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET) {
-          return new Response("Missing code or credentials", { status: 400 });
-        }
-
-        const redirectUri = `${supabaseUrl}/functions/v1/slack-integration?action=oauth-callback`;
-        const tokenResponse = await fetch("https://slack.com/api/oauth.v2.access", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            client_id: SLACK_CLIENT_ID,
-            client_secret: SLACK_CLIENT_SECRET,
-            code,
-            redirect_uri: redirectUri,
-          }),
-        });
-
-        const tokenData = await tokenResponse.json();
-        console.log("Slack OAuth response:", tokenData);
-
-        if (!tokenData.ok) {
-          return new Response(`OAuth failed: ${tokenData.error}`, { status: 400 });
-        }
-
-        // Store the integration
-        await supabase.from("integrations").upsert({
-          user_id: state,
-          provider: "slack",
-          access_token: tokenData.access_token,
-          is_active: true,
-          settings: {
-            team_id: tokenData.team?.id,
-            team_name: tokenData.team?.name,
-            bot_user_id: tokenData.bot_user_id,
-          },
-        }, { onConflict: "user_id,provider" });
-
-        // Redirect back to the app
-        return new Response(null, {
-          status: 302,
-          headers: { Location: "/settings?integration=slack&status=success" },
         });
       }
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   DndContext, 
   DragEndEvent, 
@@ -13,6 +13,7 @@ import {
   DragOverEvent
 } from "@dnd-kit/core";
 import { PanelLeft } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
@@ -34,6 +35,7 @@ import { Contact } from "@/types/contact";
 import { toast } from "sonner";
 
 const Index = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, companyMembers, company } = useProfile(user?.id);
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,6 +63,28 @@ const Index = () => {
   } = useContacts();
   const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
+
+  // Handle OAuth callback redirects (e.g., from Slack)
+  useEffect(() => {
+    const integration = searchParams.get("integration");
+    const status = searchParams.get("status");
+    const message = searchParams.get("message");
+
+    if (integration && status) {
+      if (status === "success") {
+        toast.success(`${integration.charAt(0).toUpperCase() + integration.slice(1)} connected successfully!`);
+        setSettingsOpen(true);
+      } else if (status === "error") {
+        toast.error(`Failed to connect ${integration}: ${message || "Unknown error"}`);
+      }
+      
+      // Clear the URL params
+      searchParams.delete("integration");
+      searchParams.delete("status");
+      searchParams.delete("message");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Filter contacts by folder first (only for non-trash view)
   const folderFilteredContacts = useMemo(() => {
