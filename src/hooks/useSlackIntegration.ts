@@ -47,8 +47,12 @@ export function useSlackIntegration() {
   const connect = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      
+      // Force refresh the session to get a fresh token
+      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+      
+      if (sessionError || !session) {
+        console.error("Session refresh failed:", sessionError);
         toast({
           title: "Authentication required",
           description: "Please sign in to connect Slack",
@@ -57,7 +61,7 @@ export function useSlackIntegration() {
         return;
       }
 
-      console.log("Calling slack-integration with action: get-oauth-url");
+      console.log("Calling slack-integration with fresh token");
       
       const { data, error } = await supabase.functions.invoke("slack-integration", {
         body: { action: "get-oauth-url" },
