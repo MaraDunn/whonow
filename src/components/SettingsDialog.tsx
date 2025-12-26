@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
+import { AdminPdfImport } from "@/components/AdminPdfImport";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,14 @@ interface SettingsDialogProps {
   onResetKeywords: () => void;
   isCompanyKeywords?: boolean;
   canEditKeywords?: boolean;
+  onBulkImport?: (contacts: Array<{
+    name: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    role?: string;
+    tags?: string[];
+  }>) => void;
 }
 
 export function SettingsDialog({
@@ -39,6 +48,7 @@ export function SettingsDialog({
   onResetKeywords,
   isCompanyKeywords = false,
   canEditKeywords = true,
+  onBulkImport,
 }: SettingsDialogProps) {
   const [newKeyword, setNewKeyword] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
@@ -589,6 +599,13 @@ export function SettingsDialog({
                     Click on a keyword to remove it.
                   </p>
                 </div>
+
+                <Separator />
+
+                {/* Bulk Contact Import */}
+                {onBulkImport && (
+                  <AdminPdfImport onImport={onBulkImport} />
+                )}
 
                 <Separator />
 
