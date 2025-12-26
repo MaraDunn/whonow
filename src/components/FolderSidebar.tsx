@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/tooltip";
 import { FolderFormDialog } from "@/components/FolderFormDialog";
 import { DroppableFolder } from "@/components/DroppableFolder";
+import { DroppableAllContacts } from "@/components/DroppableAllContacts";
 import { Folder as FolderType } from "@/types/folder";
 import { Profile } from "@/types/profile";
 import { cn } from "@/lib/utils";
@@ -128,32 +129,33 @@ export function FolderSidebar({
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                {/* All Contacts */}
+                {/* All Contacts - droppable to remove from folders */}
                 <SidebarMenuItem>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SidebarMenuButton
-                          onClick={() => onSelectFolder(null)}
-                          isActive={selectedFolderId === null && !showTrash}
-                          className="w-full"
-                        >
-                          <Users className="h-4 w-4" />
-                          {!isCollapsed && (
-                            <>
-                              <span className="flex-1 text-left">All Contacts</span>
-                              <span className="text-xs opacity-70">{totalContacts}</span>
-                            </>
-                          )}
-                        </SidebarMenuButton>
-                      </TooltipTrigger>
-                      {isCollapsed && (
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton
+                            onClick={() => onSelectFolder(null)}
+                            isActive={selectedFolderId === null && !showTrash}
+                            className="w-full"
+                          >
+                            <Users className="h-4 w-4" />
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
                         <TooltipContent side="right">
                           <p>All Contacts ({totalContacts})</p>
                         </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <DroppableAllContacts
+                      isSelected={selectedFolderId === null}
+                      totalContacts={totalContacts}
+                      onClick={() => onSelectFolder(null)}
+                      showTrash={showTrash}
+                    />
+                  )}
                 </SidebarMenuItem>
 
                 {/* Folder List */}

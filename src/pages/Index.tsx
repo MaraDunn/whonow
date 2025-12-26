@@ -216,30 +216,38 @@ const Index = () => {
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveContact(null);
     setOverId(null);
-    
+
     const { active, over } = event;
     if (!over) return;
 
     const contact = active.data.current?.contact as Contact | undefined;
     const targetFolderId = over.data.current?.folderId as string | null | undefined;
+    const isAllContacts = over.data.current?.isAllContacts as boolean | undefined;
 
     if (!contact) return;
-    
+
+    // Determine the new folderId: if dropped on All Contacts, remove from folder (null)
+    const newFolderId = isAllContacts ? null : targetFolderId;
+
     // If dropped on the same folder, do nothing
-    if (contact.folderId === targetFolderId) return;
-    if (!contact.folderId && targetFolderId === null) return;
+    if (contact.folderId === newFolderId) return;
+    if (!contact.folderId && newFolderId === null) return;
 
     // Update the contact's folder
     updateContact({
       ...contact,
-      folderId: targetFolderId || undefined,
+      folderId: newFolderId || undefined,
     });
 
-    const folderName = targetFolderId 
-      ? folders.find(f => f.id === targetFolderId)?.name 
-      : "No folder";
-    toast.success(`Moved "${contact.name}" to ${folderName}`);
+    const folderName = newFolderId
+      ? folders.find((f) => f.id === newFolderId)?.name
+      : "All Contacts";
     
+    const message = newFolderId
+      ? `Moved "${contact.name}" to ${folderName}`
+      : `Removed "${contact.name}" from folder`;
+    toast.success(message);
+
     // Success haptic
     if (navigator.vibrate) {
       navigator.vibrate([30, 50, 30]);
