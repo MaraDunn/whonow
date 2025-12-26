@@ -117,6 +117,7 @@ const Index = () => {
     permanentlyDeleteContact,
     emptyTrash,
     updateLastContacted,
+    toggleClientStatus,
   } = useContacts();
   const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
@@ -170,9 +171,10 @@ const Index = () => {
   const sharedContactsCount = useMemo(() => 
     contacts.filter(c => c.isShared).length, [contacts]);
 
-  // Client directory: contacts sorted based on selected sort option
+  // Client directory: only clients, sorted based on selected sort option
   const clientDirectoryContacts = useMemo(() => {
-    return [...contacts].sort((a, b) => {
+    const clientsOnly = contacts.filter(c => c.isClient);
+    return [...clientsOnly].sort((a, b) => {
       switch (clientSortOption) {
         case "oldest-contacted":
           // Never contacted first, then oldest contacted
@@ -197,6 +199,9 @@ const Index = () => {
       }
     });
   }, [contacts, clientSortOption]);
+
+  // Count of clients for sidebar
+  const clientCount = useMemo(() => contacts.filter(c => c.isClient).length, [contacts]);
 
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(
     showClientDirectory ? clientDirectoryContacts : folderFilteredContacts, 
@@ -408,7 +413,7 @@ const Index = () => {
             sharedContactsCount={sharedContactsCount}
             showClientDirectory={showClientDirectory}
             onSelectClientDirectory={handleSelectClientDirectory}
-            clientDirectoryCount={contacts.length}
+            clientDirectoryCount={clientCount}
           />
 
           {/* Main Content */}
@@ -511,6 +516,7 @@ const Index = () => {
                     folders={folders}
                     showOwnershipBadge={!!company}
                     onMarkContacted={updateLastContacted}
+                    onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
                   />
                 </>
               ) : (
@@ -527,6 +533,7 @@ const Index = () => {
                   folders={folders}
                   showOwnershipBadge={!!company}
                   onMarkContacted={updateLastContacted}
+                  onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
                 />
               )}
 

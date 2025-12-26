@@ -23,12 +23,14 @@ type DbContact = {
   company_id: string | null;
   is_shared: boolean | null;
   last_contacted_at: string | null;
+  is_client: boolean | null;
 };
 
 interface ContactWithMeta extends Contact {
   isShared?: boolean;
   ownerId?: string;
   lastContactedAt?: string;
+  isClient?: boolean;
 }
 
 const mapDbToContact = (db: DbContact): ContactWithMeta => ({
@@ -45,6 +47,7 @@ const mapDbToContact = (db: DbContact): ContactWithMeta => ({
   isShared: db.is_shared || false,
   ownerId: db.owner_id || undefined,
   lastContactedAt: db.last_contacted_at || undefined,
+  isClient: db.is_client || false,
 });
 
 const mapContactToDb = (
@@ -250,6 +253,24 @@ export const useContacts = () => {
     },
   });
 
+  // Toggle client status
+  const toggleClientStatus = useMutation({
+    mutationFn: async ({ id, isClient }: { id: string; isClient: boolean }) => {
+      const { error } = await supabase
+        .from("contacts")
+        .update({ is_client: isClient })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      toast.success(variables.isClient ? "Marked as client" : "Removed from clients");
+    },
+    onError: (error) => {
+      toast.error("Failed to update contact: " + error.message);
+    },
+  });
+
   return {
     contacts,
     trashedContacts,
@@ -262,5 +283,6 @@ export const useContacts = () => {
     permanentlyDeleteContact: permanentlyDeleteContact.mutate,
     emptyTrash: emptyTrash.mutate,
     updateLastContacted: updateLastContacted.mutate,
+    toggleClientStatus: toggleClientStatus.mutate,
   };
 };
