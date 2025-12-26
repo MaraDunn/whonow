@@ -418,7 +418,7 @@ const Index = () => {
 
           {/* Main Content */}
           <div className="flex-1">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-12">
               <Header 
                 contactCount={filteredContacts.length} 
                 onOpenAddDialog={handleOpenAddDialog}
@@ -432,7 +432,7 @@ const Index = () => {
                 myProfile={myProfile}
               />
               
-              <div className="mb-10">
+              <div className="mb-4 sm:mb-10">
                 <SearchBar
                   value={searchQuery}
                   onChange={setSearchQuery}

@@ -14,6 +14,7 @@ import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
 import { toast } from "sonner";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface HeaderProps {
   contactCount: number;
@@ -30,6 +31,7 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
   const { profile, company } = useProfile(user?.id);
   const slack = useSlackIntegration();
   const teams = useTeamsIntegration();
+  const isMobile = useIsMobile();
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -83,23 +85,29 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
     .slice(0, 2);
 
   return (
-    <header className="flex items-center justify-between mb-8 animate-fade-in">
-      <div className="flex items-center gap-4">
-        <WhoNowLogo size="md" showText={true} />
-        <div className="border-l border-border pl-4">
-          <p className="text-sm text-muted-foreground">
-            {contactCount} {contactCount === 1 ? "contact" : "contacts"}
-          </p>
-        </div>
+    <header className="flex items-center justify-between mb-4 sm:mb-8 animate-fade-in">
+      <div className="flex items-center gap-2 sm:gap-4">
+        <WhoNowLogo size={isMobile ? "sm" : "md"} showText={!isMobile} />
+        {!isMobile && (
+          <div className="border-l border-border pl-4">
+            <p className="text-sm text-muted-foreground">
+              {contactCount} {contactCount === 1 ? "contact" : "contacts"}
+            </p>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20">
+            <button className="flex items-center justify-center gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20">
               <Plus className="h-4 w-4" />
-              <span>Add Contact</span>
-              <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+              {!isMobile && (
+                <>
+                  <span>Add Contact</span>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </>
+              )}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52 bg-popover">
@@ -146,8 +154,8 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center justify-center w-10 h-10 rounded-full bg-muted hover:bg-muted/80 transition-colors">
-              <Avatar className="h-9 w-9">
+            <button className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-muted hover:bg-muted/80 transition-colors">
+              <Avatar className="h-7 w-7 sm:h-9 sm:w-9">
                 {myProfile?.avatar && <AvatarImage src={myProfile.avatar} alt={myProfile.name} />}
                 <AvatarFallback className="bg-primary/10 text-primary font-medium">
                   {profileInitials}
