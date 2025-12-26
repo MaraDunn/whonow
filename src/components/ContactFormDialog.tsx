@@ -145,6 +145,9 @@ export function ContactFormDialog({
   };
 
   const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Stop propagation to prevent dialog/collapsible keyboard handling from interfering
+    e.stopPropagation();
+    
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
       const newTag = tagInput.trim().toLowerCase();
