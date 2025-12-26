@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -31,6 +31,7 @@ import { DroppableFolder } from "@/components/DroppableFolder";
 import { DroppableAllContacts } from "@/components/DroppableAllContacts";
 import { Folder as FolderType } from "@/types/folder";
 import { Profile } from "@/types/profile";
+import { ContactOwnershipFilter } from "@/types/contact";
 import { cn } from "@/lib/utils";
 
 interface FolderSidebarProps {
@@ -48,6 +49,12 @@ interface FolderSidebarProps {
   companyMembers?: Profile[];
   showDirectory?: boolean;
   onSelectDirectory?: () => void;
+  // New props for ownership filtering
+  hasCompany?: boolean;
+  ownershipFilter?: ContactOwnershipFilter;
+  onOwnershipFilterChange?: (filter: ContactOwnershipFilter) => void;
+  personalContactsCount?: number;
+  sharedContactsCount?: number;
 }
 
 export function FolderSidebar({
@@ -65,6 +72,11 @@ export function FolderSidebar({
   companyMembers = [],
   showDirectory = false,
   onSelectDirectory,
+  hasCompany = false,
+  ownershipFilter = "all",
+  onOwnershipFilterChange,
+  personalContactsCount = 0,
+  sharedContactsCount = 0,
 }: FolderSidebarProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
@@ -136,8 +148,11 @@ export function FolderSidebar({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <SidebarMenuButton
-                            onClick={() => onSelectFolder(null)}
-                            isActive={selectedFolderId === null && !showTrash}
+                            onClick={() => {
+                              onSelectFolder(null);
+                              onOwnershipFilterChange?.("all");
+                            }}
+                            isActive={selectedFolderId === null && !showTrash && !showDirectory && ownershipFilter === "all"}
                             className="w-full"
                           >
                             <Users className="h-4 w-4" />
@@ -150,13 +165,98 @@ export function FolderSidebar({
                     </TooltipProvider>
                   ) : (
                     <DroppableAllContacts
-                      isSelected={selectedFolderId === null}
+                      isSelected={selectedFolderId === null && ownershipFilter === "all"}
                       totalContacts={totalContacts}
-                      onClick={() => onSelectFolder(null)}
+                      onClick={() => {
+                        onSelectFolder(null);
+                        onOwnershipFilterChange?.("all");
+                      }}
                       showTrash={showTrash}
                     />
                   )}
                 </SidebarMenuItem>
+
+                {/* Personal/Shared filter - only show for company users */}
+                {hasCompany && !isCollapsed && (
+                  <>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        onClick={() => {
+                          onSelectFolder(null);
+                          onOwnershipFilterChange?.("personal");
+                        }}
+                        isActive={ownershipFilter === "personal" && !showTrash && !showDirectory}
+                        className="w-full pl-6"
+                      >
+                        <UserCircle className="h-4 w-4" />
+                        <span className="flex-1 text-left">Personal</span>
+                        <span className="text-xs opacity-70">{personalContactsCount}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        onClick={() => {
+                          onSelectFolder(null);
+                          onOwnershipFilterChange?.("shared");
+                        }}
+                        isActive={ownershipFilter === "shared" && !showTrash && !showDirectory}
+                        className="w-full pl-6"
+                      >
+                        <Building2 className="h-4 w-4" />
+                        <span className="flex-1 text-left">Shared</span>
+                        <span className="text-xs opacity-70">{sharedContactsCount}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </>
+                )}
+
+                {/* Collapsed mode: Personal/Shared icons */}
+                {hasCompany && isCollapsed && (
+                  <>
+                    <SidebarMenuItem>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuButton
+                              onClick={() => {
+                                onSelectFolder(null);
+                                onOwnershipFilterChange?.("personal");
+                              }}
+                              isActive={ownershipFilter === "personal" && !showTrash && !showDirectory}
+                              className="w-full"
+                            >
+                              <UserCircle className="h-4 w-4" />
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>Personal ({personalContactsCount})</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuButton
+                              onClick={() => {
+                                onSelectFolder(null);
+                                onOwnershipFilterChange?.("shared");
+                              }}
+                              isActive={ownershipFilter === "shared" && !showTrash && !showDirectory}
+                              className="w-full"
+                            >
+                              <Building2 className="h-4 w-4" />
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>Shared ({sharedContactsCount})</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </SidebarMenuItem>
+                  </>
+                )}
 
                 {/* Folder List */}
                 {folders.map((folder) => (

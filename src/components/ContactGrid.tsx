@@ -16,6 +16,7 @@ interface ContactGridProps {
   onPermanentlyDelete?: (id: string) => void;
   onEmptyTrash?: () => void;
   folders?: Folder[];
+  showOwnershipBadge?: boolean;
 }
 
 export function ContactGrid({ 
@@ -28,7 +29,8 @@ export function ContactGrid({
   onRestoreContact,
   onPermanentlyDelete,
   onEmptyTrash,
-  folders = []
+  folders = [],
+  showOwnershipBadge = false,
 }: ContactGridProps) {
   // Create a map for quick folder lookup
   const folderMap = new Map(folders.map(f => [f.id, f]));
@@ -87,6 +89,7 @@ export function ContactGrid({
             onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
             onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
             folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
+            showOwnershipBadge={showOwnershipBadge}
           />
         ))}
       </div>
