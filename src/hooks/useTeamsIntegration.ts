@@ -120,8 +120,14 @@ export function useTeamsIntegration() {
   const disconnect = useCallback(async () => {
     try {
       setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       const { data, error } = await supabase.functions.invoke("teams-integration", {
         body: { action: "disconnect" },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) throw error;
@@ -148,8 +154,14 @@ export function useTeamsIntegration() {
   const getTeams = useCallback(async () => {
     try {
       setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return [];
+
       const { data, error } = await supabase.functions.invoke("teams-integration", {
         body: { action: "get-teams" },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) throw error;
@@ -181,8 +193,14 @@ export function useTeamsIntegration() {
   const getChannels = useCallback(async (teamId: string) => {
     try {
       setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return [];
+
       const { data, error } = await supabase.functions.invoke("teams-integration", {
         body: { action: "get-channels", teamId },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) throw error;
@@ -214,8 +232,21 @@ export function useTeamsIntegration() {
   const importMembers = useCallback(async () => {
     try {
       setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to import Teams members",
+          variant: "destructive",
+        });
+        return null;
+      }
+
       const { data, error } = await supabase.functions.invoke("teams-integration", {
         body: { action: "import-members" },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) throw error;
@@ -250,8 +281,14 @@ export function useTeamsIntegration() {
   const sendToChannel = useCallback(async (teamId: string, channelId: string, message: string) => {
     try {
       setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+
       const { data, error } = await supabase.functions.invoke("teams-integration", {
         body: { action: "send-to-channel", teamId, channelId, message },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) throw error;
@@ -286,8 +323,14 @@ export function useTeamsIntegration() {
   const createMeeting = useCallback(async (params: CreateMeetingParams) => {
     try {
       setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+
       const { data, error } = await supabase.functions.invoke("teams-integration", {
         body: { action: "create-meeting", ...params },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) throw error;
