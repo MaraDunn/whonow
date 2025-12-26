@@ -20,7 +20,8 @@ serve(async (req) => {
 
     const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID");
     const MICROSOFT_CLIENT_SECRET = Deno.env.get("MICROSOFT_CLIENT_SECRET");
-    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "common";
+    // Teams access requires a work/school account; default to organizations (not "common") to avoid personal accounts.
+    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "organizations";
 
     // Check if this is an OAuth callback (GET request with code parameter)
     const url = new URL(req.url);
@@ -378,7 +379,7 @@ serve(async (req) => {
             JSON.stringify({
               error:
                 graphError?.message ||
-                "Microsoft Teams access denied. Please disconnect + reconnect Teams and approve permissions (your org admin may need to grant consent).",
+                "Microsoft Teams access denied. If you connected a personal Microsoft account, it won’t work for Teams import—please reconnect with a work/school account (your org admin may need to grant consent).",
               graph_status: teamsResponse.status,
               graph_code: graphError?.code,
             }),
@@ -687,7 +688,7 @@ async function getValidIntegration(
 
     // Refresh the token
     const tokenResponse = await fetch(
-      `https://login.microsoftonline.com/${tenantId || "common"}/oauth2/v2.0/token`,
+      `https://login.microsoftonline.com/${tenantId || "organizations"}/oauth2/v2.0/token`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
