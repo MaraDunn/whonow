@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Link2, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import {
@@ -169,7 +169,7 @@ export function SettingsDialog({
 
   // Determine number of tabs based on admin status
   const showAdminTab = isAdmin && company;
-  const tabCount = showAdminTab ? 6 : 5;
+  const tabCount = showAdminTab ? 5 : 4;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -195,10 +195,6 @@ export function SettingsDialog({
             <TabsTrigger value="security" className="flex items-center gap-2">
               <Lock className="h-4 w-4" />
               <span className="hidden sm:inline">Security</span>
-            </TabsTrigger>
-            <TabsTrigger value="integrations" className="flex items-center gap-2">
-              <Link2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Integrations</span>
             </TabsTrigger>
             {showAdminTab && (
               <TabsTrigger value="admin" className="flex items-center gap-2">
@@ -506,10 +502,6 @@ export function SettingsDialog({
               </div>
             </TabsContent>
 
-            {/* Integrations Tab */}
-            <TabsContent value="integrations" className="mt-0">
-              <IntegrationsPanel />
-            </TabsContent>
             {/* Admin Tab - Only visible to admins */}
             {showAdminTab && (
               <TabsContent value="admin" className="space-y-6 mt-0">
@@ -596,6 +588,17 @@ export function SettingsDialog({
                   <p className="text-xs text-muted-foreground">
                     Click on a keyword to remove it.
                   </p>
+                </div>
+
+                <Separator />
+
+                {/* Integrations */}
+                <div className="space-y-4">
+                  <Label className="text-base font-medium">Integrations</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Connect your company to Slack and Microsoft Teams.
+                  </p>
+                  <IntegrationsPanel />
                 </div>
               </TabsContent>
             )}
