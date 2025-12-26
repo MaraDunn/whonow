@@ -40,6 +40,19 @@ serve(async (req) => {
         return new Response("Missing code or credentials", { status: 400 });
       }
 
+      // Parse the state to get user ID and origin
+      let userId: string;
+      let appOrigin: string;
+      try {
+        const stateData = JSON.parse(decodeURIComponent(state || "{}"));
+        userId = stateData.userId;
+        appOrigin = stateData.origin || "";
+      } catch {
+        // Fallback for old format where state was just the user ID
+        userId = state || "";
+        appOrigin = "";
+      }
+
       const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
 
       // Exchange code for tokens
@@ -62,6 +75,13 @@ serve(async (req) => {
       console.log("Microsoft OAuth response received");
 
       if (tokenData.error) {
+        const errorRedirect = appOrigin ? `${appOrigin}/settings?integration=teams&status=error&message=${encodeURIComponent(tokenData.error_description)}` : null;
+        if (errorRedirect) {
+          return new Response(null, {
+            status: 302,
+            headers: { Location: errorRedirect },
+          });
+        }
         return new Response(`OAuth failed: ${tokenData.error_description}`, { status: 400 });
       }
 
@@ -76,7 +96,7 @@ serve(async (req) => {
 
       // Store the integration
       await supabase.from("integrations").upsert({
-        user_id: state,
+        user_id: userId,
         provider: "teams",
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
@@ -88,10 +108,11 @@ serve(async (req) => {
         },
       }, { onConflict: "user_id,provider" });
 
-      // Redirect back to the app
+      // Redirect back to the app using absolute URL
+      const successRedirect = appOrigin ? `${appOrigin}/settings?integration=teams&status=success` : "/settings?integration=teams&status=success";
       return new Response(null, {
         status: 302,
-        headers: { Location: "/settings?integration=teams&status=success" },
+        headers: { Location: successRedirect },
       });
     }
 
@@ -131,12 +152,17 @@ serve(async (req) => {
 
         const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
         const scopes = "offline_access User.Read Team.ReadBasic.All Channel.ReadBasic.All Chat.ReadWrite OnlineMeetings.ReadWrite";
+        
+        // Encode both user ID and app origin in the state parameter
+        const stateData = JSON.stringify({ userId: user.id, origin: params.origin || "" });
+        const encodedState = encodeURIComponent(stateData);
+        
         const oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?` +
           `client_id=${MICROSOFT_CLIENT_ID}` +
           `&response_type=code` +
           `&redirect_uri=${encodeURIComponent(redirectUri)}` +
           `&scope=${encodeURIComponent(scopes)}` +
-          `&state=${user.id}` +
+          `&state=${encodedState}` +
           `&response_mode=query`;
 
         return new Response(JSON.stringify({ url: oauthUrl }), {

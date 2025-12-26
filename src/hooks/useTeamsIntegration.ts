@@ -86,7 +86,7 @@ export function useTeamsIntegration() {
       }
 
       const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "get-oauth-url" },
+        body: { action: "get-oauth-url", origin: window.location.origin },
       });
 
       if (error) throw error;
