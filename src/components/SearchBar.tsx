@@ -1,5 +1,6 @@
 import { Search, X } from "lucide-react";
 import { useRef, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface SearchBarProps {
   value: string;
@@ -10,6 +11,7 @@ interface SearchBarProps {
 
 export function SearchBar({ value, onChange, placeholder = "Search contacts...", isLoading = false }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -29,33 +31,35 @@ export function SearchBar({ value, onChange, placeholder = "Search contacts...",
 
   return (
     <div className="relative w-full max-w-2xl mx-auto group">
-      <div className="absolute inset-0 rounded-2xl gradient-hero opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500" />
+      <div className="absolute inset-0 rounded-xl sm:rounded-2xl gradient-hero opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500" />
       <div className="relative flex items-center">
         {isLoading ? (
-          <div className="absolute left-5 h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <div className="absolute left-3 sm:left-5 h-4 w-4 sm:h-5 sm:w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         ) : (
-          <Search className="absolute left-5 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+          <Search className="absolute left-3 sm:left-5 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
         )}
         <input
           ref={inputRef}
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="w-full h-14 pl-14 pr-24 rounded-2xl border border-border bg-card text-foreground placeholder:text-muted-foreground shadow-search focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 text-base"
+          placeholder={isMobile ? "Search..." : placeholder}
+          className="w-full h-10 sm:h-14 pl-10 sm:pl-14 pr-10 sm:pr-24 rounded-xl sm:rounded-2xl border border-border bg-card text-foreground placeholder:text-muted-foreground shadow-search focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 text-sm sm:text-base"
         />
         {value && (
           <button
             onClick={() => onChange("")}
-            className="absolute right-16 p-1.5 rounded-lg hover:bg-secondary transition-colors"
+            className="absolute right-2 sm:right-16 p-1 sm:p-1.5 rounded-lg hover:bg-secondary transition-colors"
           >
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         )}
-        <div className="absolute right-4 flex items-center gap-1 px-2 py-1 rounded-lg bg-secondary text-muted-foreground text-xs font-medium">
-          <span>⌘</span>
-          <span>K</span>
-        </div>
+        {!isMobile && (
+          <div className="absolute right-4 flex items-center gap-1 px-2 py-1 rounded-lg bg-secondary text-muted-foreground text-xs font-medium">
+            <span>⌘</span>
+            <span>K</span>
+          </div>
+        )}
       </div>
     </div>
   );
