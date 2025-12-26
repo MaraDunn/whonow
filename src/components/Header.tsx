@@ -1,9 +1,8 @@
-import { Users, Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, Sparkles, MessageSquare, Video } from "lucide-react";
+import { Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, Sparkles, MessageSquare, Video } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -14,6 +13,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
 import { toast } from "sonner";
+import { WhoNowLogo } from "@/components/WhoNowLogo";
 
 interface HeaderProps {
   contactCount: number;
@@ -85,13 +85,8 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
   return (
     <header className="flex items-center justify-between mb-8 animate-fade-in">
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl gradient-hero flex items-center justify-center">
-          <Users className="h-6 w-6 text-primary-foreground" />
-        </div>
-        <div>
-          <h1 className="font-display font-bold text-2xl text-foreground">
-            Contacts
-          </h1>
+        <WhoNowLogo size="md" showText={true} />
+        <div className="border-l border-border pl-4">
           <p className="text-sm text-muted-foreground">
             {contactCount} {contactCount === 1 ? "contact" : "contacts"}
           </p>
