@@ -416,7 +416,7 @@ const Index = () => {
           easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
         }}>
           {activeContact ? (
-            <div className="relative" style={{ transform: 'translate(-50%, 8px)' }}>
+            <div style={{ transform: 'translate(-50%, 0)' }}>
               <DragPreview contact={activeContact} />
             </div>
           ) : null}
