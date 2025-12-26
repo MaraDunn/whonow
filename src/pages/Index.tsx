@@ -21,7 +21,7 @@ import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
-import { ContactCard } from "@/components/ContactCard";
+import { DragPreview } from "@/components/DragPreview";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
@@ -410,19 +410,13 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Drag Overlay */}
+        {/* Drag Overlay - compact preview for better folder visibility */}
         <DragOverlay dropAnimation={{
           duration: 250,
           easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
         }}>
           {activeContact ? (
-            <div className="rotate-2 scale-105 shadow-2xl cursor-grabbing">
-              <ContactCard
-                contact={activeContact}
-                index={0}
-                onEdit={() => {}}
-              />
-            </div>
+            <DragPreview contact={activeContact} />
           ) : null}
         </DragOverlay>
       </DndContext>
