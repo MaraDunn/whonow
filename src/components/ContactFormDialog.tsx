@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Check, Camera, Loader2, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Check, Camera, Loader2, Sparkles, ChevronDown, ChevronUp, Building2, UserCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -34,13 +35,14 @@ import { toast } from "sonner";
 interface ContactFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (contact: Omit<Contact, "id">) => void;
+  onSave: (contact: Omit<Contact, "id"> & { isShared?: boolean }) => void;
   contact?: Contact | null;
   isProfileMode?: boolean;
   presetKeywords?: string[];
   folders?: Folder[];
   defaultFolderId?: string | null;
   initialMode?: "quick" | "full";
+  hasCompany?: boolean;
 }
 
 export function ContactFormDialog({ 
@@ -52,7 +54,8 @@ export function ContactFormDialog({
   presetKeywords = [], 
   folders = [], 
   defaultFolderId,
-  initialMode = "full"
+  initialMode = "full",
+  hasCompany = false,
 }: ContactFormDialogProps) {
   const [mode, setMode] = useState<"quick" | "full">(initialMode);
   const [quickInput, setQuickInput] = useState("");
@@ -69,6 +72,7 @@ export function ContactFormDialog({
   const [description, setDescription] = useState("");
   const [avatar, setAvatar] = useState<string | undefined>(undefined);
   const [folderId, setFolderId] = useState<string | undefined>(undefined);
+  const [isShared, setIsShared] = useState(false);
   
   const [contactOpen, setContactOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
@@ -99,6 +103,7 @@ export function ContactFormDialog({
       setDescription(contact.description || "");
       setAvatar(contact.avatar);
       setFolderId(contact.folderId);
+      setIsShared(contact.isShared || false);
     } else {
       resetForm();
       setMode(initialMode);
@@ -119,6 +124,7 @@ export function ContactFormDialog({
     setDescription("");
     setAvatar(undefined);
     setFolderId(undefined);
+    setIsShared(false);
     setContactOpen(false);
     setWorkOpen(false);
     setKeywordsOpen(false);
@@ -224,6 +230,7 @@ export function ContactFormDialog({
       description: description.trim() || undefined,
       avatar,
       folderId,
+      isShared: hasCompany ? isShared : false,
     });
 
     resetForm();
@@ -381,6 +388,34 @@ export function ContactFormDialog({
                   rows={2}
                 />
               </div>
+
+              {/* Share with company toggle - only for org users */}
+              {hasCompany && !isProfileMode && (
+                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border">
+                  <div className="flex items-center gap-3">
+                    {isShared ? (
+                      <Building2 className="h-5 w-5 text-primary" />
+                    ) : (
+                      <UserCircle className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">
+                        {isShared ? "Shared with company" : "Personal contact"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {isShared 
+                          ? "Everyone in your company can view this contact" 
+                          : "Only you can see this contact"}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={isShared}
+                    onCheckedChange={setIsShared}
+                    aria-label="Share with company"
+                  />
+                </div>
+              )}
 
               {/* Contact Details - Collapsible */}
               <CollapsibleSection title="Contact Details" open={contactOpen} onOpenChange={setContactOpen}>

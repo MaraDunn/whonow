@@ -9,4 +9,8 @@ export interface Contact {
   tags: string[];
   description?: string;
   folderId?: string;
+  isShared?: boolean;
+  ownerId?: string;
 }
+
+export type ContactOwnershipFilter = "all" | "personal" | "shared";

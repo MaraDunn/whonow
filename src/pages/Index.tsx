@@ -33,7 +33,7 @@ import { useFolders } from "@/hooks/useFolders";
 import { useCustomKeywords } from "@/hooks/useCustomKeywords";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
-import { Contact } from "@/types/contact";
+import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 
 function getClientPoint(event: Event): { x: number; y: number } | null {
@@ -100,6 +100,7 @@ const Index = () => {
   const [importDefaultTab, setImportDefaultTab] = useState<string | undefined>(undefined);
   const [showTrash, setShowTrash] = useState(false);
   const [showDirectory, setShowDirectory] = useState(false);
+  const [ownershipFilter, setOwnershipFilter] = useState<ContactOwnershipFilter>("all");
   
   const { 
     contacts, 
@@ -137,12 +138,32 @@ const Index = () => {
     }
   }, [searchParams, setSearchParams]);
 
-  // Filter contacts by folder first (only for non-trash view)
+  // Filter contacts by folder and ownership
   const folderFilteredContacts = useMemo(() => {
     if (showTrash) return trashedContacts;
-    if (selectedFolderId === null) return contacts;
-    return contacts.filter(c => c.folderId === selectedFolderId);
-  }, [contacts, trashedContacts, selectedFolderId, showTrash]);
+    
+    let filtered = contacts;
+    
+    // Apply ownership filter for company users
+    if (company && ownershipFilter !== "all") {
+      filtered = filtered.filter(c => 
+        ownershipFilter === "shared" ? c.isShared : !c.isShared
+      );
+    }
+    
+    // Apply folder filter
+    if (selectedFolderId !== null) {
+      filtered = filtered.filter(c => c.folderId === selectedFolderId);
+    }
+    
+    return filtered;
+  }, [contacts, trashedContacts, selectedFolderId, showTrash, ownershipFilter, company]);
+
+  // Calculate personal/shared counts
+  const personalContactsCount = useMemo(() => 
+    contacts.filter(c => !c.isShared).length, [contacts]);
+  const sharedContactsCount = useMemo(() => 
+    contacts.filter(c => c.isShared).length, [contacts]);
 
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(folderFilteredContacts, searchQuery);
 
@@ -334,6 +355,11 @@ const Index = () => {
             companyMembers={companyMembers}
             showDirectory={showDirectory}
             onSelectDirectory={company ? handleSelectDirectory : undefined}
+            hasCompany={!!company}
+            ownershipFilter={ownershipFilter}
+            onOwnershipFilterChange={setOwnershipFilter}
+            personalContactsCount={personalContactsCount}
+            sharedContactsCount={sharedContactsCount}
           />
 
           {/* Main Content */}
@@ -414,6 +440,7 @@ const Index = () => {
                   onPermanentlyDelete={permanentlyDeleteContact}
                   onEmptyTrash={emptyTrash}
                   folders={folders}
+                  showOwnershipBadge={!!company}
                 />
               )}
 
@@ -430,6 +457,7 @@ const Index = () => {
                 folders={folders}
                 defaultFolderId={selectedFolderId}
                 initialMode={dialogMode}
+                hasCompany={!!company}
               />
 
               <SettingsDialog

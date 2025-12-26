@@ -1,6 +1,6 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +14,7 @@ interface ContactCardProps {
   onRestore?: () => void;
   onPermanentlyDelete?: () => void;
   folder?: Folder;
+  showOwnershipBadge?: boolean;
 }
 
 export function ContactCard({ 
@@ -25,7 +26,8 @@ export function ContactCard({
   onDelete,
   onRestore,
   onPermanentlyDelete,
-  folder
+  folder,
+  showOwnershipBadge = false,
 }: ContactCardProps) {
   const initials = contact.name
     .split(" ")
@@ -86,7 +88,7 @@ export function ContactCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-display font-semibold text-lg text-foreground truncate group-hover:text-primary transition-colors">
               {contact.name}
             </h3>
@@ -94,6 +96,18 @@ export function ContactCard({
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
                 <User className="h-3 w-3" />
                 You
+              </span>
+            )}
+            {showOwnershipBadge && contact.isShared && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium">
+                <Users className="h-3 w-3" />
+                Shared
+              </span>
+            )}
+            {showOwnershipBadge && !contact.isShared && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs font-medium">
+                <UserCircle className="h-3 w-3" />
+                Personal
               </span>
             )}
           </div>
