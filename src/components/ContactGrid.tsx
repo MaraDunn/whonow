@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
 import { DraggableContactCard } from "./DraggableContactCard";
 import { Users, Trash2 } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
+import { useResponsiveView } from "@/hooks/use-mobile";
 
 interface ContactGridProps {
   contacts: Contact[];
@@ -36,8 +38,18 @@ export function ContactGrid({
   onMarkContacted,
   onToggleClient,
 }: ContactGridProps) {
+  const responsiveView = useResponsiveView();
+  const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
+  
+  // Track which contact is expanded in compact mode
+  const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
+
   // Create a map for quick folder lookup
   const folderMap = new Map(folders.map(f => [f.id, f]));
+
+  const handleToggleExpand = (contactId: string) => {
+    setExpandedContactId(prev => prev === contactId ? null : contactId);
+  };
 
   if (contacts.length === 0) {
     return (
@@ -63,6 +75,11 @@ export function ContactGrid({
     );
   }
 
+  // Responsive grid classes
+  const gridClasses = isCompactMode
+    ? "grid grid-cols-1 sm:grid-cols-2 gap-3"
+    : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5";
+
   return (
     <div>
       {isTrashView && contacts.length > 0 && (
@@ -80,7 +97,7 @@ export function ContactGrid({
           </Button>
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className={gridClasses}>
         {contacts.map((contact, index) => (
           <DraggableContactCard
             key={contact.id}
@@ -96,6 +113,9 @@ export function ContactGrid({
             showOwnershipBadge={showOwnershipBadge}
             onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
             onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
+            compact={isCompactMode}
+            isExpanded={expandedContactId === contact.id}
+            onToggleExpand={() => handleToggleExpand(contact.id)}
           />
         ))}
       </div>

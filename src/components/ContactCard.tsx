@@ -1,6 +1,6 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -29,6 +29,10 @@ interface ContactCardProps {
   showOwnershipBadge?: boolean;
   onMarkContacted?: () => void;
   onToggleClient?: (isClient: boolean) => void;
+  // Mobile/Tablet compact mode props
+  compact?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export function ContactCard({ 
@@ -44,6 +48,9 @@ export function ContactCard({
   showOwnershipBadge = false,
   onMarkContacted,
   onToggleClient,
+  compact = false,
+  isExpanded = false,
+  onToggleExpand,
 }: ContactCardProps) {
   const initials = contact.name
     .split(" ")
@@ -75,6 +82,205 @@ export function ContactCard({
     text: { icon: MessageSquare, label: "Text", color: "bg-blue-600 hover:bg-blue-700" },
   };
 
+  const handleCardClick = () => {
+    if (isTrashView) return;
+    
+    if (compact && onToggleExpand) {
+      onToggleExpand();
+    } else {
+      onEdit();
+    }
+  };
+
+  // Compact mode for mobile/tablet - collapsed state
+  if (compact && !isExpanded) {
+    return (
+      <div
+        onClick={handleCardClick}
+        className="group relative p-3 rounded-xl border border-border bg-card shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-200 cursor-pointer animate-slide-up"
+        style={{ animationDelay: `${index * 30}ms` }}
+      >
+        <div className="flex items-center gap-3">
+          {/* Avatar */}
+          <div className="relative flex-shrink-0">
+            <div className="w-10 h-10 rounded-lg gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-sm">
+              {initials}
+            </div>
+          </div>
+
+          {/* Name and Company */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h3 className="font-display font-medium text-sm text-foreground truncate">
+                {contact.name}
+              </h3>
+              {contact.isClient && (
+                <Star className="h-3 w-3 text-amber-500 fill-amber-500 flex-shrink-0" />
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground truncate">
+              {contact.company}
+            </p>
+          </div>
+
+          {/* Expand indicator */}
+          <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform" />
+        </div>
+      </div>
+    );
+  }
+
+  // Compact mode for mobile/tablet - expanded state
+  if (compact && isExpanded) {
+    return (
+      <div
+        className="group relative p-4 rounded-xl border border-primary/30 bg-card shadow-md transition-all duration-300 animate-scale-in"
+      >
+        {/* Header with collapse */}
+        <div className="flex items-center gap-3 mb-3" onClick={handleCardClick}>
+          <div className="relative flex-shrink-0">
+            <div className="w-12 h-12 rounded-lg gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-base">
+              {initials}
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3 className="font-display font-semibold text-base text-foreground">
+                {contact.name}
+              </h3>
+              {contact.isClient && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">
+                  <Star className="h-2.5 w-2.5 fill-current" />
+                  Client
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Briefcase className="h-3 w-3" />
+              {contact.role}
+            </p>
+          </div>
+
+          <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0 rotate-180 transition-transform" />
+        </div>
+
+        {/* Contact Details */}
+        <div className="space-y-2 border-t border-border pt-3">
+          {contact.email && (
+            <a
+              href={`mailto:${contact.email}`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-2 text-sm text-secondary-foreground hover:text-primary transition-colors"
+            >
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <span className="truncate">{contact.email}</span>
+            </a>
+          )}
+
+          {contact.phone && (
+            <a
+              href={`tel:${contact.phone}`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-2 text-sm text-secondary-foreground hover:text-primary transition-colors"
+            >
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span>{contact.phone}</span>
+            </a>
+          )}
+
+          <div className="flex items-center gap-2 text-sm text-secondary-foreground">
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <span className="truncate">{contact.company}</span>
+          </div>
+
+          {/* Last contacted */}
+          <div className="flex items-center gap-2 text-xs">
+            <Clock className="h-3 w-3 text-muted-foreground" />
+            <span className={lastContactedText ? 'text-muted-foreground' : 'text-orange-500 font-medium'}>
+              {lastContactedText || "Never contacted"}
+            </span>
+          </div>
+        </div>
+
+        {/* Description */}
+        {contact.description && (
+          <p className="mt-3 text-xs text-muted-foreground line-clamp-2 border-t border-border pt-3">
+            {contact.description}
+          </p>
+        )}
+
+        {/* Tags */}
+        {contact.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {contact.tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-xs"
+              >
+                {tag}
+              </span>
+            ))}
+            {contact.tags.length > 3 && (
+              <span className="px-2 py-0.5 text-xs text-muted-foreground">
+                +{contact.tags.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {!isTrashView && (
+          <div className="mt-3 flex gap-2 border-t border-border pt-3">
+            {onToggleClient && (
+              <Button
+                variant={contact.isClient ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "flex-1 text-xs h-8",
+                  contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleClient(!contact.isClient);
+                }}
+              >
+                <Star className={cn("h-3 w-3 mr-1", contact.isClient && "fill-current")} />
+                {contact.isClient ? "Client" : "Mark Client"}
+              </Button>
+            )}
+            {onMarkContacted && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 text-xs h-8"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkContacted();
+                }}
+              >
+                <Clock className="h-3 w-3 mr-1" />
+                Contacted
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="flex-1 text-xs h-8"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+            >
+              Edit
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Full desktop card
   return (
     <div
       onClick={isTrashView ? undefined : onEdit}
