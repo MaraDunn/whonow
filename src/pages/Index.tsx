@@ -562,6 +562,7 @@ const Index = () => {
                 onResetKeywords={resetToDefaults}
                 isCompanyKeywords={isCompanyKeywords}
                 canEditKeywords={canEditKeywords}
+                onBulkImport={handleImportContacts}
               />
 
               <ImportContactsDialog
