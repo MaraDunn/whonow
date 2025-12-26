@@ -87,7 +87,7 @@ export function FolderSidebar({
 }: FolderSidebarProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
-  const { state } = useSidebar();
+  const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
 
   const handleSaveFolder = (folderData: Omit<FolderType, "id" | "createdAt">) => {
@@ -108,8 +108,6 @@ export function FolderSidebar({
     setEditingFolder(null);
     setDialogOpen(true);
   };
-
-  const { toggleSidebar } = useSidebar();
 
   return (
     <div className="relative">
