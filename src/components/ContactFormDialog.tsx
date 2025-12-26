@@ -32,6 +32,28 @@ import { generateAutoKeywords } from "@/utils/autoKeywords";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+// Moved outside to prevent re-creation on every render (which causes input focus loss)
+interface CollapsibleSectionProps {
+  title: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: React.ReactNode;
+}
+
+function CollapsibleSection({ title, open: isOpen, onOpenChange: setOpen, children }: CollapsibleSectionProps) {
+  return (
+    <Collapsible open={isOpen} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+        <span>{title}</span>
+        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-3 pt-2">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 interface ContactFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -240,27 +262,6 @@ export function ContactFormDialog({
     onOpenChange(false);
   };
 
-  const CollapsibleSection = ({ 
-    title, 
-    open: isOpen, 
-    onOpenChange: setOpen, 
-    children 
-  }: { 
-    title: string; 
-    open: boolean; 
-    onOpenChange: (open: boolean) => void; 
-    children: React.ReactNode;
-  }) => (
-    <Collapsible open={isOpen} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-        <span>{title}</span>
-        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-3 pt-2">
-        {children}
-      </CollapsibleContent>
-    </Collapsible>
-  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
