@@ -18,6 +18,10 @@ export interface DraggableContactCardProps {
   showOwnershipBadge?: boolean;
   onMarkContacted?: () => void;
   onToggleClient?: (isClient: boolean) => void;
+  // Mobile/Tablet compact mode props
+  compact?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export function DraggableContactCard({ 
@@ -33,11 +37,15 @@ export function DraggableContactCard({
   showOwnershipBadge = false,
   onMarkContacted,
   onToggleClient,
+  compact = false,
+  isExpanded = false,
+  onToggleExpand,
 }: DraggableContactCardProps) {
-  const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
+  // Disable dragging in compact mode (mobile/tablet) or trash view
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: contact.id,
     data: { contact },
-    disabled: isTrashView, // Disable dragging for trashed items
+    disabled: isTrashView || compact,
   });
 
   // Hide the original element completely when dragging - the DragOverlay shows the preview
@@ -60,6 +68,9 @@ export function DraggableContactCard({
           showOwnershipBadge={showOwnershipBadge}
           onMarkContacted={onMarkContacted}
           onToggleClient={onToggleClient}
+          compact={compact}
+          isExpanded={isExpanded}
+          onToggleExpand={onToggleExpand}
         />
       </div>
     );
@@ -68,9 +79,9 @@ export function DraggableContactCard({
   return (
     <div
       ref={setNodeRef}
-      {...(isTrashView ? {} : { ...listeners, ...attributes })}
+      {...(isTrashView || compact ? {} : { ...listeners, ...attributes })}
       className={cn(
-        !isTrashView && "touch-none cursor-grab active:cursor-grabbing",
+        !isTrashView && !compact && "touch-none cursor-grab active:cursor-grabbing",
         "transition-transform duration-200"
       )}
     >
@@ -87,6 +98,9 @@ export function DraggableContactCard({
         showOwnershipBadge={showOwnershipBadge}
         onMarkContacted={onMarkContacted}
         onToggleClient={onToggleClient}
+        compact={compact}
+        isExpanded={isExpanded}
+        onToggleExpand={onToggleExpand}
       />
     </div>
   );
