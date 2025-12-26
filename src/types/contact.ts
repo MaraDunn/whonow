@@ -12,6 +12,7 @@ export interface Contact {
   isShared?: boolean;
   ownerId?: string;
   lastContactedAt?: string;
+  isClient?: boolean;
 }
 
 export type ContactOwnershipFilter = "all" | "personal" | "shared";

@@ -18,6 +18,7 @@ interface ContactGridProps {
   folders?: Folder[];
   showOwnershipBadge?: boolean;
   onMarkContacted?: (id: string) => void;
+  onToggleClient?: (id: string, isClient: boolean) => void;
 }
 
 export function ContactGrid({ 
@@ -33,6 +34,7 @@ export function ContactGrid({
   folders = [],
   showOwnershipBadge = false,
   onMarkContacted,
+  onToggleClient,
 }: ContactGridProps) {
   // Create a map for quick folder lookup
   const folderMap = new Map(folders.map(f => [f.id, f]));
@@ -93,6 +95,7 @@ export function ContactGrid({
             folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
             showOwnershipBadge={showOwnershipBadge}
             onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
+            onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
           />
         ))}
       </div>

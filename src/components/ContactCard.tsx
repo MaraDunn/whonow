@@ -1,9 +1,10 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
+import { cn } from "@/lib/utils";
 
 // Helper to format last contacted time
 function formatLastContacted(lastContactedAt?: string): string | null {
@@ -27,6 +28,7 @@ interface ContactCardProps {
   folder?: Folder;
   showOwnershipBadge?: boolean;
   onMarkContacted?: () => void;
+  onToggleClient?: (isClient: boolean) => void;
 }
 
 export function ContactCard({ 
@@ -41,6 +43,7 @@ export function ContactCard({
   folder,
   showOwnershipBadge = false,
   onMarkContacted,
+  onToggleClient,
 }: ContactCardProps) {
   const initials = contact.name
     .split(" ")
@@ -107,6 +110,12 @@ export function ContactCard({
             <h3 className="font-display font-semibold text-lg text-foreground truncate group-hover:text-primary transition-colors">
               {contact.name}
             </h3>
+            {contact.isClient && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">
+                <Star className="h-3 w-3 fill-current" />
+                Client
+              </span>
+            )}
             {contact.tags?.includes("my-profile") && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
                 <User className="h-3 w-3" />
@@ -207,20 +216,41 @@ export function ContactCard({
         ))}
       </div>
 
-      {/* Mark as contacted button - show for non-trash view */}
-      {!isTrashView && onMarkContacted && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-3 w-full text-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            onMarkContacted();
-          }}
-        >
-          <Clock className="h-3 w-3 mr-1.5" />
-          Mark as contacted
-        </Button>
+      {/* Action buttons row - show for non-trash view */}
+      {!isTrashView && (onMarkContacted || onToggleClient) && (
+        <div className="mt-3 flex gap-2">
+          {onToggleClient && (
+            <Button
+              variant={contact.isClient ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                "flex-1 text-xs",
+                contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleClient(!contact.isClient);
+              }}
+            >
+              <Star className={cn("h-3 w-3 mr-1.5", contact.isClient && "fill-current")} />
+              {contact.isClient ? "Client" : "Mark as Client"}
+            </Button>
+          )}
+          {onMarkContacted && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMarkContacted();
+              }}
+            >
+              <Clock className="h-3 w-3 mr-1.5" />
+              Contacted
+            </Button>
+          )}
+        </div>
       )}
 
       {/* Trash view actions */}

@@ -78,6 +78,7 @@ export type Database = {
           email: string | null
           folder_id: string | null
           id: string
+          is_client: boolean | null
           is_shared: boolean | null
           last_contacted_at: string | null
           name: string
@@ -97,6 +98,7 @@ export type Database = {
           email?: string | null
           folder_id?: string | null
           id?: string
+          is_client?: boolean | null
           is_shared?: boolean | null
           last_contacted_at?: string | null
           name: string
@@ -116,6 +118,7 @@ export type Database = {
           email?: string | null
           folder_id?: string | null
           id?: string
+          is_client?: boolean | null
           is_shared?: boolean | null
           last_contacted_at?: string | null
           name?: string

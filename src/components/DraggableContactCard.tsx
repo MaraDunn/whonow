@@ -17,6 +17,7 @@ export interface DraggableContactCardProps {
   folder?: Folder;
   showOwnershipBadge?: boolean;
   onMarkContacted?: () => void;
+  onToggleClient?: (isClient: boolean) => void;
 }
 
 export function DraggableContactCard({ 
@@ -31,6 +32,7 @@ export function DraggableContactCard({
   folder,
   showOwnershipBadge = false,
   onMarkContacted,
+  onToggleClient,
 }: DraggableContactCardProps) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: contact.id,
@@ -57,6 +59,7 @@ export function DraggableContactCard({
           folder={folder}
           showOwnershipBadge={showOwnershipBadge}
           onMarkContacted={onMarkContacted}
+          onToggleClient={onToggleClient}
         />
       </div>
     );
@@ -83,6 +86,7 @@ export function DraggableContactCard({
         folder={folder}
         showOwnershipBadge={showOwnershipBadge}
         onMarkContacted={onMarkContacted}
+        onToggleClient={onToggleClient}
       />
     </div>
   );
