@@ -87,6 +87,9 @@ export function useTeamsIntegration() {
 
       const { data, error } = await supabase.functions.invoke("teams-integration", {
         body: { action: "get-oauth-url", origin: window.location.origin },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) throw error;
