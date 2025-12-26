@@ -16,6 +16,7 @@ export interface DraggableContactCardProps {
   onPermanentlyDelete?: () => void;
   folder?: Folder;
   showOwnershipBadge?: boolean;
+  onMarkContacted?: () => void;
 }
 
 export function DraggableContactCard({ 
@@ -29,6 +30,7 @@ export function DraggableContactCard({
   onPermanentlyDelete,
   folder,
   showOwnershipBadge = false,
+  onMarkContacted,
 }: DraggableContactCardProps) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: contact.id,
@@ -54,6 +56,7 @@ export function DraggableContactCard({
           onPermanentlyDelete={onPermanentlyDelete}
           folder={folder}
           showOwnershipBadge={showOwnershipBadge}
+          onMarkContacted={onMarkContacted}
         />
       </div>
     );
@@ -79,6 +82,7 @@ export function DraggableContactCard({
         onPermanentlyDelete={onPermanentlyDelete}
         folder={folder}
         showOwnershipBadge={showOwnershipBadge}
+        onMarkContacted={onMarkContacted}
       />
     </div>
   );

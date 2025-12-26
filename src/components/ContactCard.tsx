@@ -1,8 +1,19 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
+import { formatDistanceToNow } from "date-fns";
+
+// Helper to format last contacted time
+function formatLastContacted(lastContactedAt?: string): string | null {
+  if (!lastContactedAt) return null;
+  try {
+    return formatDistanceToNow(new Date(lastContactedAt), { addSuffix: true });
+  } catch {
+    return null;
+  }
+}
 
 interface ContactCardProps {
   contact: Contact;
@@ -15,6 +26,7 @@ interface ContactCardProps {
   onPermanentlyDelete?: () => void;
   folder?: Folder;
   showOwnershipBadge?: boolean;
+  onMarkContacted?: () => void;
 }
 
 export function ContactCard({ 
@@ -28,12 +40,15 @@ export function ContactCard({
   onPermanentlyDelete,
   folder,
   showOwnershipBadge = false,
+  onMarkContacted,
 }: ContactCardProps) {
   const initials = contact.name
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase();
+
+  const lastContactedText = formatLastContacted(contact.lastContactedAt);
 
   const handleAction = (type: ActionType) => {
     if (!type) return;
@@ -115,6 +130,13 @@ export function ContactCard({
             <Briefcase className="h-3.5 w-3.5" />
             {contact.role}
           </p>
+          {/* Last contacted indicator */}
+          <div className="flex items-center gap-1.5 mt-1">
+            <Clock className="h-3 w-3 text-muted-foreground" />
+            <span className={`text-xs ${lastContactedText ? 'text-muted-foreground' : 'text-orange-500 font-medium'}`}>
+              {lastContactedText || "Never contacted"}
+            </span>
+          </div>
         </div>
 
         {/* Delete button for non-trash view */}
@@ -184,6 +206,22 @@ export function ContactCard({
           </span>
         ))}
       </div>
+
+      {/* Mark as contacted button - show for non-trash view */}
+      {!isTrashView && onMarkContacted && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-3 w-full text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMarkContacted();
+          }}
+        >
+          <Clock className="h-3 w-3 mr-1.5" />
+          Mark as contacted
+        </Button>
+      )}
 
       {/* Trash view actions */}
       {isTrashView && (

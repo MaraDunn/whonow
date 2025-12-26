@@ -11,6 +11,7 @@ export interface Contact {
   folderId?: string;
   isShared?: boolean;
   ownerId?: string;
+  lastContactedAt?: string;
 }
 
 export type ContactOwnershipFilter = "all" | "personal" | "shared";

@@ -22,11 +22,13 @@ type DbContact = {
   owner_id: string | null;
   company_id: string | null;
   is_shared: boolean | null;
+  last_contacted_at: string | null;
 };
 
 interface ContactWithMeta extends Contact {
   isShared?: boolean;
   ownerId?: string;
+  lastContactedAt?: string;
 }
 
 const mapDbToContact = (db: DbContact): ContactWithMeta => ({
@@ -42,6 +44,7 @@ const mapDbToContact = (db: DbContact): ContactWithMeta => ({
   folderId: db.folder_id || undefined,
   isShared: db.is_shared || false,
   ownerId: db.owner_id || undefined,
+  lastContactedAt: db.last_contacted_at || undefined,
 });
 
 const mapContactToDb = (
@@ -230,6 +233,23 @@ export const useContacts = () => {
     },
   });
 
+  // Update last contacted timestamp
+  const updateLastContacted = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("contacts")
+        .update({ last_contacted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    },
+    onError: (error) => {
+      toast.error("Failed to update contact: " + error.message);
+    },
+  });
+
   return {
     contacts,
     trashedContacts,
@@ -241,5 +261,6 @@ export const useContacts = () => {
     restoreContact: restoreContact.mutate,
     permanentlyDeleteContact: permanentlyDeleteContact.mutate,
     emptyTrash: emptyTrash.mutate,
+    updateLastContacted: updateLastContacted.mutate,
   };
 };
