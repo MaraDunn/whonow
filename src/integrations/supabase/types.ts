@@ -79,6 +79,7 @@ export type Database = {
           folder_id: string | null
           id: string
           is_shared: boolean | null
+          last_contacted_at: string | null
           name: string
           owner_id: string | null
           phone: string | null
@@ -97,6 +98,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_shared?: boolean | null
+          last_contacted_at?: string | null
           name: string
           owner_id?: string | null
           phone?: string | null
@@ -115,6 +117,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_shared?: boolean | null
+          last_contacted_at?: string | null
           name?: string
           owner_id?: string | null
           phone?: string | null

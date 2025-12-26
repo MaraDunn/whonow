@@ -100,6 +100,7 @@ const Index = () => {
   const [importDefaultTab, setImportDefaultTab] = useState<string | undefined>(undefined);
   const [showTrash, setShowTrash] = useState(false);
   const [showDirectory, setShowDirectory] = useState(false);
+  const [showClientDirectory, setShowClientDirectory] = useState(false);
   const [ownershipFilter, setOwnershipFilter] = useState<ContactOwnershipFilter>("all");
   
   const { 
@@ -111,7 +112,8 @@ const Index = () => {
     deleteContact,
     restoreContact,
     permanentlyDeleteContact,
-    emptyTrash
+    emptyTrash,
+    updateLastContacted,
   } = useContacts();
   const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
@@ -165,22 +167,47 @@ const Index = () => {
   const sharedContactsCount = useMemo(() => 
     contacts.filter(c => c.isShared).length, [contacts]);
 
-  const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(folderFilteredContacts, searchQuery);
+  // Client directory: all contacts sorted by last contacted (oldest first / never contacted first)
+  const clientDirectoryContacts = useMemo(() => {
+    return [...contacts].sort((a, b) => {
+      // Contacts never contacted come first
+      if (!a.lastContactedAt && !b.lastContactedAt) return 0;
+      if (!a.lastContactedAt) return -1;
+      if (!b.lastContactedAt) return 1;
+      // Otherwise sort by oldest contacted first
+      return new Date(a.lastContactedAt).getTime() - new Date(b.lastContactedAt).getTime();
+    });
+  }, [contacts]);
+
+  const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(
+    showClientDirectory ? clientDirectoryContacts : folderFilteredContacts, 
+    searchQuery
+  );
 
   const handleSelectTrash = () => {
     setShowTrash(true);
     setShowDirectory(false);
+    setShowClientDirectory(false);
     setSelectedFolderId(null);
   };
 
   const handleSelectFolder = (folderId: string | null) => {
     setShowTrash(false);
     setShowDirectory(false);
+    setShowClientDirectory(false);
     setSelectedFolderId(folderId);
   };
 
   const handleSelectDirectory = () => {
     setShowDirectory(true);
+    setShowTrash(false);
+    setShowClientDirectory(false);
+    setSelectedFolderId(null);
+  };
+
+  const handleSelectClientDirectory = () => {
+    setShowClientDirectory(true);
+    setShowDirectory(false);
     setShowTrash(false);
     setSelectedFolderId(null);
   };
@@ -360,6 +387,9 @@ const Index = () => {
             onOwnershipFilterChange={setOwnershipFilter}
             personalContactsCount={personalContactsCount}
             sharedContactsCount={sharedContactsCount}
+            showClientDirectory={showClientDirectory}
+            onSelectClientDirectory={handleSelectClientDirectory}
+            clientDirectoryCount={contacts.length}
           />
 
           {/* Main Content */}
@@ -428,6 +458,29 @@ const Index = () => {
                   </div>
                   <TeamDirectoryGrid members={companyMembers} />
                 </>
+              ) : showClientDirectory ? (
+                <>
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-display font-semibold">Client Directory</h2>
+                    <p className="text-muted-foreground mt-1">
+                      Sorted by time since last contact • {filteredContacts.length} client{filteredContacts.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <ContactGrid
+                    contacts={filteredContacts}
+                    searchQuery={searchQuery}
+                    action={action}
+                    onEditContact={handleEditContact}
+                    isTrashView={false}
+                    onDeleteContact={deleteContact}
+                    onRestoreContact={restoreContact}
+                    onPermanentlyDelete={permanentlyDeleteContact}
+                    onEmptyTrash={emptyTrash}
+                    folders={folders}
+                    showOwnershipBadge={!!company}
+                    onMarkContacted={updateLastContacted}
+                  />
+                </>
               ) : (
                 <ContactGrid
                   contacts={filteredContacts}
@@ -441,6 +494,7 @@ const Index = () => {
                   onEmptyTrash={emptyTrash}
                   folders={folders}
                   showOwnershipBadge={!!company}
+                  onMarkContacted={updateLastContacted}
                 />
               )}
 

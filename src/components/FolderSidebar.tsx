@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -55,6 +55,10 @@ interface FolderSidebarProps {
   onOwnershipFilterChange?: (filter: ContactOwnershipFilter) => void;
   personalContactsCount?: number;
   sharedContactsCount?: number;
+  // Client Directory props
+  showClientDirectory?: boolean;
+  onSelectClientDirectory?: () => void;
+  clientDirectoryCount?: number;
 }
 
 export function FolderSidebar({
@@ -77,6 +81,9 @@ export function FolderSidebar({
   onOwnershipFilterChange,
   personalContactsCount = 0,
   sharedContactsCount = 0,
+  showClientDirectory = false,
+  onSelectClientDirectory,
+  clientDirectoryCount = 0,
 }: FolderSidebarProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
@@ -323,6 +330,45 @@ export function FolderSidebar({
           </SidebarGroup>
 
           <SidebarSeparator />
+
+          {/* Client Directory - always show for all users */}
+          {onSelectClientDirectory && (
+            <>
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuButton
+                              onClick={onSelectClientDirectory}
+                              isActive={showClientDirectory}
+                              className="w-full"
+                            >
+                              <Briefcase className="h-4 w-4" />
+                              {!isCollapsed && (
+                                <>
+                                  <span className="flex-1 text-left">Client Directory</span>
+                                  <span className="text-xs opacity-70">{clientDirectoryCount}</span>
+                                </>
+                              )}
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          {isCollapsed && (
+                            <TooltipContent side="right">
+                              <p>Client Directory ({clientDirectoryCount})</p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+              <SidebarSeparator />
+            </>
+          )}
 
           {/* Team Directory - only show if company members exist */}
           {companyMembers.length > 0 && onSelectDirectory && (
