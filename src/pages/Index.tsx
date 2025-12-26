@@ -27,6 +27,7 @@ import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
@@ -35,6 +36,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
+
+type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 
 function getClientPoint(event: Event): { x: number; y: number } | null {
   // Touch
@@ -102,7 +105,7 @@ const Index = () => {
   const [showDirectory, setShowDirectory] = useState(false);
   const [showClientDirectory, setShowClientDirectory] = useState(false);
   const [ownershipFilter, setOwnershipFilter] = useState<ContactOwnershipFilter>("all");
-  
+  const [clientSortOption, setClientSortOption] = useState<ClientSortOption>("oldest-contacted");
   const { 
     contacts, 
     trashedContacts,
@@ -167,17 +170,33 @@ const Index = () => {
   const sharedContactsCount = useMemo(() => 
     contacts.filter(c => c.isShared).length, [contacts]);
 
-  // Client directory: all contacts sorted by last contacted (oldest first / never contacted first)
+  // Client directory: contacts sorted based on selected sort option
   const clientDirectoryContacts = useMemo(() => {
     return [...contacts].sort((a, b) => {
-      // Contacts never contacted come first
-      if (!a.lastContactedAt && !b.lastContactedAt) return 0;
-      if (!a.lastContactedAt) return -1;
-      if (!b.lastContactedAt) return 1;
-      // Otherwise sort by oldest contacted first
-      return new Date(a.lastContactedAt).getTime() - new Date(b.lastContactedAt).getTime();
+      switch (clientSortOption) {
+        case "oldest-contacted":
+          // Never contacted first, then oldest contacted
+          if (!a.lastContactedAt && !b.lastContactedAt) return 0;
+          if (!a.lastContactedAt) return -1;
+          if (!b.lastContactedAt) return 1;
+          return new Date(a.lastContactedAt).getTime() - new Date(b.lastContactedAt).getTime();
+        case "newest-contacted":
+          // Most recently contacted first, never contacted last
+          if (!a.lastContactedAt && !b.lastContactedAt) return 0;
+          if (!a.lastContactedAt) return 1;
+          if (!b.lastContactedAt) return -1;
+          return new Date(b.lastContactedAt).getTime() - new Date(a.lastContactedAt).getTime();
+        case "oldest-added":
+          // Oldest added first (we don't have createdAt on Contact type, so use id order as proxy)
+          return a.id.localeCompare(b.id);
+        case "newest-added":
+          // Most recently added first
+          return b.id.localeCompare(a.id);
+        default:
+          return 0;
+      }
     });
-  }, [contacts]);
+  }, [contacts, clientSortOption]);
 
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(
     showClientDirectory ? clientDirectoryContacts : folderFilteredContacts, 
@@ -460,11 +479,24 @@ const Index = () => {
                 </>
               ) : showClientDirectory ? (
                 <>
-                  <div className="mb-6">
-                    <h2 className="text-2xl font-display font-semibold">Client Directory</h2>
-                    <p className="text-muted-foreground mt-1">
-                      Sorted by time since last contact • {filteredContacts.length} client{filteredContacts.length !== 1 ? "s" : ""}
-                    </p>
+                  <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-display font-semibold">Client Directory</h2>
+                      <p className="text-muted-foreground mt-1">
+                        {filteredContacts.length} client{filteredContacts.length !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <Select value={clientSortOption} onValueChange={(v) => setClientSortOption(v as ClientSortOption)}>
+                      <SelectTrigger className="w-[220px]">
+                        <SelectValue placeholder="Sort by..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="oldest-contacted">Longest since contacted</SelectItem>
+                        <SelectItem value="newest-contacted">Most recently contacted</SelectItem>
+                        <SelectItem value="oldest-added">Longest since added</SelectItem>
+                        <SelectItem value="newest-added">Most recently added</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <ContactGrid
                     contacts={filteredContacts}
