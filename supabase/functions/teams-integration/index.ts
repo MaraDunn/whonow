@@ -327,24 +327,35 @@ serve(async (req) => {
       }
 
       case "import-members": {
+        console.log("Starting import-members for user:", user.id);
+        
         const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
 
         if (!integration) {
+          console.log("No valid Teams integration found");
           return new Response(JSON.stringify({ error: "Teams not connected" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
+        console.log("Found Teams integration, token starts with:", integration.access_token?.substring(0, 20));
+
         // Fetch user's joined teams
         const teamsResponse = await fetch(`${GRAPH_API_BASE}/me/joinedTeams`, {
-          headers: { Authorization: `Bearer ${integration.access_token}` },
+          headers: { 
+            "Authorization": `Bearer ${integration.access_token}`,
+            "Content-Type": "application/json",
+          },
         });
 
+        console.log("Teams API response status:", teamsResponse.status);
         const teamsData = await teamsResponse.json();
+        console.log("Teams API response:", JSON.stringify(teamsData).substring(0, 200));
 
         if (teamsData.error) {
-          return new Response(JSON.stringify({ error: teamsData.error.message }), {
+          console.error("Teams API error:", teamsData.error);
+          return new Response(JSON.stringify({ error: teamsData.error.message || "Failed to fetch teams" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -358,22 +369,31 @@ serve(async (req) => {
           .single();
 
         const allMembers: any[] = [];
+        const teamsList = teamsData.value || [];
+        console.log("Found", teamsList.length, "teams");
 
         // Fetch members from each team
-        for (const team of teamsData.value || []) {
+        for (const team of teamsList) {
+          console.log("Fetching members for team:", team.displayName);
           const membersResponse = await fetch(
             `${GRAPH_API_BASE}/teams/${team.id}/members`,
-            { headers: { Authorization: `Bearer ${integration.access_token}` } }
+            { 
+              headers: { 
+                "Authorization": `Bearer ${integration.access_token}`,
+                "Content-Type": "application/json",
+              } 
+            }
           );
 
           const membersData = await membersResponse.json();
+          console.log("Team members response status:", membersResponse.status);
 
           if (membersData.value) {
             for (const member of membersData.value) {
               // Avoid duplicates
-              if (!allMembers.find(m => m.email === member.email)) {
+              if (member.email && !allMembers.find(m => m.email === member.email)) {
                 allMembers.push({
-                  name: member.displayName,
+                  name: member.displayName || "Unknown",
                   email: member.email,
                   role: member.roles?.join(", ") || "Member",
                   company: team.displayName,
@@ -385,6 +405,8 @@ serve(async (req) => {
             }
           }
         }
+
+        console.log("Total members to import:", allMembers.length);
 
         if (allMembers.length === 0) {
           return new Response(JSON.stringify({ success: true, imported: 0 }), {
