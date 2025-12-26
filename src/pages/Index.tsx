@@ -410,13 +410,15 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Drag Overlay - compact preview for better folder visibility */}
+        {/* Drag Overlay - compact preview centered below cursor for better folder visibility */}
         <DragOverlay dropAnimation={{
           duration: 250,
           easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
         }}>
           {activeContact ? (
-            <DragPreview contact={activeContact} />
+            <div className="relative" style={{ transform: 'translate(-50%, 8px)' }}>
+              <DragPreview contact={activeContact} />
+            </div>
           ) : null}
         </DragOverlay>
       </DndContext>
