@@ -97,34 +97,34 @@ export function ContactCard({
     return (
       <div
         onClick={handleCardClick}
-        className="group relative p-3 rounded-xl border border-border bg-card shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-200 cursor-pointer animate-slide-up"
-        style={{ animationDelay: `${index * 30}ms` }}
+        className="group relative p-2 rounded-lg border border-border bg-card shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-200 cursor-pointer animate-slide-up"
+        style={{ animationDelay: `${index * 20}ms` }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Avatar */}
           <div className="relative flex-shrink-0">
-            <div className="w-10 h-10 rounded-lg gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-sm">
+            <div className="w-8 h-8 rounded-md gradient-hero flex items-center justify-center text-primary-foreground font-display font-medium text-xs">
               {initials}
             </div>
           </div>
 
           {/* Name and Company */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h3 className="font-display font-medium text-sm text-foreground truncate">
+            <div className="flex items-center gap-1">
+              <h3 className="font-display font-medium text-xs text-foreground truncate">
                 {contact.name}
               </h3>
               {contact.isClient && (
-                <Star className="h-3 w-3 text-amber-500 fill-amber-500 flex-shrink-0" />
+                <Star className="h-2.5 w-2.5 text-amber-500 fill-amber-500 flex-shrink-0" />
               )}
             </div>
-            <p className="text-xs text-muted-foreground truncate">
+            <p className="text-[10px] text-muted-foreground truncate">
               {contact.company}
             </p>
           </div>
 
           {/* Expand indicator */}
-          <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform" />
         </div>
       </div>
     );
