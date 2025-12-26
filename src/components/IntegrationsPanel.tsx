@@ -276,7 +276,7 @@ export function IntegrationsPanel() {
             <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
               <li>Go to <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Azure AD Portal</a> and register a new app</li>
               <li>Add API permissions: <code className="bg-muted px-1 rounded">User.Read</code>, <code className="bg-muted px-1 rounded">Team.ReadBasic.All</code>, <code className="bg-muted px-1 rounded">Channel.ReadBasic.All</code>, <code className="bg-muted px-1 rounded">Chat.ReadWrite</code>, <code className="bg-muted px-1 rounded">OnlineMeetings.ReadWrite</code></li>
-              <li>Add a redirect URI (Web): <code className="bg-muted px-1 rounded text-[10px]">https://kzivlasydxnhbqduqpjb.supabase.co/functions/v1/teams-integration?action=oauth-callback</code></li>
+              <li>Add a redirect URI (Web): <code className="bg-muted px-1 rounded text-[10px]">https://kzivlasydxnhbqduqpjb.supabase.co/functions/v1/teams-integration</code></li>
               <li>Create a client secret and copy it along with Client ID</li>
             </ol>
           </div>

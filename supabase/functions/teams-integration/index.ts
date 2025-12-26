@@ -18,6 +18,84 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID");
+    const MICROSOFT_CLIENT_SECRET = Deno.env.get("MICROSOFT_CLIENT_SECRET");
+    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "common";
+
+    // Check if this is an OAuth callback (GET request with code parameter)
+    const url = new URL(req.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const oauthError = url.searchParams.get("error");
+
+    if (req.method === "GET" && (code || oauthError)) {
+      // Handle OAuth callback
+      console.log("Teams OAuth callback received");
+      
+      if (oauthError) {
+        return new Response(`OAuth error: ${oauthError}`, { status: 400 });
+      }
+
+      if (!code || !MICROSOFT_CLIENT_ID || !MICROSOFT_CLIENT_SECRET) {
+        return new Response("Missing code or credentials", { status: 400 });
+      }
+
+      const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
+
+      // Exchange code for tokens
+      const tokenResponse = await fetch(
+        `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: MICROSOFT_CLIENT_ID,
+            client_secret: MICROSOFT_CLIENT_SECRET,
+            code,
+            redirect_uri: redirectUri,
+            grant_type: "authorization_code",
+          }),
+        }
+      );
+
+      const tokenData = await tokenResponse.json();
+      console.log("Microsoft OAuth response received");
+
+      if (tokenData.error) {
+        return new Response(`OAuth failed: ${tokenData.error_description}`, { status: 400 });
+      }
+
+      // Get user profile
+      const profileResponse = await fetch(`${GRAPH_API_BASE}/me`, {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const profileData = await profileResponse.json();
+
+      // Calculate token expiry
+      const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
+
+      // Store the integration
+      await supabase.from("integrations").upsert({
+        user_id: state,
+        provider: "teams",
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        token_expires_at: expiresAt.toISOString(),
+        is_active: true,
+        settings: {
+          email: profileData.mail || profileData.userPrincipalName,
+          display_name: profileData.displayName,
+        },
+      }, { onConflict: "user_id,provider" });
+
+      // Redirect back to the app
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "/settings?integration=teams&status=success" },
+      });
+    }
+
+    // For non-OAuth requests, require authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header" }), {
@@ -40,10 +118,6 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
     console.log(`Teams integration action: ${action}`, params);
 
-    const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID");
-    const MICROSOFT_CLIENT_SECRET = Deno.env.get("MICROSOFT_CLIENT_SECRET");
-    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "common";
-
     switch (action) {
       case "get-oauth-url": {
         if (!MICROSOFT_CLIENT_ID) {
@@ -55,7 +129,7 @@ serve(async (req) => {
           });
         }
 
-        const redirectUri = `${supabaseUrl}/functions/v1/teams-integration?action=oauth-callback`;
+        const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
         const scopes = "offline_access User.Read Team.ReadBasic.All Channel.ReadBasic.All Chat.ReadWrite OnlineMeetings.ReadWrite";
         const oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?` +
           `client_id=${MICROSOFT_CLIENT_ID}` +
@@ -67,75 +141,6 @@ serve(async (req) => {
 
         return new Response(JSON.stringify({ url: oauthUrl }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      case "oauth-callback": {
-        const url = new URL(req.url);
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state"); // user_id
-        const error = url.searchParams.get("error");
-
-        if (error) {
-          return new Response(`OAuth error: ${error}`, { status: 400 });
-        }
-
-        if (!code || !MICROSOFT_CLIENT_ID || !MICROSOFT_CLIENT_SECRET) {
-          return new Response("Missing code or credentials", { status: 400 });
-        }
-
-        const redirectUri = `${supabaseUrl}/functions/v1/teams-integration?action=oauth-callback`;
-
-        // Exchange code for tokens
-        const tokenResponse = await fetch(
-          `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              client_id: MICROSOFT_CLIENT_ID,
-              client_secret: MICROSOFT_CLIENT_SECRET,
-              code,
-              redirect_uri: redirectUri,
-              grant_type: "authorization_code",
-            }),
-          }
-        );
-
-        const tokenData = await tokenResponse.json();
-        console.log("Microsoft OAuth response received");
-
-        if (tokenData.error) {
-          return new Response(`OAuth failed: ${tokenData.error_description}`, { status: 400 });
-        }
-
-        // Get user profile
-        const profileResponse = await fetch(`${GRAPH_API_BASE}/me`, {
-          headers: { Authorization: `Bearer ${tokenData.access_token}` },
-        });
-        const profileData = await profileResponse.json();
-
-        // Calculate token expiry
-        const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
-
-        // Store the integration
-        await supabase.from("integrations").upsert({
-          user_id: state,
-          provider: "teams",
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
-          token_expires_at: expiresAt.toISOString(),
-          is_active: true,
-          settings: {
-            email: profileData.mail || profileData.userPrincipalName,
-            display_name: profileData.displayName,
-          },
-        }, { onConflict: "user_id,provider" });
-
-        // Redirect back to the app
-        return new Response(null, {
-          status: 302,
-          headers: { Location: "/settings?integration=teams&status=success" },
         });
       }
 
