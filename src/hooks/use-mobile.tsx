@@ -7,23 +7,22 @@ const TABLET_BREAKPOINT = 1024;
 function isTouchDevice(): boolean {
   if (typeof window === 'undefined') return false;
   
+  // Check for fine pointer (mouse/trackpad) - if this is the PRIMARY pointer, it's desktop
+  // This handles touchscreen laptops correctly - they have both but mouse is primary
+  const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+  if (hasFinePointer) return false;
+  
   // Check for coarse pointer (touch screens)
   const hasCoarsePointer = window.matchMedia('(any-pointer: coarse)').matches;
   // Check for touch points
   const hasTouchPoints = navigator.maxTouchPoints > 0;
-  // Check for fine pointer (mouse/trackpad) - if this is the PRIMARY pointer, it's desktop
-  const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
   
-  // If primary pointer is fine (mouse/trackpad), treat as desktop regardless of touch capability
-  // This handles touchscreen laptops correctly - they have both but mouse is primary
-  if (hasFinePointer) return false;
-  
-  // Otherwise, it's a touch device if it has touch capabilities
+  // It's a touch device if it has touch capabilities and no fine pointer as primary
   return hasCoarsePointer || hasTouchPoints;
 }
 
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined);
+  const [isMobile, setIsMobile] = React.useState<boolean>(false);
 
   React.useEffect(() => {
     const checkMobile = () => {
@@ -40,11 +39,11 @@ export function useIsMobile() {
     return () => mql.removeEventListener("change", checkMobile);
   }, []);
 
-  return !!isMobile;
+  return isMobile;
 }
 
 export function useIsTablet() {
-  const [isTablet, setIsTablet] = React.useState<boolean | undefined>(undefined);
+  const [isTablet, setIsTablet] = React.useState<boolean>(false);
 
   React.useEffect(() => {
     const checkTablet = () => {
@@ -68,7 +67,7 @@ export function useIsTablet() {
     };
   }, []);
 
-  return !!isTablet;
+  return isTablet;
 }
 
 export type ResponsiveView = 'mobile' | 'tablet' | 'desktop';
