@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
-import { Mail, Lock, User, LogIn, UserPlus, Building2 } from "lucide-react";
+import { Mail, Lock, User, LogIn, UserPlus, Building2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -20,6 +21,10 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
 
   // Redirect if already authenticated
@@ -92,6 +97,29 @@ const Auth = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const emailResult = emailSchema.safeParse(resetEmail);
+    if (!emailResult.success) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    setIsResetting(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+    setIsResetting(false);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Password reset link sent! Check your email.");
+      setShowForgotPassword(false);
+      setResetEmail("");
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -138,17 +166,33 @@ const Auth = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="signin-password">Password</Label>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(true)}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signin-password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10"
+                      className="pl-10 pr-10"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                   {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                 </div>
@@ -209,12 +253,19 @@ const Auth = () => {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signup-password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10"
+                      className="pl-10 pr-10"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                   {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                 </div>
@@ -235,6 +286,54 @@ const Auth = () => {
               </form>
             </TabsContent>
           </Tabs>
+
+          {/* Forgot Password Modal */}
+          {showForgotPassword && (
+            <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+              <Card className="w-full max-w-md mx-4">
+                <CardHeader>
+                  <CardTitle>Reset Password</CardTitle>
+                  <CardDescription>
+                    Enter your email address and we'll send you a link to reset your password.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="reset-email">Email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="reset-email"
+                          type="email"
+                          placeholder="you@example.com"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setShowForgotPassword(false);
+                          setResetEmail("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" className="flex-1" disabled={isResetting}>
+                        {isResetting ? "Sending..." : "Send Reset Link"}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
