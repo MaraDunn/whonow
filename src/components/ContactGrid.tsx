@@ -75,10 +75,10 @@ export function ContactGrid({
     );
   }
 
-  // Responsive grid classes
+  // Responsive grid classes - only apply compact layout on mobile/tablet
   const gridClasses = isCompactMode
     ? "grid grid-cols-1 sm:grid-cols-2 gap-3"
-    : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5";
+    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6";
 
   return (
     <div>
