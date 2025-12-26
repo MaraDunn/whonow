@@ -31,6 +31,7 @@ serve(async (req) => {
     if (req.method === "GET" && (code || oauthError)) {
       // Handle OAuth callback
       console.log("Teams OAuth callback received");
+      console.log("Teams OAuth state received:", state);
       
       if (oauthError) {
         return new Response(`OAuth error: ${oauthError}`, { status: 400 });
@@ -41,16 +42,38 @@ serve(async (req) => {
       }
 
       // Parse the state to get user ID and origin
-      let userId: string;
-      let appOrigin: string;
-      try {
-        const stateData = JSON.parse(decodeURIComponent(state || "{}"));
-        userId = stateData.userId;
-        appOrigin = stateData.origin || "";
-      } catch {
+      let userId = "";
+      let appOrigin = "";
+
+      const rawState = state ?? "";
+      const parseState = (value: string) => {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return null;
+        }
+      };
+
+      const parsedState =
+        parseState(rawState) ||
+        (() => {
+          try {
+            return parseState(decodeURIComponent(rawState));
+          } catch {
+            return null;
+          }
+        })();
+
+      if (parsedState && typeof parsedState === "object") {
+        userId = String((parsedState as any).userId || "");
+        appOrigin = String((parsedState as any).origin || "");
+      } else {
         // Fallback for old format where state was just the user ID
-        userId = state || "";
-        appOrigin = "";
+        userId = rawState;
+      }
+
+      if (!userId) {
+        return new Response("Missing user id in state", { status: 400 });
       }
 
       const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
@@ -75,13 +98,18 @@ serve(async (req) => {
       console.log("Microsoft OAuth response received");
 
       if (tokenData.error) {
-        const errorRedirect = appOrigin ? `${appOrigin}/settings?integration=teams&status=error&message=${encodeURIComponent(tokenData.error_description)}` : null;
+        const errorRedirect = appOrigin
+          ? `${appOrigin}/?integration=teams&status=error&message=${encodeURIComponent(tokenData.error_description)}`
+          : null;
+
         if (errorRedirect) {
+          console.log("Teams OAuth redirecting to (error):", errorRedirect);
           return new Response(null, {
             status: 302,
             headers: { Location: errorRedirect },
           });
         }
+
         return new Response(`OAuth failed: ${tokenData.error_description}`, { status: 400 });
       }
 
@@ -95,21 +123,29 @@ serve(async (req) => {
       const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
 
       // Store the integration
-      await supabase.from("integrations").upsert({
-        user_id: userId,
-        provider: "teams",
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        token_expires_at: expiresAt.toISOString(),
-        is_active: true,
-        settings: {
-          email: profileData.mail || profileData.userPrincipalName,
-          display_name: profileData.displayName,
+      await supabase.from("integrations").upsert(
+        {
+          user_id: userId,
+          provider: "teams",
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token,
+          token_expires_at: expiresAt.toISOString(),
+          is_active: true,
+          settings: {
+            email: profileData.mail || profileData.userPrincipalName,
+            display_name: profileData.displayName,
+          },
         },
-      }, { onConflict: "user_id,provider" });
+        { onConflict: "user_id,provider" }
+      );
 
       // Redirect back to the app using absolute URL
-      const successRedirect = appOrigin ? `${appOrigin}/settings?integration=teams&status=success` : "/settings?integration=teams&status=success";
+      const successRedirect = appOrigin
+        ? `${appOrigin}/?integration=teams&status=success`
+        : "/?integration=teams&status=success";
+
+      console.log("Teams OAuth redirecting to (success):", successRedirect);
+
       return new Response(null, {
         status: 302,
         headers: { Location: successRedirect },
@@ -154,7 +190,11 @@ serve(async (req) => {
         const scopes = "offline_access User.Read Team.ReadBasic.All Channel.ReadBasic.All Chat.ReadWrite OnlineMeetings.ReadWrite";
         
         // Encode both user ID and app origin in the state parameter
-        const stateData = JSON.stringify({ userId: user.id, origin: params.origin || "" });
+        const origin = typeof params.origin === "string" && params.origin
+          ? params.origin
+          : (req.headers.get("origin") || "");
+
+        const stateData = JSON.stringify({ userId: user.id, origin });
         const encodedState = encodeURIComponent(stateData);
         
         const oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?` +
