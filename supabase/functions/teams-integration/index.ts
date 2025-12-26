@@ -187,7 +187,18 @@ serve(async (req) => {
         }
 
         const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
-        const scopes = "offline_access User.Read Team.ReadBasic.All Channel.ReadBasic.All Chat.ReadWrite OnlineMeetings.ReadWrite";
+        // NOTE: Reading Teams + members typically requires admin-consented Graph permissions in the Azure app.
+        const scopes = [
+          "offline_access",
+          "User.Read",
+          "User.ReadBasic.All",
+          "Group.Read.All",
+          "Team.ReadBasic.All",
+          "TeamMember.Read.All",
+          "Channel.ReadBasic.All",
+          "Chat.ReadWrite",
+          "OnlineMeetings.ReadWrite",
+        ].join(" ");
         
         // Encode both user ID and app origin in the state parameter
         const origin = typeof params.origin === "string" && params.origin
@@ -203,7 +214,8 @@ serve(async (req) => {
           `&redirect_uri=${encodeURIComponent(redirectUri)}` +
           `&scope=${encodeURIComponent(scopes)}` +
           `&state=${encodedState}` +
-          `&response_mode=query`;
+          `&response_mode=query` +
+          `&prompt=consent`;
 
         return new Response(JSON.stringify({ url: oauthUrl }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -329,7 +341,13 @@ serve(async (req) => {
       case "import-members": {
         console.log("Starting import-members for user:", user.id);
         
-        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
+        const integration = await getValidIntegration(
+          supabase,
+          user.id,
+          MICROSOFT_CLIENT_ID,
+          MICROSOFT_CLIENT_SECRET,
+          MICROSOFT_TENANT_ID
+        );
 
         if (!integration) {
           console.log("No valid Teams integration found");
@@ -339,12 +357,10 @@ serve(async (req) => {
           });
         }
 
-        console.log("Found Teams integration, token starts with:", integration.access_token?.substring(0, 20));
-
         // Fetch user's joined teams
         const teamsResponse = await fetch(`${GRAPH_API_BASE}/me/joinedTeams`, {
-          headers: { 
-            "Authorization": `Bearer ${integration.access_token}`,
+          headers: {
+            Authorization: `Bearer ${integration.access_token}`,
             "Content-Type": "application/json",
           },
         });
@@ -353,12 +369,29 @@ serve(async (req) => {
         const teamsData = await teamsResponse.json();
         console.log("Teams API response:", JSON.stringify(teamsData).substring(0, 200));
 
+        // Graph returns 401/403 when the Azure app lacks required (often admin-consented) permissions.
+        if (teamsResponse.status === 401 || teamsResponse.status === 403) {
+          return new Response(
+            JSON.stringify({
+              error:
+                "Microsoft Teams access denied. Please disconnect + reconnect Teams and approve permissions (your org admin may need to grant consent).",
+            }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+
         if (teamsData.error) {
           console.error("Teams API error:", teamsData.error);
-          return new Response(JSON.stringify({ error: teamsData.error.message || "Failed to fetch teams" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: teamsData.error.message || "Failed to fetch teams" }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
         }
 
         // Get user's company_id
