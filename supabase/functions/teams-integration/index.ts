@@ -369,15 +369,21 @@ serve(async (req) => {
         const teamsData = await teamsResponse.json();
         console.log("Teams API response:", JSON.stringify(teamsData).substring(0, 200));
 
-        // Graph returns 401/403 when the Azure app lacks required (often admin-consented) permissions.
+        // Graph returns 401/403 when the account/app lacks required permissions (often needs admin consent).
+        // IMPORTANT: return 200 with an { error } payload so the web client can show a friendly toast
+        // instead of throwing a FunctionsHttpError.
         if (teamsResponse.status === 401 || teamsResponse.status === 403) {
+          const graphError = (teamsData as any)?.error;
           return new Response(
             JSON.stringify({
               error:
+                graphError?.message ||
                 "Microsoft Teams access denied. Please disconnect + reconnect Teams and approve permissions (your org admin may need to grant consent).",
+              graph_status: teamsResponse.status,
+              graph_code: graphError?.code,
             }),
             {
-              status: 400,
+              status: 200,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             }
           );
