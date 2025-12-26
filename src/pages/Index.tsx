@@ -1,18 +1,19 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { 
-  DndContext, 
-  DragEndEvent, 
-  DragStartEvent, 
-  DragOverlay, 
+import {
+  DndContext,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
   pointerWithin,
   useSensor,
   useSensors,
   PointerSensor,
   TouchSensor,
   KeyboardSensor,
-  DragOverEvent
+  DragOverEvent,
 } from "@dnd-kit/core";
+import type { Modifier } from "@dnd-kit/core";
 
 import { useSearchParams } from "react-router-dom";
 import { SearchBar } from "@/components/SearchBar";
@@ -34,6 +35,53 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { Contact } from "@/types/contact";
 import { toast } from "sonner";
+
+function getClientPoint(event: Event): { x: number; y: number } | null {
+  // Touch
+  if ("touches" in (event as any)) {
+    const te = event as TouchEvent;
+    const t = te.touches?.[0] ?? te.changedTouches?.[0];
+    if (t) return { x: t.clientX, y: t.clientY };
+  }
+
+  // Mouse / Pointer
+  if ("clientX" in (event as any) && "clientY" in (event as any)) {
+    const e = event as MouseEvent;
+    return { x: e.clientX, y: e.clientY };
+  }
+
+  return null;
+}
+
+// Keep the drag preview anchored to the cursor regardless of where the user grabs the card.
+// We want the cursor to be "holding" the top-center of the preview.
+const SNAP_TO_CURSOR_Y_OFFSET = 10;
+const snapTopCenterToCursor: Modifier = ({
+  activatorEvent,
+  activeNodeRect,
+  overlayNodeRect,
+  transform,
+}) => {
+  if (!activatorEvent || !activeNodeRect || !overlayNodeRect) return transform;
+
+  const point = getClientPoint(activatorEvent);
+  if (!point) return transform;
+
+  const pointerOffsetX = point.x - activeNodeRect.left;
+  const pointerOffsetY = point.y - activeNodeRect.top;
+
+  // Desired cursor contact point on the overlay: top-center (slightly below the cursor)
+  const desiredOffsetX = overlayNodeRect.width / 2;
+  const desiredOffsetY = SNAP_TO_CURSOR_Y_OFFSET;
+
+  // dnd-kit keeps the original grab point; we override by shifting the overlay so the
+  // cursor always maps to the desired point.
+  return {
+    ...transform,
+    x: transform.x + (desiredOffsetX - pointerOffsetX),
+    y: transform.y + (desiredOffsetY - pointerOffsetY),
+  };
+};
 
 const Index = () => {
   const queryClient = useQueryClient();
@@ -410,16 +458,15 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Drag Overlay - compact preview centered below cursor for better folder visibility */}
-        <DragOverlay dropAnimation={{
-          duration: 250,
-          easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-        }}>
-          {activeContact ? (
-            <div style={{ transform: 'translate(-50%, 0)' }}>
-              <DragPreview contact={activeContact} />
-            </div>
-          ) : null}
+        {/* Drag Overlay - compact preview anchored to cursor for better folder visibility */}
+        <DragOverlay
+          dropAnimation={{
+            duration: 250,
+            easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+          }}
+          modifiers={[snapTopCenterToCursor]}
+        >
+          {activeContact ? <DragPreview contact={activeContact} /> : null}
         </DragOverlay>
       </DndContext>
     </SidebarProvider>
