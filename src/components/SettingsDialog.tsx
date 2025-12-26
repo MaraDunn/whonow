@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Link2 } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Link2, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import {
@@ -17,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -44,6 +45,17 @@ export function SettingsDialog({
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { profile, company, isAdmin } = useProfile(user?.id);
+
+  // Security tab state
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
+  const [isSigningOutAll, setIsSigningOutAll] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   const handleAddKeyword = () => {
     if (newKeyword.trim()) {
@@ -78,9 +90,86 @@ export function SettingsDialog({
     }
   };
 
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast.success("Password updated successfully");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update password");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleChangeEmail = async () => {
+    if (!newEmail.trim() || !newEmail.includes("@")) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    setIsChangingEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      if (error) throw error;
+      toast.success("Confirmation email sent to your new address");
+      setNewEmail("");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update email");
+    } finally {
+      setIsChangingEmail(false);
+    }
+  };
+
+  const handleSignOutAllDevices = async () => {
+    setIsSigningOutAll(true);
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "global" });
+      if (error) throw error;
+      toast.success("Signed out of all devices");
+      onOpenChange(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to sign out of all devices");
+    } finally {
+      setIsSigningOutAll(false);
+    }
+  };
+
+  const handleSendPasswordReset = async () => {
+    if (!user?.email) {
+      toast.error("No email found for your account");
+      return;
+    }
+
+    setIsSendingReset(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/auth`,
+      });
+      if (error) throw error;
+      toast.success("Password reset email sent");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send reset email");
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
   // Determine number of tabs based on admin status
   const showAdminTab = isAdmin && company;
-  const tabCount = showAdminTab ? 5 : 4;
+  const tabCount = showAdminTab ? 6 : 5;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -102,6 +191,10 @@ export function SettingsDialog({
             <TabsTrigger value="account" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Account</span>
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              <span className="hidden sm:inline">Security</span>
             </TabsTrigger>
             <TabsTrigger value="integrations" className="flex items-center gap-2">
               <Link2 className="h-4 w-4" />
@@ -272,6 +365,143 @@ export function SettingsDialog({
                 >
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign Out
+                </Button>
+              </div>
+            </TabsContent>
+
+            {/* Security Tab */}
+            <TabsContent value="security" className="space-y-6 mt-0">
+              {/* Change Password */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">Change Password</Label>
+                <p className="text-sm text-muted-foreground">
+                  Update your password to keep your account secure.
+                </p>
+                
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password" className="text-sm">New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="new-password"
+                        type={showNewPassword ? "text" : "password"}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Enter new password"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password" className="text-sm">Confirm Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirm-password"
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Confirm new password"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    onClick={handleChangePassword} 
+                    disabled={isChangingPassword || !newPassword || !confirmPassword}
+                    className="w-full"
+                  >
+                    {isChangingPassword ? "Updating..." : "Update Password"}
+                  </Button>
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-sm text-muted-foreground"
+                    onClick={handleSendPasswordReset}
+                    disabled={isSendingReset}
+                  >
+                    {isSendingReset ? "Sending..." : "Forgot password? Send reset email"}
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Change Email */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">Change Email</Label>
+                <p className="text-sm text-muted-foreground">
+                  Current email: <span className="font-medium">{user?.email}</span>
+                </p>
+                
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-email" className="text-sm">New Email Address</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="new-email"
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="Enter new email"
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    onClick={handleChangeEmail} 
+                    disabled={isChangingEmail || !newEmail}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {isChangingEmail ? "Sending confirmation..." : "Update Email"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    A confirmation link will be sent to your new email address.
+                  </p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Session Management */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">Session Management</Label>
+                <p className="text-sm text-muted-foreground">
+                  Sign out of all devices if you suspect unauthorized access.
+                </p>
+                
+                <Button
+                  variant="outline"
+                  onClick={handleSignOutAllDevices}
+                  disabled={isSigningOutAll}
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  {isSigningOutAll ? "Signing out..." : "Sign Out All Devices"}
                 </Button>
               </div>
             </TabsContent>
