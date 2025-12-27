@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import Index from "./pages/Index";
-import Auth from "./pages/Auth";
+import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,7 +24,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
@@ -32,15 +32,17 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppRoutes = () => (
   <Routes>
-    <Route path="/auth" element={<Auth />} />
+    <Route path="/" element={<Landing />} />
     <Route
-      path="/"
+      path="/app"
       element={
         <ProtectedRoute>
           <Index />
         </ProtectedRoute>
       }
     />
+    {/* Redirect old /auth route to landing */}
+    <Route path="/auth" element={<Navigate to="/" replace />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
