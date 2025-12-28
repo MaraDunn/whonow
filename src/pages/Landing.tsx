@@ -3,6 +3,7 @@ import { LandingNav } from "@/components/landing/LandingNav";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { ValueProps } from "@/components/landing/ValueProps";
 import { ProductDemo } from "@/components/landing/ProductDemo";
+import { PricingSection } from "@/components/landing/PricingSection";
 import { TrustSection } from "@/components/landing/TrustSection";
 import { CTASection } from "@/components/landing/CTASection";
 import { Footer } from "@/components/landing/Footer";
@@ -30,6 +31,7 @@ const Landing = () => {
         <HeroSection onSignIn={openSignIn} onGetStarted={openSignUp} />
         <ValueProps />
         <ProductDemo />
+        <PricingSection onGetStarted={openSignUp} />
         <TrustSection />
         <CTASection onGetStarted={openSignUp} />
       </main>
