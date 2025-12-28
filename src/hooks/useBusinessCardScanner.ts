@@ -20,6 +20,12 @@ export function useBusinessCardScanner() {
   const startCamera = useCallback(async (videoElement: HTMLVideoElement) => {
     try {
       setError(null);
+      
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera access is not supported in this browser. Please use a modern browser with HTTPS.");
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
       });
@@ -27,9 +33,24 @@ export function useBusinessCardScanner() {
       videoRef.current = videoElement;
       streamRef.current = stream;
       await videoElement.play();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Camera error:", err);
-      setError("Could not access camera. Please check permissions.");
+      
+      // Provide user-friendly error messages based on error type
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setError("Camera access denied. Please allow camera permissions in your browser settings and try again.");
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        setError("No camera found. Please ensure your device has a camera.");
+      } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+        setError("Camera is in use by another application. Please close other apps using the camera.");
+      } else if (err.name === "OverconstrainedError") {
+        setError("Camera doesn't support the required settings. Try using a different camera.");
+      } else if (err.name === "SecurityError") {
+        setError("Camera access requires a secure connection (HTTPS).");
+      } else {
+        setError(err.message || "Could not access camera. Please check permissions and try again.");
+      }
+      throw err;
     }
   }, []);
 
