@@ -56,6 +56,7 @@ export function ImportContactsDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState(defaultTab || "scan");
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraInitializing, setCameraInitializing] = useState(false);
   const [editedContact, setEditedContact] = useState<{
     name: string;
     email: string;
@@ -105,8 +106,21 @@ export function ImportContactsDialog({
     if (!open || activeTab !== "scan") {
       scanner.stopCamera();
       setCameraActive(false);
+      setCameraInitializing(false);
     }
   }, [open, activeTab, scanner.stopCamera]);
+
+  // Start camera when cameraActive is set and video element is available
+  useEffect(() => {
+    if (cameraActive && videoRef.current && cameraInitializing) {
+      scanner.startCamera(videoRef.current).then(() => {
+        setCameraInitializing(false);
+      }).catch(() => {
+        setCameraActive(false);
+        setCameraInitializing(false);
+      });
+    }
+  }, [cameraActive, cameraInitializing, scanner]);
 
 
   const handleGoogleImport = () => {
@@ -270,11 +284,10 @@ export function ImportContactsDialog({
     }
   };
 
-  const handleStartCamera = async () => {
-    if (videoRef.current) {
-      await scanner.startCamera(videoRef.current);
-      setCameraActive(true);
-    }
+  const handleStartCamera = () => {
+    scanner.reset();
+    setCameraActive(true);
+    setCameraInitializing(true);
   };
 
   const handleCapture = async () => {
@@ -335,6 +348,14 @@ export function ImportContactsDialog({
                 {cameraActive ? (
                   <div className="space-y-4">
                     <div className="relative rounded-lg overflow-hidden bg-black aspect-[4/3]">
+                      {cameraInitializing && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+                          <div className="text-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-white mx-auto mb-2" />
+                            <p className="text-sm text-white/70">Starting camera...</p>
+                          </div>
+                        </div>
+                      )}
                       <video
                         ref={videoRef}
                         autoPlay
@@ -349,13 +370,14 @@ export function ImportContactsDialog({
                         onClick={() => {
                           scanner.stopCamera();
                           setCameraActive(false);
+                          setCameraInitializing(false);
                         }}
                         variant="outline"
                         className="flex-1"
                       >
                         Cancel
                       </Button>
-                      <Button onClick={handleCapture} className="flex-1 gap-2">
+                      <Button onClick={handleCapture} disabled={cameraInitializing} className="flex-1 gap-2">
                         <Camera className="h-4 w-4" />
                         Capture
                       </Button>
