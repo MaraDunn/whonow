@@ -76,6 +76,12 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
             >
               Demo
             </button>
+            <button
+              onClick={() => scrollToSection("pricing")}
+              className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
+            >
+              Pricing
+            </button>
           </div>
 
           {/* Desktop CTAs */}
@@ -154,6 +160,12 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
               className="block w-full text-left text-muted-foreground hover:text-foreground transition-colors py-2"
             >
               Demo
+            </button>
+            <button
+              onClick={() => scrollToSection("pricing")}
+              className="block w-full text-left text-muted-foreground hover:text-foreground transition-colors py-2"
+            >
+              Pricing
             </button>
             <div className="pt-4 border-t border-border space-y-2">
               {user ? (

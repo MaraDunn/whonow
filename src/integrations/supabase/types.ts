@@ -145,6 +145,54 @@ export type Database = {
           },
         ]
       }
+      employee_access_keys: {
+        Row: {
+          access_key: string
+          claimed_at: string | null
+          claimed_by: string | null
+          company_id: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          subscription_id: string
+        }
+        Insert: {
+          access_key?: string
+          claimed_at?: string | null
+          claimed_by?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          subscription_id: string
+        }
+        Update: {
+          access_key?: string
+          claimed_at?: string | null
+          claimed_by?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_access_keys_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_access_keys_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       folders: {
         Row: {
           color: string | null
@@ -324,6 +372,62 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          employee_seats_limit: number | null
+          employee_seats_used: number | null
+          id: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          tier: Database["public"]["Enums"]["subscription_tier"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          employee_seats_limit?: number | null
+          employee_seats_used?: number | null
+          id?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tier?: Database["public"]["Enums"]["subscription_tier"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          employee_seats_limit?: number | null
+          employee_seats_used?: number | null
+          id?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tier?: Database["public"]["Enums"]["subscription_tier"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -347,8 +451,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_employee_access_key: {
+        Args: { _access_key: string }
+        Returns: boolean
+      }
       create_company: { Args: { p_name: string }; Returns: string }
+      get_available_employee_seats: {
+        Args: { _company_id: string }
+        Returns: number
+      }
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
+      get_user_subscription_tier: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["subscription_tier"]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -360,6 +476,13 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "member"
+      subscription_tier:
+        | "starter"
+        | "pro"
+        | "team"
+        | "business"
+        | "enterprise"
+        | "global_enterprise"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -488,6 +611,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "member"],
+      subscription_tier: [
+        "starter",
+        "pro",
+        "team",
+        "business",
+        "enterprise",
+        "global_enterprise",
+      ],
     },
   },
 } as const
