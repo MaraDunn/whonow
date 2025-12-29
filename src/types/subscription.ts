@@ -131,6 +131,7 @@ export type FeatureName =
   | "client_management"
   | "advanced_search"
   | "team_features"
+  | "integrations"
   | "advanced_analytics"
   | "api_access"
   | "sso"
@@ -142,6 +143,7 @@ export const FEATURE_ACCESS: Record<FeatureName, SubscriptionTier[]> = {
   client_management: ["pro", "team", "business", "enterprise", "global_enterprise"],
   advanced_search: ["pro", "team", "business", "enterprise", "global_enterprise"],
   team_features: ["team", "business", "enterprise", "global_enterprise"],
+  integrations: ["team", "business", "enterprise", "global_enterprise"],
   advanced_analytics: ["business", "enterprise", "global_enterprise"],
   api_access: ["business", "enterprise", "global_enterprise"],
   sso: ["enterprise", "global_enterprise"],

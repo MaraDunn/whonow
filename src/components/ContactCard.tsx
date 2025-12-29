@@ -1,10 +1,12 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown, Lock } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useSubscription } from "@/hooks/useSubscription";
+import { LockedFeatureButton } from "@/components/LockedFeatureButton";
 
 // Helper to format last contacted time
 function formatLastContacted(lastContactedAt?: string): string | null {
@@ -52,6 +54,9 @@ export function ContactCard({
   isExpanded = false,
   onToggleExpand,
 }: ContactCardProps) {
+  const { canAccessFeature } = useSubscription();
+  const hasClientAccess = canAccessFeature("client_management");
+  
   const initials = contact.name
     .split(" ")
     .map((n) => n[0])
@@ -233,35 +238,65 @@ export function ContactCard({
         {!isTrashView && (
           <div className="mt-3 flex gap-2 border-t border-border pt-3">
             {onToggleClient && (
-              <Button
-                variant={contact.isClient ? "default" : "outline"}
-                size="sm"
-                className={cn(
-                  "flex-1 text-xs h-8",
-                  contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleClient(!contact.isClient);
-                }}
-              >
-                <Star className={cn("h-3 w-3 mr-1", contact.isClient && "fill-current")} />
-                {contact.isClient ? "Client" : "Mark Client"}
-              </Button>
+              hasClientAccess ? (
+                <Button
+                  variant={contact.isClient ? "default" : "outline"}
+                  size="sm"
+                  className={cn(
+                    "flex-1 text-xs h-8",
+                    contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleClient(!contact.isClient);
+                  }}
+                >
+                  <Star className={cn("h-3 w-3 mr-1", contact.isClient && "fill-current")} />
+                  {contact.isClient ? "Client" : "Mark Client"}
+                </Button>
+              ) : (
+                <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs h-8 opacity-70"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Star className="h-3 w-3 mr-1" />
+                    Mark Client
+                    <Lock className="h-2.5 w-2.5 ml-1 text-muted-foreground" />
+                  </Button>
+                </LockedFeatureButton>
+              )
             )}
             {onMarkContacted && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 text-xs h-8"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMarkContacted();
-                }}
-              >
-                <Clock className="h-3 w-3 mr-1" />
-                Contacted
-              </Button>
+              hasClientAccess ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs h-8"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMarkContacted();
+                  }}
+                >
+                  <Clock className="h-3 w-3 mr-1" />
+                  Contacted
+                </Button>
+              ) : (
+                <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs h-8 opacity-70"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Clock className="h-3 w-3 mr-1" />
+                    Contacted
+                    <Lock className="h-2.5 w-2.5 ml-1 text-muted-foreground" />
+                  </Button>
+                </LockedFeatureButton>
+              )
             )}
             <Button
               variant="secondary"
@@ -426,35 +461,65 @@ export function ContactCard({
       {!isTrashView && (onMarkContacted || onToggleClient) && (
         <div className="mt-3 flex gap-2">
           {onToggleClient && (
-            <Button
-              variant={contact.isClient ? "default" : "outline"}
-              size="sm"
-              className={cn(
-                "flex-1 text-xs",
-                contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleClient(!contact.isClient);
-              }}
-            >
-              <Star className={cn("h-3 w-3 mr-1.5", contact.isClient && "fill-current")} />
-              {contact.isClient ? "Client" : "Mark as Client"}
-            </Button>
+            hasClientAccess ? (
+              <Button
+                variant={contact.isClient ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "flex-1 text-xs",
+                  contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleClient(!contact.isClient);
+                }}
+              >
+                <Star className={cn("h-3 w-3 mr-1.5", contact.isClient && "fill-current")} />
+                {contact.isClient ? "Client" : "Mark as Client"}
+              </Button>
+            ) : (
+              <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs opacity-70"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Star className="h-3 w-3 mr-1.5" />
+                  Mark as Client
+                  <Lock className="h-3 w-3 ml-1.5 text-muted-foreground" />
+                </Button>
+              </LockedFeatureButton>
+            )
           )}
           {onMarkContacted && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMarkContacted();
-              }}
-            >
-              <Clock className="h-3 w-3 mr-1.5" />
-              Contacted
-            </Button>
+            hasClientAccess ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkContacted();
+                }}
+              >
+                <Clock className="h-3 w-3 mr-1.5" />
+                Contacted
+              </Button>
+            ) : (
+              <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs opacity-70"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Clock className="h-3 w-3 mr-1.5" />
+                  Contacted
+                  <Lock className="h-3 w-3 ml-1.5 text-muted-foreground" />
+                </Button>
+              </LockedFeatureButton>
+            )
           )}
         </div>
       )}

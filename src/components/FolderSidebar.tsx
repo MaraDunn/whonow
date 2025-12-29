@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle, Briefcase } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle, Briefcase, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,6 +33,8 @@ import { Folder as FolderType } from "@/types/folder";
 import { Profile } from "@/types/profile";
 import { ContactOwnershipFilter } from "@/types/contact";
 import { cn } from "@/lib/utils";
+import { useSubscription } from "@/hooks/useSubscription";
+import { LockedFeatureButton } from "@/components/LockedFeatureButton";
 
 interface FolderSidebarProps {
   folders: FolderType[];
@@ -89,6 +91,11 @@ export function FolderSidebar({
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const { canAccessFeature } = useSubscription();
+  
+  // Feature access checks
+  const hasClientAccess = canAccessFeature("client_management");
+  const hasTeamAccess = canAccessFeature("team_features");
 
   const handleSaveFolder = (folderData: Omit<FolderType, "id" | "createdAt">) => {
     if (editingFolder) {
@@ -329,37 +336,51 @@ export function FolderSidebar({
 
           <SidebarSeparator />
 
-          {/* Client Directory - always show for all users */}
+          {/* Client Directory - show for all users but lock for Starter */}
           {onSelectClientDirectory && (
             <>
               <SidebarGroup>
                 <SidebarGroupContent>
                   <SidebarMenu>
                     <SidebarMenuItem>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <SidebarMenuButton
-                              onClick={onSelectClientDirectory}
-                              isActive={showClientDirectory}
-                              className="w-full"
-                            >
-                              <Briefcase className="h-4 w-4" />
-                              {!isCollapsed && (
-                                <>
-                                  <span className="flex-1 text-left">Client Directory</span>
-                                  <span className="text-xs opacity-70">{clientDirectoryCount}</span>
-                                </>
-                              )}
-                            </SidebarMenuButton>
-                          </TooltipTrigger>
-                          {isCollapsed && (
-                            <TooltipContent side="right">
-                              <p>Client Directory ({clientDirectoryCount})</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      </TooltipProvider>
+                      {hasClientAccess ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <SidebarMenuButton
+                                onClick={onSelectClientDirectory}
+                                isActive={showClientDirectory}
+                                className="w-full"
+                              >
+                                <Briefcase className="h-4 w-4" />
+                                {!isCollapsed && (
+                                  <>
+                                    <span className="flex-1 text-left">Client Directory</span>
+                                    <span className="text-xs opacity-70">{clientDirectoryCount}</span>
+                                  </>
+                                )}
+                              </SidebarMenuButton>
+                            </TooltipTrigger>
+                            {isCollapsed && (
+                              <TooltipContent side="right">
+                                <p>Client Directory ({clientDirectoryCount})</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <LockedFeatureButton feature="client_management" minimumTier="pro">
+                          <SidebarMenuButton className="w-full opacity-70">
+                            <Briefcase className="h-4 w-4" />
+                            {!isCollapsed && (
+                              <>
+                                <span className="flex-1 text-left">Client Directory</span>
+                                <Lock className="h-3 w-3 text-muted-foreground" />
+                              </>
+                            )}
+                          </SidebarMenuButton>
+                        </LockedFeatureButton>
+                      )}
                     </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
@@ -368,8 +389,8 @@ export function FolderSidebar({
             </>
           )}
 
-          {/* Team Directory - only show if company members exist */}
-          {companyMembers.length > 0 && onSelectDirectory && (
+          {/* Team Directory - only show if company members exist AND user has team access */}
+          {hasTeamAccess && companyMembers.length > 0 && onSelectDirectory && (
             <>
               <SidebarGroup>
                 <SidebarGroupContent>
