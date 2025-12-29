@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { AdminPdfImport } from "@/components/AdminPdfImport";
@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -55,6 +56,10 @@ export function SettingsDialog({
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { profile, company, isAdmin } = useProfile(user?.id);
+  const { canAccessFeature, createCheckout } = useSubscription();
+  
+  // Feature access checks
+  const hasIntegrationsAccess = canAccessFeature("integrations");
 
   // Security tab state
   const [newPassword, setNewPassword] = useState("");
@@ -609,14 +614,41 @@ export function SettingsDialog({
 
                 <Separator />
 
-                {/* Integrations */}
-                <div className="space-y-4">
-                  <Label className="text-base font-medium">Integrations</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Connect your company to Slack and Microsoft Teams.
-                  </p>
-                  <IntegrationsPanel />
-                </div>
+                {/* Integrations - only show for Team+ */}
+                {hasIntegrationsAccess ? (
+                  <div className="space-y-4">
+                    <Label className="text-base font-medium">Integrations</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Connect your company to Slack and Microsoft Teams.
+                    </p>
+                    <IntegrationsPanel />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Label className="text-base font-medium">Integrations</Label>
+                    <div className="p-4 bg-muted/50 rounded-lg border border-dashed border-muted-foreground/30">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <Lock className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">Upgrade to Team</p>
+                          <p className="text-xs text-muted-foreground">
+                            Integrations are available on Team plans and above.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => createCheckout("team")}
+                        size="sm"
+                        className="w-full gradient-hero text-primary-foreground"
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Upgrade to Team
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
             )}
           </div>
