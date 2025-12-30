@@ -21,14 +21,24 @@ serve(async (req) => {
       );
     }
 
+    // Input validation - limit query length to prevent abuse
+    const sanitizedQuery = typeof query === 'string' ? query.slice(0, 500).trim() : '';
+    if (!sanitizedQuery) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid query' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Build context from contacts for better matching
+    // Build context from contacts - MINIMIZE PII: only send role, company, description, tags
+    // Names are included with index only for matching purposes, no emails/phones
     const contactContext = contacts?.map((c: any, i: number) => 
-      `[${i + 1}] ${c.name} | Role: ${c.role || 'N/A'} | Company: ${c.company || 'N/A'} | Description: ${c.description || 'N/A'} | Tags: ${c.tags?.join(', ') || 'none'}`
+      `[${i + 1}] ${c.name} | Role: ${c.role || 'N/A'} | Company: ${c.company || 'N/A'} | Description: ${(c.description || 'N/A').slice(0, 200)} | Tags: ${(c.tags?.slice(0, 10) || []).join(', ') || 'none'}`
     ).join('\n') || '';
 
     const systemPrompt = `You are a PRECISE search assistant for a contacts directory. Your job is to find ONLY the most accurate matches.
@@ -77,7 +87,7 @@ Always return the EXACT name as it appears in the database.`;
         model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: query }
+          { role: 'user', content: sanitizedQuery }
         ],
       }),
     });
