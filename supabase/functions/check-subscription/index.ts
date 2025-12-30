@@ -25,7 +25,8 @@ const SEAT_LIMITS: Record<string, number> = {
   global_enterprise: 1500,
 };
 
-const logStep = (step: string, details?: any) => {
+// Secure logging - no PII
+const logStep = (step: string, details?: Record<string, string | number | boolean | undefined>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[CHECK-SUBSCRIPTION] ${step}${detailsStr}`);
 };
@@ -53,13 +54,14 @@ serve(async (req) => {
     logStep("Authorization header found");
 
     const token = authHeader.replace("Bearer ", "");
-    logStep("Authenticating user with token");
+    logStep("Authenticating user");
     
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError) throw new Error(`Authentication error: ${userError.message}`);
     const user = userData.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    // Log only user ID, not email (PII)
+    logStep("User authenticated", { userId: user.id });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
@@ -103,12 +105,12 @@ serve(async (req) => {
 
     const subscription = subscriptions.data[0];
     const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-    logStep("Active subscription found", { subscriptionId: subscription.id, endDate: subscriptionEnd });
+    logStep("Active subscription found", { subscriptionId: subscription.id });
 
     const productId = subscription.items.data[0].price.product as string;
     const tier = PRODUCT_TO_TIER[productId] || "pro";
     const seatsLimit = SEAT_LIMITS[tier] || 1;
-    logStep("Determined subscription tier", { productId, tier, seatsLimit });
+    logStep("Determined subscription tier", { tier, seatsLimit });
 
     // Sync to database
     const { error: upsertError } = await supabaseClient
@@ -144,7 +146,7 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in check-subscription", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Subscription check failed" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

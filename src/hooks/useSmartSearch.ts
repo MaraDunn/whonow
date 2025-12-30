@@ -140,15 +140,20 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     try {
       setIsLoading(true);
       
+      // Sanitize query - prevent prompt injection
+      const sanitizedQuery = searchQuery.slice(0, 500).trim();
+      
       const { data, error } = await supabase.functions.invoke('parse-search-query', {
         body: { 
-          query: searchQuery,
+          query: sanitizedQuery,
+          // SECURITY: Only send necessary fields, minimize PII exposure to AI
           contacts: contactList.map(c => ({
             name: c.name,
-            role: c.role,
-            company: c.company,
-            description: c.description,
-            tags: c.tags
+            role: c.role || '',
+            company: c.company || '',
+            description: (c.description || '').slice(0, 200), // Limit description length
+            tags: (c.tags || []).slice(0, 10) // Limit tags
+            // Intentionally exclude: email, phone, avatar
           }))
         }
       });
