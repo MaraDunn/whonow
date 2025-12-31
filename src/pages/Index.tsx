@@ -118,6 +118,9 @@ const Index = () => {
     emptyTrash,
     updateLastContacted,
     toggleClientStatus,
+    isAtContactLimit,
+    contactsRemaining,
+    contactLimit,
   } = useContacts();
   const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
@@ -430,6 +433,9 @@ const Index = () => {
                 }}
                 onContactsImported={handleContactsImported}
                 myProfile={myProfile}
+                isAtContactLimit={isAtContactLimit}
+                contactsRemaining={contactsRemaining}
+                contactLimit={contactLimit}
               />
               
               <div className="mb-4 sm:mb-10">

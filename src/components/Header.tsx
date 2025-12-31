@@ -1,4 +1,4 @@
-import { Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, Sparkles, MessageSquare, Video } from "lucide-react";
+import { Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, Sparkles, MessageSquare, Video, AlertCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,9 +12,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
+import { useSubscription } from "@/hooks/useSubscription";
 import { toast } from "sonner";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface HeaderProps {
   contactCount: number;
@@ -24,13 +31,28 @@ interface HeaderProps {
   onOpenImport: (tab?: string) => void;
   onContactsImported?: () => void;
   myProfile?: Contact;
+  isAtContactLimit?: boolean;
+  contactsRemaining?: number | null;
+  contactLimit?: number | null;
 }
 
-export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSettings, onOpenImport, onContactsImported, myProfile }: HeaderProps) {
+export function Header({ 
+  contactCount, 
+  onOpenAddDialog, 
+  onOpenProfile, 
+  onOpenSettings, 
+  onOpenImport, 
+  onContactsImported, 
+  myProfile,
+  isAtContactLimit,
+  contactsRemaining,
+  contactLimit,
+}: HeaderProps) {
   const { user, signOut } = useAuth();
   const { profile, company } = useProfile(user?.id);
   const slack = useSlackIntegration();
   const teams = useTeamsIntegration();
+  const { createCheckout } = useSubscription();
   const isMobile = useIsMobile();
 
   const handleSignOut = async () => {
@@ -84,6 +106,10 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
     .toUpperCase()
     .slice(0, 2);
 
+  const handleUpgrade = () => {
+    createCheckout("pro");
+  };
+
   return (
     <header className="flex items-center justify-between mb-4 sm:mb-8 animate-fade-in">
       <div className="flex items-center gap-2 sm:gap-4">
@@ -92,6 +118,11 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
           <div className="border-l border-border pl-4">
             <p className="text-sm text-muted-foreground">
               {contactCount} {contactCount === 1 ? "contact" : "contacts"}
+              {contactLimit !== null && contactLimit !== undefined && (
+                <span className={contactsRemaining !== null && contactsRemaining <= 10 ? "text-warning" : ""}>
+                  {" "}/ {contactLimit}
+                </span>
+              )}
             </p>
           </div>
         )}
@@ -100,25 +131,57 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
       <div className="flex items-center gap-2 sm:gap-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center justify-center gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20">
-              <Plus className="h-4 w-4" />
+            <button 
+              className={`flex items-center justify-center gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-medium text-sm transition-opacity shadow-lg ${
+                isAtContactLimit 
+                  ? "bg-muted text-muted-foreground cursor-not-allowed" 
+                  : "gradient-hero text-primary-foreground hover:opacity-90 shadow-primary/20"
+              }`}
+              disabled={isAtContactLimit}
+            >
+              {isAtContactLimit ? (
+                <AlertCircle className="h-4 w-4" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
               {!isMobile && (
                 <>
-                  <span>Add Contact</span>
-                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                  <span>{isAtContactLimit ? "Limit Reached" : "Add Contact"}</span>
+                  {!isAtContactLimit && <ChevronDown className="h-3.5 w-3.5 opacity-70" />}
                 </>
               )}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 bg-popover">
-            <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenAddDialog("quick")}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              Quick Add
-            </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenAddDialog("full")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Full Form
-            </DropdownMenuItem>
+          {isAtContactLimit ? (
+            <DropdownMenuContent align="end" className="w-64 bg-popover p-4">
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">Contact limit reached</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      You've reached the {contactLimit} contact limit on the free plan. Upgrade to Pro for unlimited contacts.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleUpgrade}
+                  className="w-full px-4 py-2 rounded-lg gradient-hero text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity"
+                >
+                  Upgrade to Pro
+                </button>
+              </div>
+            </DropdownMenuContent>
+          ) : (
+            <DropdownMenuContent align="end" className="w-52 bg-popover">
+              <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenAddDialog("quick")}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Quick Add
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenAddDialog("full")}>
+                <Plus className="mr-2 h-4 w-4" />
+                Full Form
+              </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("scan")}>
               <Camera className="mr-2 h-4 w-4" />
@@ -149,7 +212,8 @@ export function Header({ contactCount, onOpenAddDialog, onOpenProfile, onOpenSet
               <Video className="mr-2 h-4 w-4" />
               {teams.isLoading ? "Importing..." : "Import from Teams"}
             </DropdownMenuItem>
-          </DropdownMenuContent>
+            </DropdownMenuContent>
+          )}
         </DropdownMenu>
 
         <DropdownMenu>
