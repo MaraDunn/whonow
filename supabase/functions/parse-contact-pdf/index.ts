@@ -162,9 +162,9 @@ Important:
     );
 
   } catch (error) {
-    console.error('Error parsing PDF:', error);
+    console.error('Error parsing PDF');
     return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ success: false, error: 'Failed to parse document' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
