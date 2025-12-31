@@ -9,11 +9,11 @@ const corsHeaders = {
 
 // Map tier names to Stripe price IDs
 const TIER_PRICES: Record<string, string> = {
-  pro: "price_1RifXqDXpGeDw1xnkNvKgEzI",
-  team: "price_1RifYIDXpGeDw1xn1rBKxeH7",
-  business: "price_1RifYIDXpGeDw1xni9LJxRLQ",
-  enterprise: "price_1RifYJDXpGeDw1xnvpXcKYOh",
-  global_enterprise: "price_1RifYJDXpGeDw1xnnCqy2Zfl",
+  pro: "price_1SjQAeFPGsvHT2MqWp8ScykQ",
+  team: "price_1SjQBdFPGsvHT2MqddHgVIzf",
+  business: "price_1SjQCHFPGsvHT2MqKDDNwvOS",
+  enterprise: "price_1SjQDCFPGsvHT2Mq9jd7ti9s",
+  global_enterprise: "price_1SjQELFPGsvHT2MqnNPIOhbL",
 };
 
 const logStep = (step: string, details?: any) => {
