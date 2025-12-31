@@ -182,8 +182,9 @@ export function SettingsDialog({
     }
   };
 
-  // Determine number of tabs based on admin status
-  const showAdminTab = isAdmin && company;
+  // Determine number of tabs based on admin status AND team+ subscription
+  const hasTeamFeatures = canAccessFeature("team_features");
+  const showAdminTab = isAdmin && company && hasTeamFeatures;
   const tabCount = showAdminTab ? 5 : 4;
 
   return (
