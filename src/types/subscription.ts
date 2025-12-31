@@ -27,6 +27,8 @@ export interface TierConfig {
   badge?: string;
 }
 
+export const STARTER_CONTACT_LIMIT = 100;
+
 export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
   starter: {
     name: "Starter",
@@ -37,7 +39,7 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 1,
     features: [
       "Basic contact management",
-      "Up to 50 contacts",
+      `Up to ${STARTER_CONTACT_LIMIT} contacts`,
       "Email support",
     ],
   },
