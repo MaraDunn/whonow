@@ -373,10 +373,7 @@ export function FolderSidebar({
                           <SidebarMenuButton className="w-full opacity-70">
                             <Briefcase className="h-4 w-4" />
                             {!isCollapsed && (
-                              <>
-                                <span className="flex-1 text-left">Client Directory</span>
-                                <Lock className="h-3 w-3 text-muted-foreground" />
-                              </>
+                              <span className="flex-1 text-left">Client Directory</span>
                             )}
                           </SidebarMenuButton>
                         </LockedFeatureButton>
