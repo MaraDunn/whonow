@@ -275,6 +275,9 @@ const Auth = () => {
                     </button>
                   </div>
                   {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    Must be 8+ characters with uppercase, lowercase, number, and special character.
+                  </p>
                 </div>
 
                 <Button type="submit" className="w-full" disabled={isSubmitting}>

@@ -142,9 +142,9 @@ Always return the EXACT name as it appears in the database.`;
     );
 
   } catch (error) {
-    console.error('Error in parse-search-query:', error);
+    console.error('Error in parse-search-query');
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'Search failed' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
