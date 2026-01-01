@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { AccountManagementDialog } from "./AccountManagementDialog";
 
 interface LandingNavProps {
   onSignIn: () => void;
@@ -22,6 +23,7 @@ interface LandingNavProps {
 
 export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const { user, signOut } = useAuth();
   const { profile } = useProfile(user?.id);
   const navigate = useNavigate();
@@ -111,9 +113,13 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
                       <p className="text-xs text-muted-foreground">{profile?.email}</p>
                     </div>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setAccountDialogOpen(true)}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      Account Management
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate("/app")}>
                       <User className="mr-2 h-4 w-4" />
-                      Account Management
+                      Go to App
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
@@ -211,6 +217,11 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
           </div>
         </div>
       )}
+
+      <AccountManagementDialog 
+        open={accountDialogOpen} 
+        onOpenChange={setAccountDialogOpen} 
+      />
     </nav>
   );
 };
