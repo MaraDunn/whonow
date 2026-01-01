@@ -31,6 +31,7 @@ import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { generateAutoKeywords } from "@/utils/autoKeywords";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { formatName, formatPhoneNumber } from "@/utils/formatContact";
 
 // Moved outside to prevent re-creation on every render (which causes input focus loss)
 interface CollapsibleSectionProps {
@@ -212,9 +213,10 @@ export function ContactFormDialog({
 
       if (data?.parsed) {
         const parsed = data.parsed;
-        setName(parsed.name || "");
+        // Apply formatting (backend already formats, but ensure consistency)
+        setName(formatName(parsed.name || ""));
         setEmail(parsed.email || "");
-        setPhone(parsed.phone || "");
+        setPhone(formatPhoneNumber(parsed.phone || ""));
         setCompany(parsed.company || "");
         setRole(parsed.role || "");
         setDescription(parsed.description || "");
