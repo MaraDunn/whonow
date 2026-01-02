@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Folder } from "@/types/folder";
+import { Folder, DirectoryType } from "@/types/folder";
 
 const PRESET_COLORS = [
   "#6366f1", // indigo
@@ -28,11 +28,21 @@ interface FolderFormDialogProps {
   onOpenChange: (open: boolean) => void;
   onSave: (folder: Omit<Folder, "id" | "createdAt">) => void;
   folder?: Folder | null;
+  directoryType?: DirectoryType;
+  existingNames?: string[];
 }
 
-export function FolderFormDialog({ open, onOpenChange, onSave, folder }: FolderFormDialogProps) {
+export function FolderFormDialog({ 
+  open, 
+  onOpenChange, 
+  onSave, 
+  folder,
+  directoryType = "contacts",
+  existingNames = [],
+}: FolderFormDialogProps) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(PRESET_COLORS[0]);
+  const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!folder;
 
@@ -44,14 +54,60 @@ export function FolderFormDialog({ open, onOpenChange, onSave, folder }: FolderF
       setName("");
       setColor(PRESET_COLORS[0]);
     }
+    setError(null);
   }, [folder, open]);
+
+  const validateName = (value: string): boolean => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setError("Folder name is required");
+      return false;
+    }
+    
+    // Check for duplicate name (case-insensitive), excluding current folder when editing
+    const isDuplicate = existingNames.some(
+      (existingName) => 
+        existingName.toLowerCase() === trimmed.toLowerCase() &&
+        (!isEditing || existingName.toLowerCase() !== folder?.name.toLowerCase())
+    );
+    
+    if (isDuplicate) {
+      setError("A folder with this name already exists");
+      return false;
+    }
+    
+    setError(null);
+    return true;
+  };
+
+  const handleNameChange = (value: string) => {
+    setName(value);
+    if (error) {
+      validateName(value);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!validateName(name)) return;
 
-    onSave({ name: name.trim(), color });
+    onSave({ 
+      name: name.trim(), 
+      color,
+      directoryType: folder?.directoryType || directoryType,
+    });
     onOpenChange(false);
+  };
+
+  const getTitle = () => {
+    const directoryLabel = directoryType === "clients" 
+      ? "Client" 
+      : directoryType === "team" 
+        ? "Team" 
+        : "";
+    return isEditing 
+      ? `Edit ${directoryLabel} Folder`.trim() 
+      : `New ${directoryLabel} Folder`.trim();
   };
 
   return (
@@ -59,7 +115,7 @@ export function FolderFormDialog({ open, onOpenChange, onSave, folder }: FolderF
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="font-display text-xl">
-            {isEditing ? "Edit Folder" : "New Folder"}
+            {getTitle()}
           </DialogTitle>
         </DialogHeader>
 
@@ -69,10 +125,14 @@ export function FolderFormDialog({ open, onOpenChange, onSave, folder }: FolderF
             <Input
               id="folder-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               placeholder="Work, Personal, Family..."
               autoFocus
+              className={error ? "border-destructive" : ""}
             />
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
           </div>
 
           <div className="space-y-2">
