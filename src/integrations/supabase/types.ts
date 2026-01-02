@@ -234,6 +234,7 @@ export type Database = {
           color: string | null
           company_id: string | null
           created_at: string
+          directory_type: string
           id: string
           name: string
           owner_id: string | null
@@ -243,6 +244,7 @@ export type Database = {
           color?: string | null
           company_id?: string | null
           created_at?: string
+          directory_type?: string
           id?: string
           name: string
           owner_id?: string | null
@@ -252,6 +254,7 @@ export type Database = {
           color?: string | null
           company_id?: string | null
           created_at?: string
+          directory_type?: string
           id?: string
           name?: string
           owner_id?: string | null

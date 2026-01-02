@@ -106,6 +106,8 @@ const Index = () => {
   const [showClientDirectory, setShowClientDirectory] = useState(false);
   const [ownershipFilter, setOwnershipFilter] = useState<ContactOwnershipFilter>("all");
   const [clientSortOption, setClientSortOption] = useState<ClientSortOption>("oldest-contacted");
+  const [selectedClientFolderId, setSelectedClientFolderId] = useState<string | null>(null);
+  const [selectedTeamFolderId, setSelectedTeamFolderId] = useState<string | null>(null);
   const { 
     contacts, 
     trashedContacts,
@@ -122,7 +124,7 @@ const Index = () => {
     contactsRemaining,
     contactLimit,
   } = useContacts();
-  const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
+  const { folders, clientFolders, teamFolders, addFolder, updateFolder, deleteFolder } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
 
   // Handle OAuth callback redirects (e.g., from Slack)
@@ -417,6 +419,12 @@ const Index = () => {
             showClientDirectory={showClientDirectory}
             onSelectClientDirectory={handleSelectClientDirectory}
             clientDirectoryCount={clientCount}
+            clientFolders={clientFolders}
+            selectedClientFolderId={selectedClientFolderId}
+            onSelectClientFolder={setSelectedClientFolderId}
+            teamFolders={teamFolders}
+            selectedTeamFolderId={selectedTeamFolderId}
+            onSelectTeamFolder={setSelectedTeamFolderId}
           />
 
           {/* Main Content */}
