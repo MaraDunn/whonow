@@ -162,6 +162,26 @@ export const useSubscription = () => {
           console.error("Checkout error:", error);
           if (error instanceof FunctionsHttpError) {
             console.error("create-checkout details:", error.context);
+            try {
+              const text = await error.context.clone().text();
+              console.error("create-checkout response body:", text);
+              // Try to surface JSON error messages if present
+              try {
+                const parsed = JSON.parse(text) as { error?: string; hint?: string };
+                if (parsed?.error) {
+                  toast.error(parsed.hint ? `${parsed.error} — ${parsed.hint}` : parsed.error);
+                  return null;
+                }
+              } catch {
+                // Not JSON, fall back to raw text
+              }
+              if (text) {
+                toast.error(text);
+                return null;
+              }
+            } catch (e) {
+              console.error("Failed to read create-checkout error body:", e);
+            }
           }
           toast.error(error.message || "Failed to start checkout process");
           return null;
