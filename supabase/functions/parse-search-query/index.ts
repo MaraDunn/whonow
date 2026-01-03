@@ -5,8 +5,146 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Deterministic Search Query Parser - NO AI/LLM
+ * Rule-based natural language query parsing
+ */
+
+// Action keywords that trigger specific actions
+const ACTION_KEYWORDS: Record<string, string> = {
+  email: "email",
+  mail: "email",
+  message: "email",
+  send: "email",
+  call: "call",
+  phone: "call",
+  ring: "call",
+  dial: "call",
+  text: "text",
+  sms: "text",
+};
+
+// Question/intent detection patterns
+const QUESTION_STARTERS = new Set([
+  "who", "what", "where", "which", "find", "show", "get", 
+  "search", "look", "can", "do", "does", "is", "are", "help",
+  "list", "display", "give"
+]);
+
+// Role/department vocabulary
+const ROLE_VOCABULARY = new Set([
+  "hr", "sales", "marketing", "engineering", "finance", "legal", "operations",
+  "support", "it", "tech", "product", "design", "research", "development",
+  "ceo", "cto", "cfo", "coo", "vp", "director", "manager", "lead", "senior",
+  "junior", "developer", "engineer", "designer", "analyst", "consultant"
+]);
+
+// Stop words
+const STOP_WORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+  "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
+  "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
+  "should", "may", "might", "must", "shall", "can", "need", "our", "my",
+  "your", "his", "her", "its", "their", "this", "that", "these", "those",
+  "i", "you", "he", "she", "it", "we", "they", "someone", "anyone", "person"
+]);
+
+function normalizeQuery(query: string): string {
+  return query.toLowerCase().trim().replace(/[?!.,;:]+$/g, "").replace(/\s+/g, " ");
+}
+
+function isQuestion(query: string): boolean {
+  const normalized = normalizeQuery(query);
+  if (query.trim().endsWith("?")) return true;
+  const firstWord = normalized.split(" ")[0];
+  return QUESTION_STARTERS.has(firstWord) || normalized.includes("someone") || normalized.includes("anyone");
+}
+
+interface Contact {
+  name: string;
+  role?: string;
+  company?: string;
+  description?: string;
+  tags?: string[];
+}
+
+interface ParsedResult {
+  isQuestion: boolean;
+  intent: string;
+  keywords: string[];
+  matchingContactNames: string[];
+  confidence: "high" | "medium" | "low";
+}
+
+function scoreContact(contact: Contact, searchTerms: string[]): number {
+  let score = 0;
+  const name = (contact.name || "").toLowerCase();
+  const role = (contact.role || "").toLowerCase();
+  const company = (contact.company || "").toLowerCase();
+  const description = (contact.description || "").toLowerCase();
+  const tags = (contact.tags || []).join(" ").toLowerCase();
+  const allText = `${name} ${role} ${company} ${description} ${tags}`;
+  
+  for (const term of searchTerms) {
+    if (name.includes(term)) score += 10;
+    if (role.includes(term)) score += 8;
+    if (tags.includes(term)) score += 7;
+    if (description.includes(term)) score += 5;
+    if (company.includes(term)) score += 4;
+  }
+  
+  return score;
+}
+
+function parseSearchQuery(query: string, contacts: Contact[]): ParsedResult {
+  const normalized = normalizeQuery(query);
+  const words = normalized.split(" ").filter(Boolean);
+  
+  // Check for action prefix
+  const firstWord = words[0];
+  const isAction = firstWord && ACTION_KEYWORDS[firstWord];
+  const searchWords = isAction ? words.slice(1) : words;
+  
+  // Extract keywords (non-stop words)
+  const keywords = searchWords.filter(w => 
+    w.length >= 2 && !STOP_WORDS.has(w) && !ACTION_KEYWORDS[w]
+  );
+  
+  // Determine intent
+  let intent = "search";
+  if (isAction) {
+    intent = `${ACTION_KEYWORDS[firstWord]} contact`;
+  } else if (isQuestion(query)) {
+    intent = "find matching contacts";
+  }
+  
+  // Score contacts and find matches
+  const scoredContacts = contacts
+    .map(c => ({ contact: c, score: scoreContact(c, keywords) }))
+    .filter(sc => sc.score >= 4)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+  
+  const matchingNames = scoredContacts.map(sc => sc.contact.name);
+  
+  // Determine confidence
+  let confidence: "high" | "medium" | "low" = "low";
+  if (scoredContacts.length > 0) {
+    const topScore = scoredContacts[0].score;
+    if (topScore >= 15) confidence = "high";
+    else if (topScore >= 8) confidence = "medium";
+  }
+  
+  return {
+    isQuestion: isQuestion(query),
+    intent,
+    keywords,
+    matchingContactNames: matchingNames,
+    confidence,
+  };
+}
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -21,7 +159,6 @@ serve(async (req) => {
       );
     }
 
-    // Input validation - limit query length to prevent abuse
     const sanitizedQuery = typeof query === 'string' ? query.slice(0, 500).trim() : '';
     if (!sanitizedQuery) {
       return new Response(
@@ -30,119 +167,20 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
+    console.log('Deterministic search for:', sanitizedQuery);
 
-    // Build context from contacts - MINIMIZE PII: only send role, company, description, tags
-    // Names are included with index only for matching purposes, no emails/phones
-    const contactContext = contacts?.map((c: any, i: number) => 
-      `[${i + 1}] ${c.name} | Role: ${c.role || 'N/A'} | Company: ${c.company || 'N/A'} | Description: ${(c.description || 'N/A').slice(0, 200)} | Tags: ${(c.tags?.slice(0, 10) || []).join(', ') || 'none'}`
-    ).join('\n') || '';
+    // Use deterministic parsing - NO AI
+    const result = parseSearchQuery(sanitizedQuery, contacts || []);
 
-    const systemPrompt = `You are a PRECISE search assistant for a contacts directory. Your job is to find ONLY the most accurate matches.
-
-CONTACTS DATABASE:
-${contactContext}
-
-CRITICAL RULES - FOLLOW EXACTLY:
-1. MAXIMUM 5 contacts per query - NEVER return more than 5
-2. ONLY return contacts where the search criteria is EXPLICITLY visible in their data
-3. If a COMPANY NAME is mentioned, contacts MUST be from that EXACT company - no exceptions
-4. If a ROLE/FUNCTION is mentioned, the contact MUST have that exact role or function in their role/description
-5. Prefer 1-3 HIGHLY accurate matches over 5 loosely related ones
-6. When confidence is low, return EMPTY matchingContactNames array - do NOT guess
-7. NEVER match based on tangential or weak relationships
-
-VALIDATION BEFORE INCLUDING A CONTACT:
-- Company query? → Verify contact.company MATCHES the company name
-- Role query? → Verify contact.role or contact.description CONTAINS the role
-- Function query (HR, Sales, etc.)? → Verify role/description EXPLICITLY mentions that function
-- If you cannot find explicit evidence, DO NOT include the contact
-
-RESPOND WITH ONLY THIS JSON (no markdown, no extra text):
-{
-  "isQuestion": true,
-  "intent": "brief description of what user seeks",
-  "keywords": ["exact_keyword_from_query"],
-  "matchingContactNames": ["Exact Name 1", "Exact Name 2"],
-  "confidence": "high|medium|low"
-}
-
-CONFIDENCE LEVELS:
-- "high": All returned contacts have EXPLICIT matches to the query criteria
-- "medium": Most contacts have clear matches, some have strong implied matches
-- "low": Matches are uncertain or based on weak associations - USE EMPTY ARRAY INSTEAD
-
-Always return the EXACT name as it appears in the database.`;
-
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: sanitizedQuery }
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded, please try again later.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'AI credits exhausted. Please add credits to continue.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    
-    console.log('AI response:', content);
-
-    // Parse the JSON response
-    let parsed;
-    try {
-      // Extract JSON from response (handle markdown code blocks)
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
-      // Return a fallback that treats it as a regular search
-      parsed = {
-        isQuestion: false,
-        intent: '',
-        keywords: query.toLowerCase().split(' ').filter(Boolean),
-        matchingContactNames: []
-      };
-    }
+    console.log('Search result:', result);
 
     return new Response(
-      JSON.stringify(parsed),
+      JSON.stringify(result),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error in parse-search-query');
+    console.error('Error in parse-search-query:', error);
     return new Response(
       JSON.stringify({ error: 'Search failed' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
