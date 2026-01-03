@@ -10,11 +10,16 @@
  */
 
 // Allowed origins for CORS - update for production
-const ALLOWED_ORIGINS = [
-  "https://4bf33c78-836d-463a-a955-3c63d9df84b3.lovableproject.com",
-  "http://localhost:5173",
-  "http://localhost:3000",
+// Can be overridden with ALLOWED_ORIGINS environment variable (comma-separated)
+const DEFAULT_ORIGINS = [
+  "http://localhost:8080",  // Default dev server port
+  "http://localhost:5173",  // Alternative Vite port
+  "http://localhost:3000",  // Alternative port
 ];
+
+const ALLOWED_ORIGINS = Deno.env.get("ALLOWED_ORIGINS")
+  ? Deno.env.get("ALLOWED_ORIGINS")!.split(",").map(o => o.trim())
+  : DEFAULT_ORIGINS;
 
 /**
  * Get secure CORS headers based on request origin

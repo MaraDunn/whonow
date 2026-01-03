@@ -21,7 +21,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Get app URL from environment or use a default
-    const appUrl = Deno.env.get("APP_URL") || "https://4bf33c78-836d-463a-a955-3c63d9df84b3.lovableproject.com";
+    const appUrl = Deno.env.get("APP_URL") || "http://localhost:8080";
 
     // Check if this is an OAuth callback (GET request with code parameter)
     const url = new URL(req.url);
