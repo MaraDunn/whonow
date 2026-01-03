@@ -33,22 +33,23 @@ export function useBusinessCardScanner() {
       videoRef.current = videoElement;
       streamRef.current = stream;
       await videoElement.play();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Camera error:", err);
+      const e = typeof err === "object" && err !== null ? (err as { name?: string; message?: string }) : {};
       
       // Provide user-friendly error messages based on error type
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
         setError("Camera access denied. Please allow camera permissions in your browser settings and try again.");
-      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+      } else if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
         setError("No camera found. Please ensure your device has a camera.");
-      } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+      } else if (e.name === "NotReadableError" || e.name === "TrackStartError") {
         setError("Camera is in use by another application. Please close other apps using the camera.");
-      } else if (err.name === "OverconstrainedError") {
+      } else if (e.name === "OverconstrainedError") {
         setError("Camera doesn't support the required settings. Try using a different camera.");
-      } else if (err.name === "SecurityError") {
+      } else if (e.name === "SecurityError") {
         setError("Camera access requires a secure connection (HTTPS).");
       } else {
-        setError(err.message || "Could not access camera. Please check permissions and try again.");
+        setError(e.message || "Could not access camera. Please check permissions and try again.");
       }
       throw err;
     }

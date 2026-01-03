@@ -23,7 +23,7 @@ export function escapeHtml(input: string): string {
     "=": "&#x3D;",
   };
   
-  return input.replace(/[&<>"'`=\/]/g, (char) => escapeMap[char] || char);
+  return input.replace(/[&<>"'`=/]/g, (char) => escapeMap[char] || char);
 }
 
 /**
@@ -56,7 +56,7 @@ export function sanitizePhone(phone: string): string | null {
   const cleaned = phone.trim();
   
   // Basic validation: should contain digits and common phone characters
-  const phoneRegex = /^[\d\s\-\(\)\+\.]{7,25}$/;
+  const phoneRegex = /^[\d\s\-()+.]{7,25}$/;
   
   if (!phoneRegex.test(cleaned)) {
     return null;
@@ -72,13 +72,20 @@ export function sanitizePhone(phone: string): string | null {
 export function sanitizeName(name: string, maxLength = 100): string {
   if (typeof name !== "string") return "";
   
-  return name
+  const stripped = name
     .trim()
     .slice(0, maxLength)
-    // Remove control characters and HTML-like patterns
-    .replace(/[\x00-\x1F\x7F]/g, "")
     .replace(/<[^>]*>/g, "")
     .trim();
+
+  // Remove control characters without using a control-char regex (eslint no-control-regex)
+  let out = "";
+  for (let i = 0; i < stripped.length; i++) {
+    const code = stripped.charCodeAt(i);
+    const isControl = (code >= 0 && code <= 31) || code === 127;
+    if (!isControl) out += stripped[i];
+  }
+  return out.trim();
 }
 
 /**
@@ -87,14 +94,22 @@ export function sanitizeName(name: string, maxLength = 100): string {
 export function sanitizeText(text: string, maxLength = 2000): string {
   if (typeof text !== "string") return "";
   
-  return text
+  const trimmed = text
     .trim()
     .slice(0, maxLength)
-    // Remove control characters except newlines and tabs
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
     // Remove HTML script tags
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .trim();
+
+  // Remove control characters except newlines (\n=10), tabs (\t=9), and carriage return (\r=13)
+  let out = "";
+  for (let i = 0; i < trimmed.length; i++) {
+    const code = trimmed.charCodeAt(i);
+    const isDisallowedControl =
+      (code >= 0 && code <= 31 && code !== 9 && code !== 10 && code !== 13) || code === 127;
+    if (!isDisallowedControl) out += trimmed[i];
+  }
+  return out.trim();
 }
 
 /**

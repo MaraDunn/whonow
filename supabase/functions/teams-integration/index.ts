@@ -8,6 +8,20 @@ const corsHeaders = {
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 
+type GraphError = { code?: string; message?: string };
+type TeamsListResponse = { value?: Array<{ id?: string; displayName?: string }>; error?: GraphError };
+type TeamMembersResponse = { value?: Array<{ displayName?: string; email?: string; roles?: string[] }>; error?: GraphError };
+
+type TeamsContactRow = {
+  name: string;
+  email: string;
+  role: string;
+  company: string;
+  owner_id: string;
+  company_id: string | null;
+  tags: string[];
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -66,8 +80,9 @@ serve(async (req) => {
         })();
 
       if (parsedState && typeof parsedState === "object") {
-        userId = String((parsedState as any).userId || "");
-        appOrigin = String((parsedState as any).origin || "");
+        const stateObj = parsedState as { userId?: unknown; origin?: unknown };
+        userId = String(stateObj.userId || "");
+        appOrigin = String(stateObj.origin || "");
       } else {
         // Fallback for old format where state was just the user ID
         userId = rawState;
@@ -367,14 +382,14 @@ serve(async (req) => {
         });
 
         console.log("Teams API response status:", teamsResponse.status);
-        const teamsData = await teamsResponse.json();
+        const teamsData = (await teamsResponse.json()) as TeamsListResponse;
         console.log("Teams API response:", JSON.stringify(teamsData).substring(0, 200));
 
         // Graph returns 401/403 when the account/app lacks required permissions (often needs admin consent).
         // IMPORTANT: return 200 with an { error } payload so the web client can show a friendly toast
         // instead of throwing a FunctionsHttpError.
         if (teamsResponse.status === 401 || teamsResponse.status === 403) {
-          const graphError = (teamsData as any)?.error;
+          const graphError = teamsData?.error;
           return new Response(
             JSON.stringify({
               error:
@@ -408,7 +423,7 @@ serve(async (req) => {
           .eq("id", user.id)
           .single();
 
-        const allMembers: any[] = [];
+        const allMembers: TeamsContactRow[] = [];
         const teamsList = teamsData.value || [];
         console.log("Found", teamsList.length, "teams");
 
@@ -425,7 +440,7 @@ serve(async (req) => {
             }
           );
 
-          const membersData = await membersResponse.json();
+          const membersData = (await membersResponse.json()) as TeamMembersResponse;
           console.log("Team members response status:", membersResponse.status);
 
           if (membersData.value) {
@@ -436,10 +451,10 @@ serve(async (req) => {
                   name: member.displayName || "Unknown",
                   email: member.email,
                   role: member.roles?.join(", ") || "Member",
-                  company: team.displayName,
+                  company: team.displayName || "Microsoft Teams",
                   owner_id: user.id,
-                  company_id: profile?.company_id,
-                  tags: ["teams-import", team.displayName],
+                  company_id: profile?.company_id ?? null,
+                  tags: ["teams-import", team.displayName || "Microsoft Teams"],
                 });
               }
             }
@@ -554,7 +569,7 @@ serve(async (req) => {
         }
 
         // Get contact details if provided
-        let attendees: any[] = [];
+        let attendees: Array<{ emailAddress: { address: string; name: string }; type: "required" }> = [];
         if (contactId) {
           const { data: contact } = await supabase
             .from("contacts")
@@ -666,7 +681,7 @@ serve(async (req) => {
 
 // Helper function to get integration with valid token
 async function getValidIntegration(
-  supabase: any,
+  supabase: ReturnType<typeof createClient>,
   userId: string,
   clientId?: string,
   clientSecret?: string,

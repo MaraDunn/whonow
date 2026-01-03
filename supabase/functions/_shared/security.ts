@@ -82,7 +82,7 @@ export function isValidEmail(email: string): boolean {
  */
 export function isValidPhone(phone: string): boolean {
   // Allow digits, spaces, dashes, parentheses, and plus sign
-  const phoneRegex = /^[\d\s\-\(\)\+]{7,20}$/;
+  const phoneRegex = /^[\d\s\-()+]{7,20}$/;
   return phoneRegex.test(phone);
 }
 

@@ -10,6 +10,22 @@ interface GoogleContact {
   avatar?: string;
 }
 
+type GoogleTokenResponse = {
+  access_token?: string;
+};
+
+type GooglePerson = {
+  names?: Array<{ displayName?: string }>;
+  emailAddresses?: Array<{ value?: string }>;
+  phoneNumbers?: Array<{ value?: string }>;
+  organizations?: Array<{ name?: string; title?: string }>;
+  photos?: Array<{ url?: string }>;
+};
+
+type PeopleConnectionsResponse = {
+  connections?: GooglePerson[];
+};
+
 // You need to set your Google OAuth Client ID here
 const GOOGLE_CLIENT_ID = "340045414488-au8kh5fhtls67u767io9ka1is77k46ie.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/contacts.readonly";
@@ -36,7 +52,7 @@ export const useGoogleContacts = () => {
       const client = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: SCOPES,
-        callback: async (response: any) => {
+        callback: async (response: GoogleTokenResponse) => {
           if (response.access_token) {
             setAccessToken(response.access_token);
             setIsAuthenticated(true);
@@ -70,12 +86,12 @@ export const useGoogleContacts = () => {
         throw new Error("Failed to fetch contacts");
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as PeopleConnectionsResponse;
       const connections = data.connections || [];
 
       const mapped: GoogleContact[] = connections
-        .filter((c: any) => c.names?.[0]?.displayName)
-        .map((c: any) => ({
+        .filter((c) => Boolean(c.names?.[0]?.displayName))
+        .map((c) => ({
           name: c.names?.[0]?.displayName || "",
           email: c.emailAddresses?.[0]?.value || "",
           phone: c.phoneNumbers?.[0]?.value || "",
@@ -145,7 +161,7 @@ declare global {
         initTokenClient: (config: {
           client_id: string;
           scope: string;
-          callback: (response: any) => void;
+          callback: (response: GoogleTokenResponse) => void;
         }) => { requestAccessToken: () => void };
         revoke: (token: string, callback: () => void) => void;
       };

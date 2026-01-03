@@ -118,9 +118,10 @@ export function useSlackIntegration() {
       // Redirect to Slack OAuth
       console.log("Redirecting to Slack OAuth:", data.url);
       window.location.href = data.url;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error connecting Slack:", error);
-      const errorMsg = error?.message || error?.toString() || "Could not initiate Slack connection";
+      const errorMsg =
+        error instanceof Error ? error.message : "Could not initiate Slack connection";
       toast({
         title: "Connection failed",
         description: errorMsg,

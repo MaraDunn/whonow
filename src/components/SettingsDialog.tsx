@@ -122,8 +122,9 @@ export function SettingsDialog({
       toast.success("Password updated successfully");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update password");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to update password";
+      toast.error(message);
     } finally {
       setIsChangingPassword(false);
     }
@@ -141,8 +142,9 @@ export function SettingsDialog({
       if (error) throw error;
       toast.success("Confirmation email sent to your new address");
       setNewEmail("");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update email");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to update email";
+      toast.error(message);
     } finally {
       setIsChangingEmail(false);
     }
@@ -155,8 +157,9 @@ export function SettingsDialog({
       if (error) throw error;
       toast.success("Signed out of all devices");
       onOpenChange(false);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to sign out of all devices");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to sign out of all devices";
+      toast.error(message);
     } finally {
       setIsSigningOutAll(false);
     }
@@ -175,8 +178,9 @@ export function SettingsDialog({
       });
       if (error) throw error;
       toast.success("Password reset email sent");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to send reset email");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to send reset email";
+      toast.error(message);
     } finally {
       setIsSendingReset(false);
     }

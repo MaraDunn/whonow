@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { SubscriptionData, SubscriptionTier, FeatureName, FEATURE_ACCESS } from "@/types/subscription";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
 export const useSubscription = () => {
@@ -26,6 +27,19 @@ export const useSubscription = () => {
 
     // Legacy enterprise tiers (or unexpected values) are treated as business.
     return "business";
+  };
+
+  const describeFunctionsError = (err: unknown): string => {
+    if (err instanceof FunctionsHttpError) {
+      const body = err.context?.body;
+      if (typeof body === "string") return body;
+      if (body && typeof body === "object") {
+        const maybeError = (body as { error?: unknown; message?: unknown }).error ?? (body as { message?: unknown }).message;
+        if (typeof maybeError === "string") return maybeError;
+      }
+      return `Edge Function HTTP ${err.context?.status ?? "error"}`;
+    }
+    return err instanceof Error ? err.message : "Unknown error";
   };
 
   const checkSubscription = useCallback(async () => {
@@ -86,6 +100,9 @@ export const useSubscription = () => {
       });
     } catch (error) {
       console.error("Failed to check subscription:", error);
+      if (error instanceof FunctionsHttpError) {
+        console.error("check-subscription details:", error.context);
+      }
       // Fail gracefully - default to starter tier
       setSubscription({
         subscribed: false,
@@ -143,6 +160,9 @@ export const useSubscription = () => {
 
         if (error) {
           console.error("Checkout error:", error);
+          if (error instanceof FunctionsHttpError) {
+            console.error("create-checkout details:", error.context);
+          }
           toast.error(error.message || "Failed to start checkout process");
           return null;
         }
@@ -162,7 +182,10 @@ export const useSubscription = () => {
         }
       } catch (error) {
         console.error("Error creating checkout:", error);
-        const errorMessage = error instanceof Error ? error.message : "Failed to start checkout process";
+        if (error instanceof FunctionsHttpError) {
+          console.error("create-checkout details:", error.context);
+        }
+        const errorMessage = describeFunctionsError(error);
         toast.error(errorMessage);
         return null;
       }
@@ -185,6 +208,9 @@ export const useSubscription = () => {
 
         if (error) {
           console.error("Customer portal error:", error);
+          if (error instanceof FunctionsHttpError) {
+            console.error("customer-portal details:", error.context);
+          }
           toast.error(error.message || "Failed to open billing portal");
           return null;
         }
@@ -204,7 +230,10 @@ export const useSubscription = () => {
         }
       } catch (error) {
         console.error("Error opening customer portal:", error);
-        const errorMessage = error instanceof Error ? error.message : "Failed to open billing portal";
+        if (error instanceof FunctionsHttpError) {
+          console.error("customer-portal details:", error.context);
+        }
+        const errorMessage = describeFunctionsError(error);
         toast.error(errorMessage);
         return null;
       }

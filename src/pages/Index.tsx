@@ -41,14 +41,14 @@ type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added"
 
 function getClientPoint(event: Event): { x: number; y: number } | null {
   // Touch
-  if ("touches" in (event as any)) {
+  if ("touches" in event) {
     const te = event as TouchEvent;
     const t = te.touches?.[0] ?? te.changedTouches?.[0];
     if (t) return { x: t.clientX, y: t.clientY };
   }
 
   // Mouse / Pointer
-  if ("clientX" in (event as any) && "clientY" in (event as any)) {
+  if ("clientX" in event && "clientY" in event) {
     const e = event as MouseEvent;
     return { x: e.clientX, y: e.clientY };
   }

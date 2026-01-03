@@ -168,8 +168,8 @@ function extractRole(blocks: string[]): string | null {
       if (match) {
         // Get surrounding context for the full title
         const idx = block.toLowerCase().indexOf(match[0].toLowerCase());
-        let start = idx;
-        let end = idx + match[0].length;
+        const start = idx;
+        const end = idx + match[0].length;
         
         // Expand to capture prefixes like "Senior" or suffixes
         const words = block.split(/\s+/);

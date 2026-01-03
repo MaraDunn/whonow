@@ -5,6 +5,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  // Allow the browser to read these response headers (useful for debugging)
+  "Access-Control-Expose-Headers": "sb-request-id",
 };
 
 // Map tier names to Stripe price IDs
@@ -15,7 +18,7 @@ const TIER_PRICES: Record<string, string> = {
   business: "price_1RifYIDXpGeDw1xni9LJxRLQ",
 };
 
-const logStep = (step: string, details?: any) => {
+const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[CREATE-CHECKOUT] ${step}${detailsStr}`);
 };
@@ -103,14 +106,15 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in create-checkout", { message: errorMessage });
-    
-    // Return detailed error for debugging (in production, use generic message)
-    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development";
+
+    // Important: always return a readable JSON error to the browser so it doesn't become an opaque "non-2xx" error.
+    // This message should be safe (no secrets). Stripe/Supabase SDK error messages are generally safe here.
     return new Response(
-      JSON.stringify({ 
-        error: isDevelopment ? errorMessage : "Failed to create checkout session",
-        details: isDevelopment ? { message: errorMessage } : undefined
-      }), 
+      JSON.stringify({
+        error: errorMessage,
+        hint:
+          "Common causes: STRIPE_SECRET_KEY missing, priceId not found in this Stripe mode (test vs live), or Stripe product/price misconfigured.",
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,

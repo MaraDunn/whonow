@@ -6,6 +6,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+type SlackUserProfile = {
+  email?: string;
+  phone?: string;
+  title?: string;
+  image_192?: string;
+};
+
+type SlackMember = {
+  id?: string;
+  is_bot?: boolean;
+  deleted?: boolean;
+  name?: string;
+  real_name?: string;
+  profile?: SlackUserProfile;
+};
+
+type SlackUsersListResponse = {
+  ok: boolean;
+  error?: string;
+  members?: SlackMember[];
+};
+
 serve(async (req) => {
   const url = new URL(req.url);
   const authHeader = req.headers.get("Authorization");
@@ -196,7 +218,7 @@ serve(async (req) => {
         const membersResponse = await fetch("https://slack.com/api/users.list", {
           headers: { Authorization: `Bearer ${integration.access_token}` },
         });
-        const membersData = await membersResponse.json();
+        const membersData = (await membersResponse.json()) as SlackUsersListResponse;
 
         console.log("Slack users.list response ok:", membersData.ok, "Member count:", membersData.members?.length);
 
@@ -209,8 +231,8 @@ serve(async (req) => {
         }
 
         // Filter out bots and deleted users
-        const validMembers = membersData.members.filter(
-          (m: any) => !m.is_bot && !m.deleted && m.id !== "USLACKBOT"
+        const validMembers = (membersData.members ?? []).filter(
+          (m) => !m.is_bot && !m.deleted && m.id !== "USLACKBOT"
         );
 
         console.log("Valid members after filtering:", validMembers.length);
@@ -223,8 +245,8 @@ serve(async (req) => {
           .single();
 
         // Build contacts to import
-        const contactsToImport = validMembers.map((member: any) => ({
-          name: member.real_name || member.name,
+        const contactsToImport = validMembers.map((member) => ({
+          name: member.real_name || member.name || "",
           email: member.profile?.email || null,
           phone: member.profile?.phone || null,
           role: member.profile?.title || null,
@@ -237,8 +259,8 @@ serve(async (req) => {
 
         // Check for existing contacts by email to avoid duplicates
         const emailsToCheck = contactsToImport
-          .filter((c: any) => c.email)
-          .map((c: any) => c.email);
+          .filter((c) => Boolean(c.email))
+          .map((c) => c.email as string);
 
         let existingEmailSet = new Set<string>();
         
@@ -249,13 +271,16 @@ serve(async (req) => {
             .eq("owner_id", user.id)
             .in("email", emailsToCheck);
           
-          existingEmailSet = new Set(existingContacts?.map((c: any) => c.email) || []);
+          const emails = (existingContacts ?? [])
+            .map((c) => (c as { email: string | null }).email)
+            .filter((e): e is string => Boolean(e));
+          existingEmailSet = new Set(emails);
           console.log("Found existing contacts:", existingEmailSet.size);
         }
 
         // Filter out duplicates
         const newContacts = contactsToImport.filter(
-          (c: any) => !c.email || !existingEmailSet.has(c.email)
+          (c) => !c.email || !existingEmailSet.has(c.email)
         );
         const skippedCount = contactsToImport.length - newContacts.length;
 
