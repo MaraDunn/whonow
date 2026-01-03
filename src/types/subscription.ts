@@ -1,10 +1,8 @@
-export type SubscriptionTier = 
-  | "starter" 
-  | "pro" 
-  | "team" 
-  | "business" 
-  | "enterprise" 
-  | "global_enterprise";
+export type SubscriptionTier =
+  | "starter"
+  | "pro"
+  | "team"
+  | "business";
 
 export interface SubscriptionData {
   subscribed: boolean;
@@ -93,38 +91,6 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
       "Dedicated support",
     ],
   },
-  enterprise: {
-    name: "Enterprise",
-    priceId: "price_1RifYJDXpGeDw1xnvpXcKYOh",
-    productId: "prod_SnOPO17iQDH4V2",
-    price: 399.99,
-    period: "month",
-    seats: 500,
-    features: [
-      "Everything in Business",
-      "Up to 500 team members",
-      "SSO/SAML integration",
-      "Custom integrations",
-      "SLA guarantee",
-      "24/7 phone support",
-    ],
-  },
-  global_enterprise: {
-    name: "Global Enterprise",
-    priceId: "price_1RifYJDXpGeDw1xnnCqy2Zfl",
-    productId: "prod_SnOQ6YGj0xwIZT",
-    price: 899.99,
-    period: "month",
-    seats: 1500,
-    features: [
-      "Everything in Enterprise",
-      "Up to 1,500 team members",
-      "Multi-region deployment",
-      "Custom SLA",
-      "Dedicated success manager",
-      "On-site training",
-    ],
-  },
 };
 
 export type FeatureName = 
@@ -140,14 +106,15 @@ export type FeatureName =
   | "custom_integrations";
 
 export const FEATURE_ACCESS: Record<FeatureName, SubscriptionTier[]> = {
-  basic_contacts: ["starter", "pro", "team", "business", "enterprise", "global_enterprise"],
-  unlimited_contacts: ["pro", "team", "business", "enterprise", "global_enterprise"],
-  client_management: ["pro", "team", "business", "enterprise", "global_enterprise"],
-  advanced_search: ["pro", "team", "business", "enterprise", "global_enterprise"],
-  team_features: ["team", "business", "enterprise", "global_enterprise"],
-  integrations: ["team", "business", "enterprise", "global_enterprise"],
-  advanced_analytics: ["business", "enterprise", "global_enterprise"],
-  api_access: ["business", "enterprise", "global_enterprise"],
-  sso: ["enterprise", "global_enterprise"],
-  custom_integrations: ["enterprise", "global_enterprise"],
+  basic_contacts: ["starter", "pro", "team", "business"],
+  unlimited_contacts: ["pro", "team", "business"],
+  client_management: ["pro", "team", "business"],
+  advanced_search: ["pro", "team", "business"],
+  team_features: ["team", "business"],
+  integrations: ["team", "business"],
+  advanced_analytics: ["business"],
+  api_access: ["business"],
+  // No self-serve enterprise tiers: direct large orgs to sales instead.
+  sso: [],
+  custom_integrations: [],
 };

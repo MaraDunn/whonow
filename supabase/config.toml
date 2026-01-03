@@ -1,4 +1,4 @@
-project_id = "kzivlasydxnhbqduqpjb"
+project_id = "yinicwvgwdjlkwjegrun"
 
 [functions.parse-search-query]
 verify_jwt = false

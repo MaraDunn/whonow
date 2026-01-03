@@ -39,11 +39,12 @@ export const FeatureGate = ({
     return null;
   }
 
-  // Determine minimum tier needed for this feature
+  const isContactSalesFeature = feature === "sso" || feature === "custom_integrations";
+
+  // Determine minimum self-serve tier needed for this feature
   const getMinimumTier = () => {
     if (feature === "team_features") return "team";
     if (feature === "advanced_analytics" || feature === "api_access") return "business";
-    if (feature === "sso" || feature === "custom_integrations") return "enterprise";
     return "pro";
   };
 
@@ -67,31 +68,44 @@ export const FeatureGate = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            Upgrade to {tierConfig.name}
+            {isContactSalesFeature ? "Contact Sales" : `Upgrade to ${tierConfig.name}`}
           </DialogTitle>
           <DialogDescription>
-            This feature requires a {tierConfig.name} subscription or higher.
+            {isContactSalesFeature
+              ? "This feature is available for larger organizations. Contact our sales team to learn more."
+              : `This feature requires a ${tierConfig.name} subscription or higher.`}
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
-          <div className="bg-muted/50 rounded-lg p-4 mb-4">
-            <div className="flex items-baseline gap-1 mb-2">
-              <span className="text-2xl font-bold">${tierConfig.price}</span>
-              <span className="text-muted-foreground">/{tierConfig.period}</span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {tierConfig.features[0]}
-            </p>
-          </div>
+          {isContactSalesFeature ? (
+            <Button asChild className="w-full gradient-hero text-primary-foreground">
+              <a href="mailto:sales@whonow.com?subject=WhoNow%20Enterprise%20Feature%20Inquiry">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Contact Sales
+              </a>
+            </Button>
+          ) : (
+            <>
+              <div className="bg-muted/50 rounded-lg p-4 mb-4">
+                <div className="flex items-baseline gap-1 mb-2">
+                  <span className="text-2xl font-bold">${tierConfig.price}</span>
+                  <span className="text-muted-foreground">/{tierConfig.period}</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {tierConfig.features[0]}
+                </p>
+              </div>
 
-          <Button
-            onClick={() => createCheckout(minimumTier)}
-            className="w-full gradient-hero text-primary-foreground"
-          >
-            <Sparkles className="w-4 h-4 mr-2" />
-            Upgrade to {tierConfig.name}
-          </Button>
+              <Button
+                onClick={() => createCheckout(minimumTier)}
+                className="w-full gradient-hero text-primary-foreground"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Upgrade to {tierConfig.name}
+              </Button>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

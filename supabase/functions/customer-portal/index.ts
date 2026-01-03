@@ -50,7 +50,10 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
-    const origin = req.headers.get("origin") || "http://localhost:3000";
+    // Get origin from request or use environment variable, fallback to localhost:8080
+    const origin = Deno.env.get("APP_URL") || 
+                   req.headers.get("origin") || 
+                   "http://localhost:8080";
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}/app`,
@@ -64,10 +67,18 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in customer-portal", { message: errorMessage });
-    // Return generic error message to client
-    return new Response(JSON.stringify({ error: "Failed to access billing portal" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    
+    // Return detailed error for debugging (in production, use generic message)
+    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development";
+    return new Response(
+      JSON.stringify({ 
+        error: isDevelopment ? errorMessage : "Failed to access billing portal",
+        details: isDevelopment ? { message: errorMessage } : undefined
+      }), 
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      }
+    );
   }
 });

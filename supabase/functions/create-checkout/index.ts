@@ -8,12 +8,11 @@ const corsHeaders = {
 };
 
 // Map tier names to Stripe price IDs
+// Enterprise tiers are not self-serve: direct customers to sales from the landing page.
 const TIER_PRICES: Record<string, string> = {
-  pro: "price_1SjQAeFPGsvHT2MqWp8ScykQ",
-  team: "price_1SjQBdFPGsvHT2MqddHgVIzf",
-  business: "price_1SjQCHFPGsvHT2MqKDDNwvOS",
-  enterprise: "price_1SjQDCFPGsvHT2Mq9jd7ti9s",
-  global_enterprise: "price_1SjQELFPGsvHT2MqnNPIOhbL",
+  pro: "price_1RifXqDXpGeDw1xnkNvKgEzI",
+  team: "price_1RifYIDXpGeDw1xn1rBKxeH7",
+  business: "price_1RifYIDXpGeDw1xni9LJxRLQ",
 };
 
 const logStep = (step: string, details?: any) => {
@@ -28,7 +27,8 @@ serve(async (req) => {
 
   const supabaseClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
   );
 
   try {
@@ -48,7 +48,14 @@ serve(async (req) => {
     // Log only user ID, not email (PII)
     logStep("User authenticated", { userId: user.id });
 
-    const { tier } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      throw new Error("Invalid request body");
+    }
+    
+    const { tier } = body;
     if (!tier || !TIER_PRICES[tier]) {
       throw new Error(`Invalid tier: ${tier}. Valid tiers are: ${Object.keys(TIER_PRICES).join(", ")}`);
     }
@@ -64,7 +71,10 @@ serve(async (req) => {
       logStep("Existing customer found", { customerId });
     }
 
-    const origin = req.headers.get("origin") || "http://localhost:3000";
+    // Get origin from request or use environment variable, fallback to localhost:8080
+    const origin = Deno.env.get("APP_URL") || 
+                   req.headers.get("origin") || 
+                   "http://localhost:8080";
     
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -93,10 +103,18 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in create-checkout", { message: errorMessage });
-    // Return generic error message to client
-    return new Response(JSON.stringify({ error: "Failed to create checkout session" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    
+    // Return detailed error for debugging (in production, use generic message)
+    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development";
+    return new Response(
+      JSON.stringify({ 
+        error: isDevelopment ? errorMessage : "Failed to create checkout session",
+        details: isDevelopment ? { message: errorMessage } : undefined
+      }), 
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      }
+    );
   }
 });

@@ -29,7 +29,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
     await createCheckout(tier);
   };
 
-  const tiers: SubscriptionTier[] = ["starter", "pro", "team", "business", "enterprise", "global_enterprise"];
+  const tiers: SubscriptionTier[] = ["starter", "pro", "team", "business"];
 
   return (
     <section id="pricing" className="py-24 bg-muted/30">
@@ -47,7 +47,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {tiers.map((tierKey) => {
             const config = TIER_CONFIGS[tierKey];
             const isCurrentPlan = user && currentTier === tierKey;
@@ -86,8 +86,6 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
                     {tierKey === "pro" && "For individuals"}
                     {tierKey === "team" && "For small teams"}
                     {tierKey === "business" && "For growing companies"}
-                    {tierKey === "enterprise" && "For large organizations"}
-                    {tierKey === "global_enterprise" && "For global scale"}
                   </CardDescription>
                 </CardHeader>
 
@@ -139,6 +137,50 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
               </Card>
             );
           })}
+
+          {/* Contact Sales (replaces Enterprise + Global Enterprise self-serve tiers) */}
+          <Card className="relative flex flex-col transition-all duration-300 hover:shadow-card-hover border-dashed">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Enterprise</CardTitle>
+              <CardDescription className="h-8">
+                For larger organizations
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="flex-1">
+              <div className="mb-6">
+                <span className="text-3xl font-bold">Custom</span>
+                <span className="text-muted-foreground text-sm">/month</span>
+              </div>
+
+              <ul className="space-y-2">
+                {[
+                  "SSO/SAML",
+                  "Custom integrations",
+                  "Dedicated success manager",
+                  "Security reviews & SLA",
+                ].map((feature, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm">
+                    <Check className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <span className="text-muted-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+
+            <CardFooter className="pt-4">
+              <Button
+                asChild
+                variant="outline"
+                className="w-full"
+                disabled={isLoading}
+              >
+                <a href="mailto:sales@whonow.com?subject=WhoNow%20Enterprise%20Inquiry">
+                  Contact Sales
+                </a>
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-8">

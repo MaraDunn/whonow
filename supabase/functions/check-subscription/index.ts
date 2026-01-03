@@ -12,8 +12,9 @@ const PRODUCT_TO_TIER: Record<string, string> = {
   "prod_SnOPR3XQ7NILtZ": "pro",           // WhoNow Pro
   "prod_SnOPIZxzHqO5j9": "team",          // WhoNow Team
   "prod_SnOPIZGzLgqiUM": "business",      // WhoNow Business
-  "prod_SnOPO17iQDH4V2": "enterprise",    // WhoNow Enterprise
-  "prod_SnOQ6YGj0xwIZT": "global_enterprise", // WhoNow Global Enterprise
+  // Legacy enterprise products (no longer self-serve): treat as business and direct orgs to sales.
+  "prod_SnOPO17iQDH4V2": "business",
+  "prod_SnOQ6YGj0xwIZT": "business",
 };
 
 const SEAT_LIMITS: Record<string, number> = {
@@ -21,8 +22,6 @@ const SEAT_LIMITS: Record<string, number> = {
   pro: 1,
   team: 25,
   business: 100,
-  enterprise: 500,
-  global_enterprise: 1500,
 };
 
 // Secure logging - no PII
@@ -124,6 +123,7 @@ serve(async (req) => {
         current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
         current_period_end: subscriptionEnd,
         employee_seats_limit: seatsLimit,
+        employee_seats_used: 0, // Will be calculated separately
       }, { onConflict: "user_id" });
 
     if (upsertError) {
