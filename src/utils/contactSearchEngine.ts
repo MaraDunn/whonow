@@ -350,20 +350,30 @@ export function searchWithParsedQuery(
 ): Contact[] {
   const { maxResults = MAX_RESULTS } = options;
   
-  // If company, role, or time range is specified, we need strict filtering
+  // Check which filters are active
   const hasCompanyFilter = parsedQuery.entities.companies.length > 0;
   const hasRoleFilter = parsedQuery.entities.roles.length > 0;
   const hasTimeFilter = !!parsedQuery.timeRange;
+  const hasLocationFilter = parsedQuery.entities.locations.length > 0;
+  const hasRelationshipFilter = parsedQuery.entities.relationships.length > 0;
+  const hasInteractionFilter = !!parsedQuery.interactionType;
+  const hasInteractionTimeFilter = !!parsedQuery.interactionTimeRange;
+  const hasNeedsFollowUp = parsedQuery.needsFollowUp === true;
+  const hasResponsibilityFilter = !!parsedQuery.responsibility;
   
-  // Build search terms from parsed query (EXCLUDE companies and roles - they're handled separately)
+  // Build search terms from parsed query (EXCLUDE structured entities - they're handled separately)
   const searchTerms = [
     ...parsedQuery.keywords,
     ...parsedQuery.entities.names,
     ...parsedQuery.entities.departments,
-    // DON'T include companies or roles in general search terms - they're filtered separately
+    // DON'T include companies, roles, locations, relationships in general search terms
   ].filter(Boolean).map(t => t.toLowerCase());
   
-  if (searchTerms.length === 0 && !hasCompanyFilter && !hasRoleFilter && !hasTimeFilter) {
+  const hasAnyFilter = hasCompanyFilter || hasRoleFilter || hasTimeFilter || 
+                       hasLocationFilter || hasRelationshipFilter || hasInteractionFilter ||
+                       hasInteractionTimeFilter || hasNeedsFollowUp || hasResponsibilityFilter;
+  
+  if (searchTerms.length === 0 && !hasAnyFilter) {
     // Fall back to original query terms
     return searchContacts(contacts, parsedQuery.searchTerms, { maxResults });
   }
@@ -434,7 +444,172 @@ export function searchWithParsedQuery(
         }
       }
       
-      // Score against non-company, non-role search terms
+      // Check location filter - search in description and tags
+      if (hasLocationFilter) {
+        const contactText = [
+          contact.description || "",
+          ...(contact.tags || []),
+        ].join(" ").toLowerCase();
+        
+        const matchesLocation = parsedQuery.entities.locations.some(location => {
+          const locationLower = location.toLowerCase();
+          return contactText.includes(locationLower);
+        });
+        
+        if (!matchesLocation) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Check relationship filter - search in tags and isClient field
+      if (hasRelationshipFilter) {
+        const contactTags = (contact.tags || []).map(t => t.toLowerCase());
+        const isClient = contact.isClient || false;
+        
+        const matchesRelationship = parsedQuery.entities.relationships.some(rel => {
+          if (rel === "client" && isClient) return true;
+          return contactTags.includes(rel.toLowerCase());
+        });
+        
+        if (!matchesRelationship) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Check interaction type filter
+      if (hasInteractionFilter && parsedQuery.interactionType) {
+        // For now, we check if contact has been contacted (lastContactedAt exists)
+        // In a full implementation, you'd check interaction logs
+        if (!contact.lastContactedAt) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Check interaction time range filter
+      if (hasInteractionTimeFilter && parsedQuery.interactionTimeRange) {
+        if (!contact.lastContactedAt) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+        
+        const lastContacted = new Date(contact.lastContactedAt);
+        const { start, end } = parsedQuery.interactionTimeRange;
+        
+        if (lastContacted < start || lastContacted > end) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Check needs follow-up filter
+      if (hasNeedsFollowUp) {
+        // If needs follow-up, contact should either:
+        // 1. Have no lastContactedAt (never contacted)
+        // 2. Have lastContactedAt older than 7 days (configurable)
+        const followUpThreshold = 7; // days
+        const now = new Date();
+        
+        if (contact.lastContactedAt) {
+          const lastContacted = new Date(contact.lastContactedAt);
+          const daysSinceContact = Math.floor((now.getTime() - lastContacted.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysSinceContact < followUpThreshold) {
+            return {
+              contact,
+              score: 0,
+              matchedFields: [],
+              matchedTerms: [],
+            };
+          }
+        }
+        // If no lastContactedAt, it matches (needs follow-up)
+      }
+      
+      // Check responsibility filter
+      if (hasResponsibilityFilter && parsedQuery.responsibility) {
+        const resp = parsedQuery.responsibility;
+        let matchesResponsibility = false;
+        
+        // Apply OR logic within responsibility filters
+        // Match departments OR roles OR tags
+        
+        // Check departments
+        if (resp.filters.departments && resp.filters.departments.length > 0) {
+          const contactRole = (contact.role || "").toLowerCase();
+          const contactDesc = (contact.description || "").toLowerCase();
+          for (const dept of resp.filters.departments) {
+            if (contactRole.includes(dept.toLowerCase()) || 
+                contactDesc.includes(dept.toLowerCase())) {
+              matchesResponsibility = true;
+              break;
+            }
+          }
+        }
+        
+        // Check roles
+        if (!matchesResponsibility && resp.filters.roles && resp.filters.roles.length > 0) {
+          const contactRole = (contact.role || "").toLowerCase();
+          for (const role of resp.filters.roles) {
+            if (roleMatches(contactRole, role)) {
+              matchesResponsibility = true;
+              break;
+            }
+          }
+        }
+        
+        // Check tags
+        if (!matchesResponsibility && resp.filters.tags && resp.filters.tags.length > 0) {
+          const contactTags = (contact.tags || []).map(t => t.toLowerCase());
+          for (const tag of resp.filters.tags) {
+            if (contactTags.includes(tag.toLowerCase())) {
+              matchesResponsibility = true;
+              break;
+            }
+          }
+        }
+        
+        // Check explicit owner
+        if (!matchesResponsibility && resp.filters.owner) {
+          if (contact.ownerId === resp.filters.owner) {
+            matchesResponsibility = true;
+          }
+        }
+        
+        // If responsibility filter is specified but contact doesn't match, exclude it
+        if (!matchesResponsibility) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Score against non-structured search terms
       const result = scoreContact(contact, searchTerms);
       
       // Boost for exact company matches (only if company matches)
@@ -472,6 +647,47 @@ export function searchWithParsedQuery(
           if (contactRole.includes(deptLower) || contactDesc.includes(deptLower)) {
             result.score += 10; // Boost for department match
           }
+        }
+      }
+      
+      // Boost for location matches
+      if (hasLocationFilter) {
+        const contactText = [
+          contact.description || "",
+          ...(contact.tags || []),
+        ].join(" ").toLowerCase();
+        
+        for (const location of parsedQuery.entities.locations) {
+          if (contactText.includes(location.toLowerCase())) {
+            result.score += 12; // Boost for location match
+            if (!result.matchedFields.includes("location")) {
+              result.matchedFields.push("location");
+            }
+          }
+        }
+      }
+      
+      // Boost for relationship matches
+      if (hasRelationshipFilter) {
+        result.score += 10; // Boost for relationship match
+        if (!result.matchedFields.includes("relationship")) {
+          result.matchedFields.push("relationship");
+        }
+      }
+      
+      // Boost for interaction matches
+      if (hasInteractionFilter && contact.lastContactedAt) {
+        result.score += 8; // Boost for interaction match
+        if (!result.matchedFields.includes("interaction")) {
+          result.matchedFields.push("interaction");
+        }
+      }
+      
+      // Boost for responsibility matches
+      if (hasResponsibilityFilter && parsedQuery.responsibility) {
+        result.score += 25; // Strong boost for responsibility match
+        if (!result.matchedFields.includes("responsibility")) {
+          result.matchedFields.push("responsibility");
         }
       }
       

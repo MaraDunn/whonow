@@ -11,6 +11,7 @@ interface SmartSearchResult {
   searchTerm: string;
   isLoading: boolean;
   aiIntent: string | null;
+  interpretation: string | null; // Human-readable interpretation of the query
 }
 
 const MAX_RESULTS = 10; // Reduced for better precision
@@ -65,5 +66,6 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     searchTerm,
     isLoading: false, // No longer async - deterministic search is synchronous
     aiIntent: parsedQuery?.intent || null, // Now deterministic intent
+    interpretation: parsedQuery?.interpretation || null, // Query interpretation
   };
 }

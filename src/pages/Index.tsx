@@ -208,7 +208,7 @@ const Index = () => {
   // Count of clients for sidebar
   const clientCount = useMemo(() => contacts.filter(c => c.isClient).length, [contacts]);
 
-  const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent } = useSmartSearch(
+  const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent, interpretation } = useSmartSearch(
     showClientDirectory ? clientDirectoryContacts : folderFilteredContacts, 
     searchQuery
   );
@@ -454,6 +454,12 @@ const Index = () => {
                   isLoading={searchLoading}
                 />
               </div>
+
+              {searchQuery && interpretation && (
+                <div className="mb-4 px-3 sm:px-4 py-2 bg-muted/50 rounded-lg text-sm text-muted-foreground animate-fade-in">
+                  {interpretation}
+                </div>
+              )}
 
               {searchQuery && (
                 <div className="mb-6 animate-fade-in">

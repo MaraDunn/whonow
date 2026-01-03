@@ -3,12 +3,33 @@
  * Rule-based natural language query parsing - NO AI/LLM
  */
 
+import { 
+  buildResponsibilityIndex, 
+  matchResponsibility, 
+  normalizeResponsibilityPhrase 
+} from "./responsibilityIndex";
+import { RESPONSIBILITIES } from "@/data/responsibilities";
+
+// Build responsibility index at module load time
+const RESPONSIBILITY_INDEX = buildResponsibilityIndex();
+
 export type ActionType = "email" | "call" | "text" | null;
 export type IntentType = "find" | "action" | "filter" | "question";
 
 export interface TimeRange {
   start: Date;
   end: Date;
+}
+
+export interface ResponsibilityMatch {
+  responsibilityId: string;
+  matchedAlias: string;
+  filters: {
+    departments?: string[];
+    roles?: string[];
+    tags?: string[];
+    owner?: string;
+  };
 }
 
 export interface ParsedQuery {
@@ -19,12 +40,19 @@ export interface ParsedQuery {
     companies: string[];
     roles: string[];
     departments: string[];
+    locations: string[];
+    relationships: string[]; // Relationship types: client, prospect, vendor, etc.
   };
   keywords: string[];
   filters: Record<string, string>;
   originalQuery: string;
   searchTerms: string[];
   timeRange?: TimeRange; // Time range for filtering contacts by creation date
+  interactionType?: "email" | "call" | "meeting" | "text" | null; // Type of interaction
+  interactionTimeRange?: TimeRange; // Time range for last interaction
+  needsFollowUp?: boolean; // "need to follow up", "haven't talked to"
+  responsibility?: ResponsibilityMatch | null; // Matched responsibility
+  interpretation?: string; // Human-readable interpretation of the query
 }
 
 // Action keywords that trigger specific actions
@@ -84,6 +112,19 @@ const STOP_WORDS = new Set([
   "someone", "anyone", "person", "people", "contact", "contacts", "me", "help",
   "meet", "met", "did", "add", "added"
 ]);
+
+// Time-of-day definitions (hour ranges)
+const TIME_OF_DAY = {
+  morning: { start: 5, end: 12 },      // 5am - 12pm
+  afternoon: { start: 12, end: 17 },    // 12pm - 5pm
+  evening: { start: 17, end: 21 },     // 5pm - 9pm
+  night: { start: 21, end: 5 },        // 9pm - 5am (next day)
+  // Alternative names
+  am: { start: 0, end: 12 },
+  pm: { start: 12, end: 24 },
+  noon: { start: 12, end: 13 },
+  midnight: { start: 0, end: 1 },
+};
 
 // Time-based query patterns
 const TIME_PATTERNS = {
@@ -148,11 +189,59 @@ const TIME_PATTERNS = {
   },
 };
 
+// Relationship keywords mapping
+const RELATIONSHIP_KEYWORDS: Record<string, string[]> = {
+  client: ["client", "clients", "customer", "customers"],
+  prospect: ["prospect", "prospects", "lead", "leads", "potential"],
+  vendor: ["vendor", "vendors", "supplier", "suppliers"],
+  investor: ["investor", "investors", "vc", "venture", "capital"],
+  friend: ["friend", "friends", "personal"],
+  colleague: ["colleague", "colleagues", "coworker", "coworkers", "teammate", "teammates"],
+  partner: ["partner", "partners"],
+  contact: ["contact", "contacts", "person", "people"],
+};
+
+// Location synonyms
+const LOCATION_SYNONYMS: Record<string, string[]> = {
+  "san francisco": ["sf", "san fran", "san francisco", "bay area"],
+  "new york": ["ny", "nyc", "new york", "new york city", "manhattan"],
+  "los angeles": ["la", "los angeles", "l.a."],
+  "washington": ["dc", "washington", "washington dc", "d.c."],
+  "chicago": ["chi", "chicago"],
+  "boston": ["boston"],
+  "seattle": ["seattle"],
+  "austin": ["austin"],
+};
+
+// Common location/event keywords
+const LOCATION_KEYWORDS = new Set([
+  "office", "conference", "event", "meeting", "ces", "sxsw", "summit",
+  "convention", "expo", "trade show", "workshop", "seminar"
+]);
+
+// Interaction type keywords
+const INTERACTION_KEYWORDS = {
+  email: ["email", "emailed", "mail", "mailed", "message", "messaged", "sent"],
+  call: ["call", "called", "phone", "phoned", "ring", "rang", "dial", "dialed"],
+  meeting: ["meet", "met", "meeting", "met with", "saw", "see", "introduction", "intro"],
+  text: ["text", "texted", "sms", "messaged"],
+};
+
+// Day names
+const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+// Month names
+const MONTH_NAMES = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december"
+];
+
 // Prepositions that indicate entity relationships
 const ENTITY_PREPOSITIONS = {
   company: new Set(["at", "from", "with", "@"]),
   role: new Set(["as", "works"]),
   department: new Set(["in", "handles", "does"]),
+  location: new Set(["in", "at", "from", "near"]),
 };
 
 /**
@@ -204,6 +293,167 @@ function detectAction(words: string[]): { action: ActionType; remainingWords: st
 }
 
 /**
+ * Extract relationships from query
+ */
+function extractRelationships(words: string[]): string[] {
+  const relationships: string[] = [];
+  const normalized = words.join(" ").toLowerCase();
+  
+  for (const [relationshipType, keywords] of Object.entries(RELATIONSHIP_KEYWORDS)) {
+    for (const keyword of keywords) {
+      if (normalized.includes(keyword)) {
+        if (!relationships.includes(relationshipType)) {
+          relationships.push(relationshipType);
+        }
+      }
+    }
+  }
+  
+  return relationships;
+}
+
+/**
+ * Extract locations from query
+ */
+function extractLocations(words: string[]): string[] {
+  const locations: string[] = [];
+  const normalized = words.join(" ").toLowerCase();
+  
+  // Check for location synonyms
+  for (const [canonical, synonyms] of Object.entries(LOCATION_SYNONYMS)) {
+    for (const synonym of synonyms) {
+      if (normalized.includes(synonym)) {
+        if (!locations.includes(canonical)) {
+          locations.push(canonical);
+        }
+        break;
+      }
+    }
+  }
+  
+  // Check for location keywords (office, conference, etc.)
+  for (const word of words) {
+    const lower = word.toLowerCase();
+    if (LOCATION_KEYWORDS.has(lower)) {
+      if (!locations.includes(lower)) {
+        locations.push(lower);
+      }
+    }
+  }
+  
+  // Check for "in [Location]" or "at [Location]" patterns
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].toLowerCase();
+    if (ENTITY_PREPOSITIONS.location.has(word) && words[i + 1]) {
+      const locationWords: string[] = [];
+      for (let j = i + 1; j < words.length && j < i + 4; j++) {
+        const w = words[j].toLowerCase();
+        if (STOP_WORDS.has(w) && j > i + 1) break;
+        locationWords.push(words[j]);
+      }
+      if (locationWords.length > 0) {
+        const location = locationWords.join(" ");
+        if (!locations.includes(location.toLowerCase())) {
+          locations.push(location.toLowerCase());
+        }
+      }
+    }
+  }
+  
+  return locations;
+}
+
+/**
+ * Extract interaction type from query
+ */
+function extractInteractionType(query: string): "email" | "call" | "meeting" | "text" | null {
+  const normalized = normalizeQuery(query);
+  
+  for (const [type, keywords] of Object.entries(INTERACTION_KEYWORDS)) {
+    for (const keyword of keywords) {
+      if (normalized.includes(keyword)) {
+        return type as "email" | "call" | "meeting" | "text";
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract "needs follow up" intent
+ */
+function extractNeedsFollowUp(query: string): boolean {
+  const normalized = normalizeQuery(query);
+  const followUpPatterns = [
+    "need to follow up",
+    "need follow up",
+    "follow up",
+    "haven't talked",
+    "havent talked",
+    "haven't contacted",
+    "havent contacted",
+    "no contact",
+    "not contacted",
+    "should follow up",
+    "must follow up",
+  ];
+  
+  return followUpPatterns.some(pattern => normalized.includes(pattern));
+}
+
+/**
+ * Extract responsibility intent from query
+ * Detects patterns like "who handles X", "who is responsible for X", etc.
+ * Returns the matched responsibility or null if no match found
+ */
+function extractResponsibility(query: string): { match: ResponsibilityMatch | null; phrase: string | null } {
+  const normalized = normalizeQuery(query);
+  
+  // Responsibility intent patterns
+  const responsibilityPatterns: Array<{ pattern: RegExp; phraseIndex: number }> = [
+    { pattern: /who\s+(handles|manages|owns)\s+(.+)/i, phraseIndex: 2 },
+    { pattern: /who\s+is\s+responsible\s+for\s+(.+)/i, phraseIndex: 1 },
+    { pattern: /point\s+of\s+contact\s+for\s+(.+)/i, phraseIndex: 1 },
+    { pattern: /who\s+do\s+i\s+talk\s+to\s+about\s+(.+)/i, phraseIndex: 1 },
+    { pattern: /who\s+should\s+i\s+contact\s+for\s+(.+)/i, phraseIndex: 1 },
+    { pattern: /who\s+can\s+i\s+talk\s+to\s+about\s+(.+)/i, phraseIndex: 1 },
+  ];
+  
+  for (const { pattern, phraseIndex } of responsibilityPatterns) {
+    const match = normalized.match(pattern);
+    if (match && match[phraseIndex]) {
+      const responsibilityPhrase = match[phraseIndex].trim();
+      
+      // Match against responsibility aliases
+      const matchResult = matchResponsibility(responsibilityPhrase, RESPONSIBILITY_INDEX);
+      
+      if (matchResult) {
+        const responsibility = RESPONSIBILITIES[matchResult.responsibilityId];
+        if (responsibility) {
+          return {
+            match: {
+              responsibilityId: matchResult.responsibilityId,
+              matchedAlias: matchResult.matchedAlias,
+              filters: responsibility.filters,
+            },
+            phrase: responsibilityPhrase,
+          };
+        }
+      }
+      
+      // If pattern matched but no responsibility found, return phrase for fallback
+      return {
+        match: null,
+        phrase: responsibilityPhrase,
+      };
+    }
+  }
+  
+  return { match: null, phrase: null };
+}
+
+/**
  * Extract entities from query using rule-based patterns
  */
 function extractEntities(words: string[]): ParsedQuery["entities"] {
@@ -212,6 +462,8 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
     companies: [],
     roles: [],
     departments: [],
+    locations: [],
+    relationships: [],
   };
   
   const text = words.join(" ");
@@ -350,6 +602,12 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
     entities.names = potentialNames.slice(0, 3); // Max 3 name parts
   }
   
+  // Extract relationships
+  entities.relationships = extractRelationships(words);
+  
+  // Extract locations
+  entities.locations = extractLocations(words);
+  
   return entities;
 }
 
@@ -359,10 +617,143 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
 function extractTimeRange(query: string): TimeRange | undefined {
   const normalized = normalizeQuery(query);
   
+  // Check for time-of-day patterns combined with "today", "yesterday", or "this"
+  // Pattern: "this morning", "yesterday afternoon", "today night", etc.
+  const timeOfDayPattern = new RegExp(
+    `(this|today|yesterday)\\s+(${Object.keys(TIME_OF_DAY).join("|")})`,
+    "i"
+  );
+  const timeOfDayMatch = normalized.match(timeOfDayPattern);
+  
+  if (timeOfDayMatch) {
+    const dayRef = timeOfDayMatch[1].toLowerCase();
+    const timeOfDay = timeOfDayMatch[2].toLowerCase();
+    const timeRange = TIME_OF_DAY[timeOfDay as keyof typeof TIME_OF_DAY];
+    
+    if (timeRange) {
+      const end = new Date();
+      const start = new Date();
+      
+      // Set the date based on day reference
+      if (dayRef === "yesterday") {
+        start.setDate(end.getDate() - 1);
+        end.setDate(end.getDate() - 1);
+      } else {
+        // "this" or "today" - use today
+        start.setDate(end.getDate());
+        end.setDate(end.getDate());
+      }
+      
+      // Set hours based on time of day
+      start.setHours(timeRange.start, 0, 0, 0);
+      
+      // Handle night time range (9pm - 5am spans midnight)
+      if (timeRange.end < timeRange.start) {
+        // Night: 21:00 - 05:00 (next day)
+        end.setDate(end.getDate() + 1);
+        end.setHours(timeRange.end, 0, 0, 0);
+      } else if (timeRange.end === 24) {
+        end.setHours(23, 59, 59, 999);
+      } else {
+        end.setHours(timeRange.end, 0, 0, 0);
+      }
+      
+      return { start, end };
+    }
+  }
+  
+  // Check for standalone time-of-day words (assume "today" if not specified)
+  // Only match if no day reference was found above
+  if (!timeOfDayMatch) {
+    // Check if query contains a time-of-day word without a preceding day reference
+    const timeOfDayWords = Object.keys(TIME_OF_DAY).join("|");
+    const standalonePattern = new RegExp(
+      `\\b(${timeOfDayWords})\\b`,
+      "i"
+    );
+    const standaloneMatch = normalized.match(standalonePattern);
+    
+    if (standaloneMatch) {
+      // Verify there's no day reference before the time-of-day word
+      const matchIndex = normalized.indexOf(standaloneMatch[0]);
+      const beforeMatch = normalized.substring(0, matchIndex);
+      const hasDayRefBefore = /\b(this|today|yesterday|last)\s*$/i.test(beforeMatch.trim());
+      
+      if (!hasDayRefBefore) {
+        const timeOfDay = standaloneMatch[1].toLowerCase();
+        const timeRange = TIME_OF_DAY[timeOfDay as keyof typeof TIME_OF_DAY];
+        
+        if (timeRange) {
+          const end = new Date();
+          const start = new Date();
+          
+          // Default to today
+          start.setHours(timeRange.start, 0, 0, 0);
+          
+          if (timeRange.end === 24) {
+            end.setHours(23, 59, 59, 999);
+          } else {
+            end.setHours(timeRange.end, 0, 0, 0);
+          }
+          
+          return { start, end };
+        }
+      }
+    }
+  }
+  
   // Check for time patterns
   for (const [pattern, getRange] of Object.entries(TIME_PATTERNS)) {
     if (normalized.includes(pattern)) {
       return getRange();
+    }
+  }
+  
+  // Check for day names (Monday, Tuesday, etc.)
+  for (let i = 0; i < DAY_NAMES.length; i++) {
+    const dayName = DAY_NAMES[i];
+    if (normalized.includes(dayName)) {
+      const end = new Date();
+      const start = new Date();
+      const today = end.getDay();
+      const targetDay = i;
+      
+      // Calculate days to subtract to get to the most recent occurrence of that day
+      let daysDiff = today - targetDay;
+      if (daysDiff < 0) daysDiff += 7; // If target day is in the future, go to last week
+      if (daysDiff === 0 && normalized.includes("last")) {
+        daysDiff = 7; // "last Monday" means previous Monday
+      }
+      
+      start.setDate(end.getDate() - daysDiff);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(start.getDate());
+      end.setHours(23, 59, 59, 999);
+      
+      return { start, end };
+    }
+  }
+  
+  // Check for month names (March, April, etc.)
+  for (let i = 0; i < MONTH_NAMES.length; i++) {
+    const monthName = MONTH_NAMES[i];
+    if (normalized.includes(monthName)) {
+      const end = new Date();
+      const start = new Date();
+      const currentYear = end.getFullYear();
+      
+      // Check if "last" is mentioned (last March = previous year's March)
+      const isLastYear = normalized.includes("last");
+      const year = isLastYear ? currentYear - 1 : currentYear;
+      
+      start.setFullYear(year, i, 1);
+      start.setHours(0, 0, 0, 0);
+      
+      // Get last day of month
+      end.setFullYear(year, i + 1, 0);
+      end.setHours(23, 59, 59, 999);
+      
+      return { start, end };
     }
   }
   
@@ -387,7 +778,135 @@ function extractTimeRange(query: string): TimeRange | undefined {
     return { start, end };
   }
   
+  // Check for "in the last X days" pattern
+  const inLastMatch = normalized.match(/in\s+the\s+last\s+(\d+)\s+(day|days|week|weeks|month|months)/);
+  if (inLastMatch) {
+    const amount = parseInt(inLastMatch[1], 10);
+    const unit = inLastMatch[2];
+    const end = new Date();
+    const start = new Date();
+    
+    if (unit.startsWith("day")) {
+      start.setDate(end.getDate() - amount);
+    } else if (unit.startsWith("week")) {
+      start.setDate(end.getDate() - (amount * 7));
+    } else if (unit.startsWith("month")) {
+      start.setMonth(end.getMonth() - amount);
+    }
+    
+    return { start, end };
+  }
+  
   return undefined;
+}
+
+/**
+ * Extract interaction time range (when interaction happened, not when contact was created)
+ */
+function extractInteractionTimeRange(query: string): TimeRange | undefined {
+  const normalized = normalizeQuery(query);
+  
+  // Check for patterns like "emailed last week", "called yesterday", "met this morning"
+  const interactionPatterns = [
+    /(email|call|meet|talk|contact).*?(last|this|yesterday|today|morning|afternoon|evening|night)/i,
+    /(last|this|yesterday|today|morning|afternoon|evening|night).*?(email|call|meet|talk|contact)/i,
+  ];
+  
+  for (const pattern of interactionPatterns) {
+    if (pattern.test(normalized)) {
+      // Extract the time part and parse it
+      return extractTimeRange(query);
+    }
+  }
+  
+  return undefined;
+}
+
+/**
+ * Generate human-readable interpretation of the query
+ */
+function generateInterpretation(parsed: Omit<ParsedQuery, "interpretation">): string {
+  const parts: string[] = [];
+  
+  if (parsed.timeRange) {
+    const start = parsed.timeRange.start;
+    const end = parsed.timeRange.end;
+    const isSameDay = start.toDateString() === end.toDateString();
+    
+    if (isSameDay) {
+      const hours = start.getHours();
+      const endHours = end.getHours();
+      if (hours === 0 && endHours === 23) {
+        parts.push(`added on ${start.toLocaleDateString()}`);
+      } else {
+        parts.push(`added ${start.toLocaleDateString()} ${hours}:00-${endHours}:00`);
+      }
+    } else {
+      parts.push(`added between ${start.toLocaleDateString()} and ${end.toLocaleDateString()}`);
+    }
+  }
+  
+  if (parsed.interactionTimeRange) {
+    parts.push(`interacted ${parsed.interactionTimeRange.start.toLocaleDateString()}`);
+  }
+  
+  if (parsed.interactionType) {
+    parts.push(`via ${parsed.interactionType}`);
+  }
+  
+  if (parsed.entities.companies.length > 0) {
+    parts.push(`from ${parsed.entities.companies.join(", ")}`);
+  }
+  
+  if (parsed.entities.locations.length > 0) {
+    parts.push(`in ${parsed.entities.locations.join(", ")}`);
+  }
+  
+  if (parsed.entities.relationships.length > 0) {
+    parts.push(`who are ${parsed.entities.relationships.join(", ")}`);
+  }
+  
+  if (parsed.entities.roles.length > 0) {
+    parts.push(`with role ${parsed.entities.roles.join(", ")}`);
+  }
+  
+  if (parsed.needsFollowUp) {
+    parts.push("needing follow-up");
+  }
+  
+  if (parsed.responsibility) {
+    const resp = parsed.responsibility;
+    const responsibility = RESPONSIBILITIES[resp.responsibilityId];
+    const domainName = responsibility?.domain.toUpperCase() || resp.responsibilityId;
+    parts.push(`responsible for "${resp.matchedAlias}" (${domainName})`);
+  } else {
+    // Check if there was a responsibility phrase but no match (fallback case)
+    const responsibilityPatterns: Array<{ pattern: RegExp; phraseIndex: number }> = [
+      { pattern: /who\s+(handles|manages|owns)\s+(.+)/i, phraseIndex: 2 },
+      { pattern: /who\s+is\s+responsible\s+for\s+(.+)/i, phraseIndex: 1 },
+      { pattern: /point\s+of\s+contact\s+for\s+(.+)/i, phraseIndex: 1 },
+      { pattern: /who\s+do\s+i\s+talk\s+to\s+about\s+(.+)/i, phraseIndex: 1 },
+    ];
+    
+    const normalized = normalizeQuery(parsed.originalQuery);
+    for (const { pattern, phraseIndex } of responsibilityPatterns) {
+      const match = normalized.match(pattern);
+      if (match && match[phraseIndex]) {
+        const phrase = match[phraseIndex].trim();
+        // If we have keywords from this phrase but no responsibility match, indicate fallback
+        if (parsed.keywords.some(k => phrase.toLowerCase().includes(k))) {
+          parts.push(`(no predefined responsibility found — showing keyword matches for "${phrase}")`);
+        }
+        break;
+      }
+    }
+  }
+  
+  if (parsed.keywords.length > 0) {
+    parts.push(`containing "${parsed.keywords.join(" ")}"`);
+  }
+  
+  return parts.length > 0 ? `Searching contacts ${parts.join(", ")}` : "Searching all contacts";
 }
 
 /**
@@ -401,8 +920,17 @@ function extractKeywords(words: string[]): string[] {
       if (STOP_WORDS.has(w)) return false;
       if (ACTION_KEYWORDS[w]) return false;
       if (ENTITY_PREPOSITIONS.company.has(w)) return false;
+      if (ENTITY_PREPOSITIONS.location.has(w)) return false;
       // Filter out time-related words
       if (["last", "this", "week", "month", "year", "today", "yesterday", "recent"].includes(w)) return false;
+      // Filter out time-of-day words (they're handled by time range extraction)
+      if (Object.keys(TIME_OF_DAY).includes(w)) return false;
+      // Filter out day and month names
+      if (DAY_NAMES.includes(w) || MONTH_NAMES.includes(w)) return false;
+      // Filter out interaction keywords
+      if (Object.values(INTERACTION_KEYWORDS).some(keywords => keywords.includes(w))) return false;
+      // Filter out relationship keywords
+      if (Object.values(RELATIONSHIP_KEYWORDS).some(keywords => keywords.includes(w))) return false;
       return true;
     });
 }
@@ -431,8 +959,61 @@ export function parseSearchQuery(query: string): ParsedQuery {
   // Extract keywords
   const keywords = extractKeywords(remainingWords);
   
-  // Extract time range if present
+  // Extract time range if present (for creation date)
   const timeRange = extractTimeRange(query);
+  
+  // Extract interaction type
+  const interactionType = extractInteractionType(query);
+  
+  // Extract interaction time range
+  const interactionTimeRange = extractInteractionTimeRange(query);
+  
+  // Extract needs follow-up
+  const needsFollowUp = extractNeedsFollowUp(query);
+  
+  // Extract responsibility
+  const responsibilityResult = extractResponsibility(query);
+  const responsibility = responsibilityResult.match;
+  const responsibilityPhrase = responsibilityResult.phrase;
+  
+  // If responsibility is found, expand its filters into entities
+  if (responsibility) {
+    // Add responsibility departments to entities
+    if (responsibility.filters.departments) {
+      for (const dept of responsibility.filters.departments) {
+        if (!entities.departments.includes(dept)) {
+          entities.departments.push(dept);
+        }
+      }
+    }
+    
+    // Add responsibility roles to entities
+    if (responsibility.filters.roles) {
+      for (const role of responsibility.filters.roles) {
+        if (!entities.roles.includes(role)) {
+          entities.roles.push(role);
+        }
+      }
+    }
+    
+    // Add responsibility tags to keywords for fallback search
+    if (responsibility.filters.tags) {
+      for (const tag of responsibility.filters.tags) {
+        if (!keywords.includes(tag)) {
+          keywords.push(tag);
+        }
+      }
+    }
+  } else if (responsibilityPhrase) {
+    // Fallback: if responsibility phrase detected but no match, add to keywords for text search
+    const normalizedPhrase = normalizeResponsibilityPhrase(responsibilityPhrase);
+    const phraseTokens = normalizedPhrase.split(/\s+/).filter(t => t.length >= 2);
+    for (const token of phraseTokens) {
+      if (!keywords.includes(token)) {
+        keywords.push(token);
+      }
+    }
+  }
   
   // Build search terms (unique, meaningful terms for text search)
   const searchTerms = [...new Set([
@@ -440,10 +1021,11 @@ export function parseSearchQuery(query: string): ParsedQuery {
     ...entities.names.map(n => n.toLowerCase()),
     ...entities.roles,
     ...entities.departments,
-    ...entities.companies.map(c => c.toLowerCase()),
+    // Don't include companies, locations, relationships in general search terms
+    // They're handled as filters
   ])].filter(t => t.length >= 2);
   
-  return {
+  const parsed: Omit<ParsedQuery, "interpretation"> = {
     intent,
     action,
     entities,
@@ -452,6 +1034,18 @@ export function parseSearchQuery(query: string): ParsedQuery {
     originalQuery: query,
     searchTerms,
     timeRange,
+    interactionType,
+    interactionTimeRange,
+    needsFollowUp,
+    responsibility: responsibility || null,
+  };
+  
+  // Generate interpretation
+  const interpretation = generateInterpretation(parsed);
+  
+  return {
+    ...parsed,
+    interpretation,
   };
 }
 
