@@ -13,7 +13,7 @@ interface SmartSearchResult {
   aiIntent: string | null;
 }
 
-const MAX_RESULTS = 15;
+const MAX_RESULTS = 10; // Reduced for better precision
 
 /**
  * Deterministic smart search hook - NO AI/LLM

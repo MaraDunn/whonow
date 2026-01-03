@@ -13,6 +13,7 @@ export interface Contact {
   ownerId?: string;
   lastContactedAt?: string;
   isClient?: boolean;
+  createdAt?: string; // Timestamp when contact was added (hidden from UI, used for time-based searches)
 }
 
 export type ContactOwnershipFilter = "all" | "personal" | "shared";

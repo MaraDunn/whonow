@@ -18,8 +18,8 @@ const FIELD_WEIGHTS = {
 };
 
 // Minimum score threshold for results
-const MIN_SCORE_THRESHOLD = 3;
-const MAX_RESULTS = 15;
+const MIN_SCORE_THRESHOLD = 5; // Increased for better precision
+const MAX_RESULTS = 10; // Reduced from 15 to show fewer, more relevant results
 
 interface ScoredContact {
   contact: Contact;
@@ -87,6 +87,78 @@ function fuzzyMatch(text: string, searchTerm: string): boolean {
   
   // Require at least 50% trigram overlap for fuzzy match
   return matches >= searchTrigrams.length * 0.5;
+}
+
+/**
+ * Check if company name matches with word boundaries
+ * Returns true if the search company matches the contact company at word boundaries
+ */
+function companyMatches(contactCompany: string, searchCompany: string): boolean {
+  if (!contactCompany || !searchCompany) return false;
+  
+  const contactLower = contactCompany.toLowerCase().trim();
+  const searchLower = searchCompany.toLowerCase().trim();
+  
+  // Exact match
+  if (contactLower === searchLower) return true;
+  
+  // Word boundary match - check if all words in search company appear in contact company
+  const searchWords = searchLower.split(/\s+/).filter(w => w.length >= 2);
+  const contactWords = new Set(contactLower.split(/\s+/));
+  
+  // All search words must be present in contact company
+  const allWordsMatch = searchWords.every(word => {
+    // Check for exact word match
+    if (contactWords.has(word)) return true;
+    // Check if word is a prefix of any contact word (e.g., "tech" matches "technologies")
+    return Array.from(contactWords).some(cw => cw.startsWith(word) || word.startsWith(cw));
+  });
+  
+  if (allWordsMatch) return true;
+  
+  // Check if contact company starts with search company (e.g., "TechCorp" matches "TechCorp Solutions")
+  if (contactLower.startsWith(searchLower)) return true;
+  
+  // Check if search company starts with contact company (e.g., "TechCorp Solutions" matches "TechCorp")
+  if (searchLower.startsWith(contactLower)) return true;
+  
+  return false;
+}
+
+/**
+ * Check if role matches with word boundaries
+ * Returns true if the search role matches the contact role at word boundaries
+ */
+function roleMatches(contactRole: string, searchRole: string): boolean {
+  if (!contactRole || !searchRole) return false;
+  
+  const contactLower = contactRole.toLowerCase().trim();
+  const searchLower = searchRole.toLowerCase().trim();
+  
+  // Exact match
+  if (contactLower === searchLower) return true;
+  
+  // Word boundary match - check if all words in search role appear in contact role
+  const searchWords = searchLower.split(/\s+/).filter(w => w.length >= 2);
+  const contactWords = new Set(contactLower.split(/\s+/));
+  
+  // All search words must be present in contact role
+  const allWordsMatch = searchWords.every(word => {
+    // Check for exact word match
+    if (contactWords.has(word)) return true;
+    // Check if word is a prefix of any contact word (e.g., "engineer" matches "engineering")
+    return Array.from(contactWords).some(cw => cw.startsWith(word) || word.startsWith(cw));
+  });
+  
+  if (allWordsMatch) return true;
+  
+  // Check if contact role starts with search role (e.g., "Software" matches "Software Engineer")
+  if (contactLower.startsWith(searchLower)) return true;
+  
+  // Check if search role starts with contact role (e.g., "Software Engineer" matches "Software")
+  if (searchLower.startsWith(contactLower)) return true;
+  
+  return false;
 }
 
 /**
@@ -278,16 +350,20 @@ export function searchWithParsedQuery(
 ): Contact[] {
   const { maxResults = MAX_RESULTS } = options;
   
-  // Build search terms from parsed query
+  // If company, role, or time range is specified, we need strict filtering
+  const hasCompanyFilter = parsedQuery.entities.companies.length > 0;
+  const hasRoleFilter = parsedQuery.entities.roles.length > 0;
+  const hasTimeFilter = !!parsedQuery.timeRange;
+  
+  // Build search terms from parsed query (EXCLUDE companies and roles - they're handled separately)
   const searchTerms = [
     ...parsedQuery.keywords,
     ...parsedQuery.entities.names,
-    ...parsedQuery.entities.roles,
     ...parsedQuery.entities.departments,
-    ...parsedQuery.entities.companies,
+    // DON'T include companies or roles in general search terms - they're filtered separately
   ].filter(Boolean).map(t => t.toLowerCase());
   
-  if (searchTerms.length === 0) {
+  if (searchTerms.length === 0 && !hasCompanyFilter && !hasRoleFilter && !hasTimeFilter) {
     // Fall back to original query terms
     return searchContacts(contacts, parsedQuery.searchTerms, { maxResults });
   }
@@ -295,23 +371,105 @@ export function searchWithParsedQuery(
   // Score contacts
   const scored = contacts
     .map(contact => {
+      // First, check time range filter - if time range is specified, require match
+      if (parsedQuery.timeRange) {
+        const contactCreatedAt = contact.createdAt;
+        if (!contactCreatedAt) {
+          // If contact has no timestamp, exclude it from time-based searches
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+        
+        const createdAt = new Date(contactCreatedAt);
+        const { start, end } = parsedQuery.timeRange;
+        
+        // Check if contact was created within the time range
+        if (createdAt < start || createdAt > end) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Check company filter - if company is specified, require match
+      if (hasCompanyFilter) {
+        const contactCompany = contact.company || "";
+        const matchesCompany = parsedQuery.entities.companies.some(company =>
+          companyMatches(contactCompany, company)
+        );
+        
+        // If company filter is specified but contact doesn't match, exclude it
+        if (!matchesCompany) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Check role filter - if role is specified, require match in role field only
+      if (hasRoleFilter) {
+        const contactRole = contact.role || "";
+        const matchesRole = parsedQuery.entities.roles.some(role =>
+          roleMatches(contactRole, role)
+        );
+        
+        // If role filter is specified but contact doesn't match, exclude it
+        if (!matchesRole) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Score against non-company, non-role search terms
       const result = scoreContact(contact, searchTerms);
       
-      // Boost for exact entity matches
-      if (parsedQuery.entities.companies.length > 0) {
-        const contactCompany = (contact.company || "").toLowerCase();
+      // Boost for exact company matches (only if company matches)
+      if (hasCompanyFilter) {
+        const contactCompany = contact.company || "";
         for (const company of parsedQuery.entities.companies) {
-          if (contactCompany.includes(company.toLowerCase())) {
-            result.score += 15; // Strong boost for company match
+          if (companyMatches(contactCompany, company)) {
+            result.score += 20; // Strong boost for company match
+            if (!result.matchedFields.includes("company")) {
+              result.matchedFields.push("company");
+            }
           }
         }
       }
       
+      // Boost for exact role matches (only if role matches)
+      if (hasRoleFilter) {
+        const contactRole = contact.role || "";
+        for (const role of parsedQuery.entities.roles) {
+          if (roleMatches(contactRole, role)) {
+            result.score += 15; // Strong boost for role match
+            if (!result.matchedFields.includes("role")) {
+              result.matchedFields.push("role");
+            }
+          }
+        }
+      }
+      
+      // Boost for department matches
       if (parsedQuery.entities.departments.length > 0) {
         const contactRole = (contact.role || "").toLowerCase();
         const contactDesc = (contact.description || "").toLowerCase();
         for (const dept of parsedQuery.entities.departments) {
-          if (contactRole.includes(dept) || contactDesc.includes(dept)) {
+          const deptLower = dept.toLowerCase();
+          if (contactRole.includes(deptLower) || contactDesc.includes(deptLower)) {
             result.score += 10; // Boost for department match
           }
         }

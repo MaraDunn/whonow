@@ -6,6 +6,11 @@
 export type ActionType = "email" | "call" | "text" | null;
 export type IntentType = "find" | "action" | "filter" | "question";
 
+export interface TimeRange {
+  start: Date;
+  end: Date;
+}
+
 export interface ParsedQuery {
   intent: IntentType;
   action: ActionType;
@@ -19,6 +24,7 @@ export interface ParsedQuery {
   filters: Record<string, string>;
   originalQuery: string;
   searchTerms: string[];
+  timeRange?: TimeRange; // Time range for filtering contacts by creation date
 }
 
 // Action keywords that trigger specific actions
@@ -75,8 +81,72 @@ const STOP_WORDS = new Set([
   "very", "just", "also", "now", "here", "there", "when", "where", "why",
   "how", "any", "if", "about", "into", "through", "during", "before", "after",
   "above", "below", "between", "under", "again", "further", "then", "once",
-  "someone", "anyone", "person", "people", "contact", "contacts", "me", "help"
+  "someone", "anyone", "person", "people", "contact", "contacts", "me", "help",
+  "meet", "met", "did", "add", "added"
 ]);
+
+// Time-based query patterns
+const TIME_PATTERNS = {
+  "last week": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 7);
+    return { start, end };
+  },
+  "this week": () => {
+    const end = new Date();
+    const start = new Date();
+    const dayOfWeek = start.getDay();
+    start.setDate(start.getDate() - dayOfWeek);
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+  },
+  "last month": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setMonth(end.getMonth() - 1);
+    return { start, end };
+  },
+  "this month": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+  },
+  "last year": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setFullYear(end.getFullYear() - 1);
+    return { start, end };
+  },
+  "this year": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setMonth(0, 1);
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+  },
+  "yesterday": () => {
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 1);
+    return { start, end };
+  },
+  "today": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+  },
+  "recent": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 7); // Last 7 days
+    return { start, end };
+  },
+};
 
 // Prepositions that indicate entity relationships
 const ENTITY_PREPOSITIONS = {
@@ -175,8 +245,60 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
         if (STOP_WORDS.has(w) || ENTITY_PREPOSITIONS.company.has(w)) break;
         companyWords.unshift(words[j]);
       }
-      if (companyWords.length > 1) {
+      if (companyWords.length >= 1) {
         entities.companies.push(companyWords.join(" "));
+      }
+    }
+  }
+  
+  // Also detect company names without prepositions (capitalized words or known company patterns)
+  // This handles queries like "TechCorp" or "TechCorp Solutions"
+  if (entities.companies.length === 0) {
+    // Look for sequences of capitalized words or words ending in company suffixes
+    const potentialCompanyWords: string[] = [];
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const lower = word.toLowerCase();
+      
+      // Skip if it's a stop word, role, or action keyword
+      if (STOP_WORDS.has(lower)) {
+        if (potentialCompanyWords.length > 0) {
+          // End of potential company name
+          if (potentialCompanyWords.length >= 1) {
+            const companyName = potentialCompanyWords.join(" ");
+            // Only add if it looks like a company (has suffix or is multi-word)
+            if (COMPANY_SUFFIXES.has(potentialCompanyWords[potentialCompanyWords.length - 1].toLowerCase()) ||
+                potentialCompanyWords.length >= 2) {
+              entities.companies.push(companyName);
+            }
+          }
+          potentialCompanyWords.length = 0;
+        }
+        continue;
+      }
+      
+      if (ROLE_VOCABULARY.has(lower) || ACTION_KEYWORDS[lower]) {
+        if (potentialCompanyWords.length > 0) {
+          potentialCompanyWords.length = 0;
+        }
+        continue;
+      }
+      
+      // If word starts with capital or has company suffix, it might be part of company name
+      if (word[0] === word[0].toUpperCase() || COMPANY_SUFFIXES.has(lower)) {
+        potentialCompanyWords.push(word);
+      } else if (potentialCompanyWords.length > 0) {
+        // Continue building if we're already in a company name
+        potentialCompanyWords.push(word);
+      }
+    }
+    
+    // Handle remaining potential company words at end of query
+    if (potentialCompanyWords.length >= 1) {
+      const companyName = potentialCompanyWords.join(" ");
+      if (COMPANY_SUFFIXES.has(potentialCompanyWords[potentialCompanyWords.length - 1].toLowerCase()) ||
+          potentialCompanyWords.length >= 2) {
+        entities.companies.push(companyName);
       }
     }
   }
@@ -232,6 +354,43 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
 }
 
 /**
+ * Extract time range from query
+ */
+function extractTimeRange(query: string): TimeRange | undefined {
+  const normalized = normalizeQuery(query);
+  
+  // Check for time patterns
+  for (const [pattern, getRange] of Object.entries(TIME_PATTERNS)) {
+    if (normalized.includes(pattern)) {
+      return getRange();
+    }
+  }
+  
+  // Check for "last X days/weeks/months"
+  const lastMatch = normalized.match(/last\s+(\d+)\s+(day|days|week|weeks|month|months|year|years)/);
+  if (lastMatch) {
+    const amount = parseInt(lastMatch[1], 10);
+    const unit = lastMatch[2];
+    const end = new Date();
+    const start = new Date();
+    
+    if (unit.startsWith("day")) {
+      start.setDate(end.getDate() - amount);
+    } else if (unit.startsWith("week")) {
+      start.setDate(end.getDate() - (amount * 7));
+    } else if (unit.startsWith("month")) {
+      start.setMonth(end.getMonth() - amount);
+    } else if (unit.startsWith("year")) {
+      start.setFullYear(end.getFullYear() - amount);
+    }
+    
+    return { start, end };
+  }
+  
+  return undefined;
+}
+
+/**
  * Extract meaningful keywords from query
  */
 function extractKeywords(words: string[]): string[] {
@@ -242,6 +401,8 @@ function extractKeywords(words: string[]): string[] {
       if (STOP_WORDS.has(w)) return false;
       if (ACTION_KEYWORDS[w]) return false;
       if (ENTITY_PREPOSITIONS.company.has(w)) return false;
+      // Filter out time-related words
+      if (["last", "this", "week", "month", "year", "today", "yesterday", "recent"].includes(w)) return false;
       return true;
     });
 }
@@ -270,6 +431,9 @@ export function parseSearchQuery(query: string): ParsedQuery {
   // Extract keywords
   const keywords = extractKeywords(remainingWords);
   
+  // Extract time range if present
+  const timeRange = extractTimeRange(query);
+  
   // Build search terms (unique, meaningful terms for text search)
   const searchTerms = [...new Set([
     ...keywords,
@@ -287,6 +451,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
     filters: {},
     originalQuery: query,
     searchTerms,
+    timeRange,
   };
 }
 
