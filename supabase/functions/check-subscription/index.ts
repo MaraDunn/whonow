@@ -8,15 +8,24 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-// Map Stripe product IDs to subscription tiers
-const PRODUCT_TO_TIER: Record<string, string> = {
-  "prod_SnOPR3XQ7NILtZ": "pro",           // WhoNow Pro
-  "prod_SnOPIZxzHqO5j9": "team",          // WhoNow Team
-  "prod_SnOPIZGzLgqiUM": "business",      // WhoNow Business
-  // Legacy enterprise products (no longer self-serve): treat as business and direct orgs to sales.
-  "prod_SnOPO17iQDH4V2": "business",
-  "prod_SnOQ6YGj0xwIZT": "business",
+// Stripe IDs differ between test and live mode.
+// Prefer mapping by PRICE ID (stable per environment and easy to configure via secrets).
+const DEFAULT_PRICE_TO_TIER: Record<string, string> = {
+  // Backwards-compatible defaults (override via secrets for test mode)
+  "price_1RifXqDXpGeDw1xnkNvKgEzI": "pro",
+  "price_1RifYIDXpGeDw1xn1rBKxeH7": "team",
+  "price_1RifYIDXpGeDw1xni9LJxRLQ": "business",
 };
+
+function priceToTier(priceId: string | undefined): string {
+  if (!priceId) return "pro";
+  const envMap: Record<string, string | undefined> = {
+    [Deno.env.get("STRIPE_PRICE_ID_PRO") || ""]: "pro",
+    [Deno.env.get("STRIPE_PRICE_ID_TEAM") || ""]: "team",
+    [Deno.env.get("STRIPE_PRICE_ID_BUSINESS") || ""]: "business",
+  };
+  return envMap[priceId] || DEFAULT_PRICE_TO_TIER[priceId] || "pro";
+}
 
 const SEAT_LIMITS: Record<string, number> = {
   starter: 1,
@@ -107,8 +116,8 @@ serve(async (req) => {
     const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
     logStep("Active subscription found", { subscriptionId: subscription.id });
 
-    const productId = subscription.items.data[0].price.product as string;
-    const tier = PRODUCT_TO_TIER[productId] || "pro";
+    const priceId = subscription.items.data[0].price.id as string | undefined;
+    const tier = priceToTier(priceId);
     const seatsLimit = SEAT_LIMITS[tier] || 1;
     logStep("Determined subscription tier", { tier, seatsLimit });
 
@@ -136,7 +145,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       subscribed: true,
       tier: tier,
-      product_id: productId,
+      // Return the Stripe price id for debugging/telemetry
+      product_id: priceId,
       seats_limit: seatsLimit,
       seats_used: 0, // Will be fetched from database
       subscription_end: subscriptionEnd

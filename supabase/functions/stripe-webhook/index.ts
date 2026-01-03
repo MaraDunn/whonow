@@ -4,14 +4,23 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 // No CORS headers needed - webhooks come from Stripe servers, not browsers
 
-const PRODUCT_TO_TIER: Record<string, string> = {
-  "prod_SnOPR3XQ7NILtZ": "pro",
-  "prod_SnOPIZxzHqO5j9": "team",
-  "prod_SnOPIZGzLgqiUM": "business",
-  // Legacy enterprise products (no longer self-serve): treat as business and direct orgs to sales.
-  "prod_SnOPO17iQDH4V2": "business",
-  "prod_SnOQ6YGj0xwIZT": "business",
+// Stripe IDs differ between test and live mode.
+// Prefer mapping by PRICE ID (easy to configure via secrets).
+const DEFAULT_PRICE_TO_TIER: Record<string, string> = {
+  "price_1RifXqDXpGeDw1xnkNvKgEzI": "pro",
+  "price_1RifYIDXpGeDw1xn1rBKxeH7": "team",
+  "price_1RifYIDXpGeDw1xni9LJxRLQ": "business",
 };
+
+function priceToTier(priceId: string | undefined): string {
+  if (!priceId) return "pro";
+  const envMap: Record<string, string | undefined> = {
+    [Deno.env.get("STRIPE_PRICE_ID_PRO") || ""]: "pro",
+    [Deno.env.get("STRIPE_PRICE_ID_TEAM") || ""]: "team",
+    [Deno.env.get("STRIPE_PRICE_ID_BUSINESS") || ""]: "business",
+  };
+  return envMap[priceId] || DEFAULT_PRICE_TO_TIER[priceId] || "pro";
+}
 
 const SEAT_LIMITS: Record<string, number> = {
   starter: 1,
@@ -107,9 +116,9 @@ serve(async (req) => {
           break;
         }
 
-        // Determine tier from product
-        const productId = subscription.items.data[0]?.price?.product as string;
-        const tier = PRODUCT_TO_TIER[productId] || "pro";
+        // Determine tier from price (works across test/live)
+        const priceId = subscription.items.data[0]?.price?.id as string | undefined;
+        const tier = priceToTier(priceId);
         const seatsLimit = SEAT_LIMITS[tier] || 1;
         const status = subscription.status === "active" ? "active" : subscription.status;
 

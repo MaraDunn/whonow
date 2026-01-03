@@ -10,13 +10,27 @@ const corsHeaders = {
   "Access-Control-Expose-Headers": "sb-request-id",
 };
 
-// Map tier names to Stripe price IDs
-// Enterprise tiers are not self-serve: direct customers to sales from the landing page.
-const TIER_PRICES: Record<string, string> = {
+// Stripe price IDs are environment-specific (test vs live).
+// Prefer configuring them as Supabase Edge Function secrets:
+// - STRIPE_PRICE_ID_PRO
+// - STRIPE_PRICE_ID_TEAM
+// - STRIPE_PRICE_ID_BUSINESS
+//
+// These defaults are kept for backwards compatibility but should be overridden via secrets.
+const DEFAULT_TIER_PRICES: Record<string, string> = {
   pro: "price_1RifXqDXpGeDw1xnkNvKgEzI",
   team: "price_1RifYIDXpGeDw1xn1rBKxeH7",
   business: "price_1RifYIDXpGeDw1xni9LJxRLQ",
 };
+
+function getTierPriceId(tier: string): string | undefined {
+  const envMap: Record<string, string | undefined> = {
+    pro: Deno.env.get("STRIPE_PRICE_ID_PRO") || undefined,
+    team: Deno.env.get("STRIPE_PRICE_ID_TEAM") || undefined,
+    business: Deno.env.get("STRIPE_PRICE_ID_BUSINESS") || undefined,
+  };
+  return envMap[tier] || DEFAULT_TIER_PRICES[tier];
+}
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -59,10 +73,11 @@ serve(async (req) => {
     }
     
     const { tier } = body;
-    if (!tier || !TIER_PRICES[tier]) {
-      throw new Error(`Invalid tier: ${tier}. Valid tiers are: ${Object.keys(TIER_PRICES).join(", ")}`);
+    const priceId = tier ? getTierPriceId(String(tier)) : undefined;
+    if (!tier || !priceId) {
+      throw new Error(`Invalid tier: ${tier}. Valid tiers are: ${Object.keys(DEFAULT_TIER_PRICES).join(", ")}`);
     }
-    logStep("Tier selected", { tier, priceId: TIER_PRICES[tier] });
+    logStep("Tier selected", { tier, priceId });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     
@@ -84,7 +99,7 @@ serve(async (req) => {
       customer_email: customerId ? undefined : user.email,
       line_items: [
         {
-          price: TIER_PRICES[tier],
+          price: priceId,
           quantity: 1,
         },
       ],
