@@ -386,10 +386,6 @@ export function searchWithParsedQuery(
         const contactCreatedAt = contact.createdAt;
         if (!contactCreatedAt || contactCreatedAt.trim() === '') {
           // If contact has no timestamp, exclude it from time-based searches
-          // Debug logging for troubleshooting
-          if (contact.name?.toLowerCase().includes('mitchel')) {
-            console.log(`[DEBUG] Contact "${contact.name}" excluded: missing createdAt`);
-          }
           return {
             contact,
             score: 0,
@@ -403,10 +399,6 @@ export function searchWithParsedQuery(
         // Check if date is valid
         if (isNaN(createdAt.getTime())) {
           // Invalid date - exclude from time-based searches
-          // Debug logging for troubleshooting
-          if (contact.name?.toLowerCase().includes('mitchel')) {
-            console.log(`[DEBUG] Contact "${contact.name}" excluded: invalid date "${contactCreatedAt}"`);
-          }
           return {
             contact,
             score: 0,
