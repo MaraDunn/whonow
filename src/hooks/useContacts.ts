@@ -50,7 +50,7 @@ const mapDbToContact = (db: DbContact): ContactWithMeta => ({
   ownerId: db.owner_id || undefined,
   lastContactedAt: db.last_contacted_at || undefined,
   isClient: db.is_client || false,
-  createdAt: db.created_at, // Include timestamp for time-based searches
+  createdAt: db.created_at || undefined, // Include timestamp for time-based searches
 });
 
 const mapContactToDb = (

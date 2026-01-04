@@ -97,6 +97,7 @@ const COMPANY_SUFFIXES = new Set([
 ]);
 
 // Stop words to filter from keywords
+// Note: "add" and "added" are NOT in stop words - we need them to detect creation date searches
 const STOP_WORDS = new Set([
   "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
   "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
@@ -110,7 +111,7 @@ const STOP_WORDS = new Set([
   "how", "any", "if", "about", "into", "through", "during", "before", "after",
   "above", "below", "between", "under", "again", "further", "then", "once",
   "someone", "anyone", "person", "people", "contact", "contacts", "me", "help",
-  "meet", "met", "did", "add", "added"
+  "meet", "met", "did"
 ]);
 
 // Time-of-day definitions (hour ranges)
@@ -128,6 +129,15 @@ const TIME_OF_DAY = {
 
 // Time-based query patterns
 const TIME_PATTERNS = {
+  "earlier this week": () => {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date();
+    const dayOfWeek = start.getDay();
+    start.setDate(start.getDate() - dayOfWeek);
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+  },
   "last week": () => {
     const end = new Date();
     const start = new Date();
@@ -136,6 +146,7 @@ const TIME_PATTERNS = {
   },
   "this week": () => {
     const end = new Date();
+    end.setHours(23, 59, 59, 999);
     const start = new Date();
     const dayOfWeek = start.getDay();
     start.setDate(start.getDate() - dayOfWeek);
@@ -150,6 +161,7 @@ const TIME_PATTERNS = {
   },
   "this month": () => {
     const end = new Date();
+    end.setHours(23, 59, 59, 999);
     const start = new Date();
     start.setDate(1);
     start.setHours(0, 0, 0, 0);
@@ -163,6 +175,7 @@ const TIME_PATTERNS = {
   },
   "this year": () => {
     const end = new Date();
+    end.setHours(23, 59, 59, 999);
     const start = new Date();
     start.setMonth(0, 1);
     start.setHours(0, 0, 0, 0);
@@ -177,6 +190,7 @@ const TIME_PATTERNS = {
   },
   "today": () => {
     const end = new Date();
+    end.setHours(23, 59, 59, 999);
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     return { start, end };
@@ -617,13 +631,62 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
 function extractTimeRange(query: string): TimeRange | undefined {
   const normalized = normalizeQuery(query);
   
+  // FIRST: Check for combined patterns like "last [day] [time-of-day]" (e.g., "last friday night")
+  // This must come before individual day/time-of-day checks
+  const dayNamesPattern = DAY_NAMES.join("|");
+  const timeOfDayKeys = Object.keys(TIME_OF_DAY).join("|");
+  
+  // Pattern: "last [day] [time-of-day]" (e.g., "last friday night", "last monday morning")
+  const lastDayTimePattern = new RegExp(
+    `last\\s+(${dayNamesPattern})\\s+(${timeOfDayKeys})`,
+    "i"
+  );
+  const lastDayTimeMatch = normalized.match(lastDayTimePattern);
+  
+  if (lastDayTimeMatch) {
+    const dayName = lastDayTimeMatch[1].toLowerCase();
+    const timeOfDay = lastDayTimeMatch[2].toLowerCase();
+    const dayIndex = DAY_NAMES.findIndex(d => d.toLowerCase() === dayName);
+    const timeRange = TIME_OF_DAY[timeOfDay as keyof typeof TIME_OF_DAY];
+    
+    if (dayIndex !== -1 && timeRange) {
+      const end = new Date();
+      const start = new Date();
+      const today = end.getDay();
+      const targetDay = dayIndex;
+      
+      // Calculate days to subtract to get to the most recent occurrence of that day
+      let daysDiff = today - targetDay;
+      if (daysDiff < 0) daysDiff += 7; // If target day is in the future, go to last week
+      if (daysDiff === 0) daysDiff = 7; // If today is the target day, go to last week
+      
+      start.setDate(end.getDate() - daysDiff);
+      start.setHours(timeRange.start, 0, 0, 0);
+      
+      // Handle night time range (9pm - 5am spans midnight)
+      if (timeRange.end < timeRange.start) {
+        // Night: 21:00 - 05:00 (next day)
+        end.setDate(start.getDate() + 1);
+        end.setHours(timeRange.end, 0, 0, 0);
+      } else if (timeRange.end === 24) {
+        end.setDate(start.getDate());
+        end.setHours(23, 59, 59, 999);
+      } else {
+        end.setDate(start.getDate());
+        end.setHours(timeRange.end, 0, 0, 0);
+      }
+      
+      return { start, end };
+    }
+  }
+  
   // Check for time-of-day patterns combined with "today", "yesterday", or "this"
   // Pattern: "this morning", "yesterday afternoon", "today night", etc.
-  const timeOfDayPattern = new RegExp(
+  const timeOfDayPattern2 = new RegExp(
     `(this|today|yesterday)\\s+(${Object.keys(TIME_OF_DAY).join("|")})`,
     "i"
   );
-  const timeOfDayMatch = normalized.match(timeOfDayPattern);
+  const timeOfDayMatch = normalized.match(timeOfDayPattern2);
   
   if (timeOfDayMatch) {
     const dayRef = timeOfDayMatch[1].toLowerCase();
@@ -710,27 +773,30 @@ function extractTimeRange(query: string): TimeRange | undefined {
   }
   
   // Check for day names (Monday, Tuesday, etc.)
-  for (let i = 0; i < DAY_NAMES.length; i++) {
-    const dayName = DAY_NAMES[i];
-    if (normalized.includes(dayName)) {
-      const end = new Date();
-      const start = new Date();
-      const today = end.getDay();
-      const targetDay = i;
-      
-      // Calculate days to subtract to get to the most recent occurrence of that day
-      let daysDiff = today - targetDay;
-      if (daysDiff < 0) daysDiff += 7; // If target day is in the future, go to last week
-      if (daysDiff === 0 && normalized.includes("last")) {
-        daysDiff = 7; // "last Monday" means previous Monday
+  // Skip if we already matched a combined pattern above
+  if (!lastDayTimeMatch) {
+    for (let i = 0; i < DAY_NAMES.length; i++) {
+      const dayName = DAY_NAMES[i];
+      if (normalized.includes(dayName)) {
+        const end = new Date();
+        const start = new Date();
+        const today = end.getDay();
+        const targetDay = i;
+        
+        // Calculate days to subtract to get to the most recent occurrence of that day
+        let daysDiff = today - targetDay;
+        if (daysDiff < 0) daysDiff += 7; // If target day is in the future, go to last week
+        if (daysDiff === 0 && normalized.includes("last")) {
+          daysDiff = 7; // "last Monday" means previous Monday
+        }
+        
+        start.setDate(end.getDate() - daysDiff);
+        start.setHours(0, 0, 0, 0);
+        end.setDate(start.getDate());
+        end.setHours(23, 59, 59, 999);
+        
+        return { start, end };
       }
-      
-      start.setDate(end.getDate() - daysDiff);
-      start.setHours(0, 0, 0, 0);
-      end.setDate(start.getDate());
-      end.setHours(23, 59, 59, 999);
-      
-      return { start, end };
     }
   }
   
@@ -963,10 +1029,28 @@ export function parseSearchQuery(query: string): ParsedQuery {
   const timeRange = extractTimeRange(query);
   
   // Extract interaction type
-  const interactionType = extractInteractionType(query);
+  let interactionType = extractInteractionType(query);
   
   // Extract interaction time range
-  const interactionTimeRange = extractInteractionTimeRange(query);
+  let interactionTimeRange = extractInteractionTimeRange(query);
+  
+  // Check if query contains "add" or "added" - indicates creation date search
+  const hasAddKeyword = normalized.includes("add") || normalized.includes("added");
+  
+  // If query has "add"/"added" and a time range, prioritize creation date over interaction date
+  // This handles queries like "who did I add today?" vs "who did I meet today?"
+  // When "add" is present, we want creation date, not interaction date
+  if (hasAddKeyword && timeRange) {
+    // Clear interaction filters - user is asking about when contacts were added, not when they interacted
+    interactionType = null;
+    interactionTimeRange = undefined;
+  } else if (interactionType && timeRange && !hasAddKeyword) {
+    // If query has interaction keywords and time range but no "add"/"added",
+    // it's ambiguous. Default to creation date since that's what we're tracking.
+    // This handles "who did I meet today?" - treat as "who did I add today?"
+    interactionType = null;
+    interactionTimeRange = undefined;
+  }
   
   // Extract needs follow-up
   const needsFollowUp = extractNeedsFollowUp(query);

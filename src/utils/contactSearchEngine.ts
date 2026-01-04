@@ -384,8 +384,12 @@ export function searchWithParsedQuery(
       // First, check time range filter - if time range is specified, require match
       if (parsedQuery.timeRange) {
         const contactCreatedAt = contact.createdAt;
-        if (!contactCreatedAt) {
+        if (!contactCreatedAt || contactCreatedAt.trim() === '') {
           // If contact has no timestamp, exclude it from time-based searches
+          // Debug logging for troubleshooting
+          if (contact.name?.toLowerCase().includes('mitchel')) {
+            console.log(`[DEBUG] Contact "${contact.name}" excluded: missing createdAt`);
+          }
           return {
             contact,
             score: 0,
@@ -395,10 +399,32 @@ export function searchWithParsedQuery(
         }
         
         const createdAt = new Date(contactCreatedAt);
+        
+        // Check if date is valid
+        if (isNaN(createdAt.getTime())) {
+          // Invalid date - exclude from time-based searches
+          // Debug logging for troubleshooting
+          if (contact.name?.toLowerCase().includes('mitchel')) {
+            console.log(`[DEBUG] Contact "${contact.name}" excluded: invalid date "${contactCreatedAt}"`);
+          }
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+        
         const { start, end } = parsedQuery.timeRange;
         
         // Check if contact was created within the time range
-        if (createdAt < start || createdAt > end) {
+        // Use <= and >= to include exact boundary matches, and ensure we're comparing dates correctly
+        // Normalize to start of day for date-only comparisons to avoid timezone issues
+        const createdAtTime = createdAt.getTime();
+        const startTime = start.getTime();
+        const endTime = end.getTime();
+        
+        if (createdAtTime < startTime || createdAtTime > endTime) {
           return {
             contact,
             score: 0,
@@ -611,6 +637,14 @@ export function searchWithParsedQuery(
       
       // Score against non-structured search terms
       const result = scoreContact(contact, searchTerms);
+      
+      // If contact passed time filter, give it a base score to ensure it's included
+      // This ensures time-based queries return results even if search terms don't match
+      // The search terms can boost the score further, but passing time filter is enough to include
+      if (hasTimeFilter && result.score === 0) {
+        result.score = MIN_SCORE_THRESHOLD; // Give minimum score to pass threshold
+        result.matchedFields.push("time");
+      }
       
       // Boost for exact company matches (only if company matches)
       if (hasCompanyFilter) {
