@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle, Briefcase } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle, Briefcase, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -148,14 +148,10 @@ export function FolderSidebar({
       <Sidebar collapsible="icon" className="border-r border-border">
         <SidebarHeader className="p-2">
           <div className={cn(
-            "flex items-center",
+            "flex items-center gap-2",
             isCollapsed ? "justify-center" : "justify-between px-2"
           )}>
-            {!isCollapsed && (
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                Folders
-              </h2>
-            )}
+            {/* Hamburger Menu Button */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -163,16 +159,41 @@ export function FolderSidebar({
                     variant="ghost" 
                     size="icon" 
                     className="h-7 w-7" 
-                    onClick={() => handleAddFolder("contacts")}
+                    onClick={toggleSidebar}
                   >
-                    <FolderPlus className="h-4 w-4" />
+                    <Menu className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  <p>Add folder</p>
+                  <p>{isCollapsed ? "Expand sidebar" : "Collapse sidebar"}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            
+            {!isCollapsed && (
+              <>
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex-1">
+                  Folders
+                </h2>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-7 w-7" 
+                        onClick={() => handleAddFolder("contacts")}
+                      >
+                        <FolderPlus className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Add folder</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </>
+            )}
           </div>
         </SidebarHeader>
 
@@ -186,16 +207,16 @@ export function FolderSidebar({
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <SidebarMenuButton
+                          <DroppableAllContacts
+                            isSelected={selectedFolderId === null && !showTrash && !showDirectory && !showClientDirectory && ownershipFilter === "all"}
+                            totalContacts={totalContacts}
                             onClick={() => {
                               onSelectFolder(null);
                               onOwnershipFilterChange?.("all");
                             }}
-                            isActive={selectedFolderId === null && !showTrash && !showDirectory && !showClientDirectory && ownershipFilter === "all"}
-                            className="w-full"
-                          >
-                            <Users className="h-4 w-4" />
-                          </SidebarMenuButton>
+                            showTrash={showTrash}
+                            collapsed={true}
+                          />
                         </TooltipTrigger>
                         <TooltipContent side="right">
                           <p>All Contacts ({totalContacts})</p>
@@ -304,15 +325,13 @@ export function FolderSidebar({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <SidebarMenuButton
+                            <DroppableFolder
+                              folder={folder}
+                              isSelected={selectedFolderId === folder.id}
+                              contactCount={contactCountByFolder[folder.id] || 0}
                               onClick={() => onSelectFolder(folder.id)}
-                              isActive={selectedFolderId === folder.id}
-                            >
-                              <div
-                                className="h-4 w-4 rounded-sm shrink-0"
-                                style={{ backgroundColor: folder.color || "#6B7280" }}
-                              />
-                            </SidebarMenuButton>
+                              collapsed={true}
+                            />
                           </TooltipTrigger>
                           <TooltipContent side="right">
                             <p>{folder.name} ({contactCountByFolder[folder.id] || 0})</p>
@@ -640,25 +659,6 @@ export function FolderSidebar({
         />
       </Sidebar>
 
-      {/* Collapse Toggle Arrow */}
-      <button
-        onClick={toggleSidebar}
-        className={cn(
-          "fixed top-4 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background shadow-sm hover:bg-accent transition-all duration-200",
-          isCollapsed ? "left-[calc(var(--sidebar-width-icon)-0.75rem)]" : "left-[calc(var(--sidebar-width)-0.75rem)]"
-        )}
-        style={{
-          "--sidebar-width": "16rem",
-          "--sidebar-width-icon": "3rem",
-        } as React.CSSProperties}
-        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {isCollapsed ? (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-        ) : (
-          <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
-        )}
-      </button>
     </div>
   );
 }

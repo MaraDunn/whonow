@@ -39,27 +39,9 @@ import { toast } from "sonner";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 
-function getClientPoint(event: Event): { x: number; y: number } | null {
-  // Touch
-  if ("touches" in event) {
-    const te = event as TouchEvent;
-    const t = te.touches?.[0] ?? te.changedTouches?.[0];
-    if (t) return { x: t.clientX, y: t.clientY };
-  }
-
-  // Mouse / Pointer
-  if ("clientX" in event && "clientY" in event) {
-    const e = event as MouseEvent;
-    return { x: e.clientX, y: e.clientY };
-  }
-
-  return null;
-}
-
-// Keep the drag preview anchored to the cursor regardless of where the user grabs the card.
-// We want the cursor to be "holding" the top-center of the preview.
-const SNAP_TO_CURSOR_Y_OFFSET = 10;
-const snapTopCenterToCursor: Modifier = ({
+// Center the drag preview on the cursor with a small vertical offset for better visibility
+// This ensures the preview follows the mouse accurately regardless of where the user initially clicked
+const centerOnCursor: Modifier = ({
   activatorEvent,
   activeNodeRect,
   overlayNodeRect,
@@ -67,22 +49,33 @@ const snapTopCenterToCursor: Modifier = ({
 }) => {
   if (!activatorEvent || !activeNodeRect || !overlayNodeRect) return transform;
 
-  const point = getClientPoint(activatorEvent);
-  if (!point) return transform;
+  // Get the initial click position relative to the active node
+  let initialX = 0;
+  let initialY = 0;
+  
+  if ("touches" in activatorEvent) {
+    const te = activatorEvent as TouchEvent;
+    const t = te.touches?.[0] ?? te.changedTouches?.[0];
+    if (t) {
+      initialX = t.clientX - activeNodeRect.left;
+      initialY = t.clientY - activeNodeRect.top;
+    }
+  } else if ("clientX" in activatorEvent && "clientY" in activatorEvent) {
+    const e = activatorEvent as MouseEvent;
+    initialX = e.clientX - activeNodeRect.left;
+    initialY = e.clientY - activeNodeRect.top;
+  }
 
-  const pointerOffsetX = point.x - activeNodeRect.left;
-  const pointerOffsetY = point.y - activeNodeRect.top;
+  // We want the cursor to be at the center-top of the preview
+  // The transform already accounts for mouse movement, so we just need to adjust
+  // the offset to center the preview horizontally and offset it slightly vertically
+  const centerOffsetX = overlayNodeRect.width / 2 - initialX;
+  const topOffsetY = 15 - initialY; // Small offset above cursor for better visibility
 
-  // Desired cursor contact point on the overlay: top-center (slightly below the cursor)
-  const desiredOffsetX = overlayNodeRect.width / 2;
-  const desiredOffsetY = SNAP_TO_CURSOR_Y_OFFSET;
-
-  // dnd-kit keeps the original grab point; we override by shifting the overlay so the
-  // cursor always maps to the desired point.
   return {
     ...transform,
-    x: transform.x + (desiredOffsetX - pointerOffsetX),
-    y: transform.y + (desiredOffsetY - pointerOffsetY),
+    x: transform.x + centerOffsetX,
+    y: transform.y + topOffsetY,
   };
 };
 
@@ -614,7 +607,7 @@ const Index = () => {
             duration: 250,
             easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
           }}
-          modifiers={[snapTopCenterToCursor]}
+          modifiers={[centerOnCursor]}
         >
           {activeContact ? <DragPreview contact={activeContact} /> : null}
         </DragOverlay>

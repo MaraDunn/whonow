@@ -2,6 +2,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { Folder as FolderIcon, FolderInput } from "lucide-react";
 import { Folder } from "@/types/folder";
 import { cn } from "@/lib/utils";
+import { SidebarMenuButton } from "@/components/ui/sidebar";
 
 interface DroppableFolderProps {
   folder: Folder | null; // null for "No folder" option
@@ -9,15 +10,46 @@ interface DroppableFolderProps {
   contactCount: number;
   onClick: () => void;
   children?: React.ReactNode;
+  collapsed?: boolean;
 }
 
-export function DroppableFolder({ folder, isSelected, contactCount, onClick, children }: DroppableFolderProps) {
+export function DroppableFolder({ folder, isSelected, contactCount, onClick, children, collapsed = false }: DroppableFolderProps) {
   const { setNodeRef, isOver, active } = useDroppable({
     id: folder?.id || "no-folder",
     data: { folderId: folder?.id || null },
   });
 
   const isDragging = !!active;
+
+  if (collapsed) {
+    return (
+      <div ref={setNodeRef} className="w-full">
+        <SidebarMenuButton
+          onClick={onClick}
+          isActive={isSelected}
+          className={cn(
+            "w-full relative overflow-hidden",
+            // Enhanced drop target styling
+            isOver && !isSelected && "ring-2 ring-primary bg-primary/15 scale-[1.02] shadow-md",
+            // Subtle pulse animation when dragging to indicate valid targets
+            isDragging && !isSelected && !isOver && "ring-1 ring-primary/30 bg-primary/5"
+          )}
+        >
+          {/* Animated background on hover during drag */}
+          {isOver && (
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/5 animate-pulse" />
+          )}
+          <div
+            className={cn(
+              "h-4 w-4 rounded-sm shrink-0 relative z-10 transition-transform duration-200",
+              isDragging && !isSelected && "scale-110"
+            )}
+            style={{ backgroundColor: folder?.color || "#6B7280" }}
+          />
+        </SidebarMenuButton>
+      </div>
+    );
+  }
 
   return (
     <button
