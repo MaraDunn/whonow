@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import React, { ReactNode, useState } from "react";
 import { Lock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,12 +12,16 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { FeatureName, SubscriptionTier, TIER_CONFIGS } from "@/types/subscription";
 import { cn } from "@/lib/utils";
 
+// Global flag to track if a dialog was just closed
+export let dialogJustClosed = false;
+
 interface LockedFeatureButtonProps {
   feature: FeatureName;
   children: ReactNode;
   className?: string;
   onClick?: () => void;
   minimumTier?: SubscriptionTier;
+  hideLockIcon?: boolean;
 }
 
 export function LockedFeatureButton({
@@ -26,6 +30,7 @@ export function LockedFeatureButton({
   className,
   onClick,
   minimumTier = "pro",
+  hideLockIcon = false,
 }: LockedFeatureButtonProps) {
   const { canAccessFeature, createCheckout } = useSubscription();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -33,7 +38,8 @@ export function LockedFeatureButton({
 
   const tierConfig = TIER_CONFIGS[minimumTier];
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (hasAccess) {
       onClick?.();
     } else {
@@ -41,16 +47,27 @@ export function LockedFeatureButton({
     }
   };
 
+  const handleDialogChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      // Set flag to prevent card click immediately after dialog closes
+      dialogJustClosed = true;
+      setTimeout(() => {
+        dialogJustClosed = false;
+      }, 200);
+    }
+  };
+
   return (
     <>
-      <div className={cn("relative", className)} onClick={handleClick}>
+      <div className={cn("relative", className)} onClick={handleClick} data-locked-feature-button>
         {children}
-        {!hasAccess && (
+        {!hasAccess && !hideLockIcon && (
           <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
         )}
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -76,7 +93,11 @@ export function LockedFeatureButton({
             <Button
               onClick={() => {
                 createCheckout(minimumTier);
+                dialogJustClosed = true;
                 setDialogOpen(false);
+                setTimeout(() => {
+                  dialogJustClosed = false;
+                }, 200);
               }}
               className="w-full gradient-hero text-primary-foreground"
             >

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle, Briefcase, Menu } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle, Briefcase, Menu, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -380,9 +380,16 @@ export function FolderSidebar({
                           )}
                         </SidebarMenuButton>
                       ) : (
-                        <LockedFeatureButton feature="client_management" minimumTier="pro">
+                        <LockedFeatureButton feature="client_management" minimumTier="pro" hideLockIcon={isCollapsed}>
                           <SidebarMenuButton 
-                            tooltip={isCollapsed ? "Client Directory" : undefined}
+                            tooltip={isCollapsed ? {
+                              children: (
+                                <div className="flex items-center gap-1.5">
+                                  <span>Client Directory</span>
+                                  <Lock className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              )
+                            } : undefined}
                             className="w-full opacity-70"
                           >
                             <Briefcase className="h-4 w-4" />

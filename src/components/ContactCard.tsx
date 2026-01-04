@@ -1,12 +1,13 @@
+import React from "react";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown, Lock } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSubscription } from "@/hooks/useSubscription";
-import { LockedFeatureButton } from "@/components/LockedFeatureButton";
+import { LockedFeatureButton, dialogJustClosed } from "@/components/LockedFeatureButton";
 
 // Helper to format last contacted time
 function formatLastContacted(lastContactedAt?: string): string | null {
@@ -89,8 +90,23 @@ export function ContactCard({
     text: { icon: MessageSquare, label: "Text", color: "bg-blue-600 hover:bg-blue-700" },
   };
 
-  const handleCardClick = () => {
+  const handleCardClick = (e?: React.MouseEvent) => {
     if (isTrashView) return;
+    
+    // Prevent card click if dialog was just closed
+    if (dialogJustClosed) {
+      return;
+    }
+    
+    // Check if the click originated from a locked button area
+    if (e?.target instanceof HTMLElement) {
+      const target = e.target as HTMLElement;
+      // Check if click is within a LockedFeatureButton wrapper
+      const lockedButtonWrapper = target.closest('[data-locked-feature-button]');
+      if (lockedButtonWrapper) {
+        return;
+      }
+    }
     
     if (compact && onToggleExpand) {
       onToggleExpand();
@@ -108,7 +124,7 @@ export function ContactCard({
   if (compact && !isExpanded) {
     return (
       <div
-        onClick={handleCardClick}
+        onClick={(e) => handleCardClick(e)}
         className="group relative p-2 rounded-lg border border-border bg-card shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-200 cursor-pointer animate-slide-up"
         style={{ animationDelay: `${index * 20}ms` }}
       >
@@ -149,7 +165,7 @@ export function ContactCard({
         className="group relative p-4 rounded-xl border border-primary/30 bg-card shadow-md transition-all duration-300 animate-scale-in"
       >
         {/* Header with collapse */}
-        <div className="flex items-center gap-3 mb-3" onClick={handleCardClick}>
+        <div className="flex items-center gap-3 mb-3" onClick={(e) => handleCardClick(e)}>
           <div className="relative flex-shrink-0">
             <div className="w-12 h-12 rounded-lg gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-base">
               {initials}
@@ -224,7 +240,7 @@ export function ContactCard({
                   variant={contact.isClient ? "default" : "outline"}
                   size="sm"
                   className={cn(
-                    "flex-1 text-xs h-8",
+                    "flex-1 text-xs h-8 px-2 min-w-0 justify-center",
                     contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
                   )}
                   onClick={(e) => {
@@ -232,20 +248,18 @@ export function ContactCard({
                     onToggleClient(!contact.isClient);
                   }}
                 >
-                  <Star className={cn("h-3 w-3 mr-1", contact.isClient && "fill-current")} />
-                  {contact.isClient ? "Client" : "Mark Client"}
+                  <Star className={cn("h-3 w-3 mr-1.5 flex-shrink-0", contact.isClient && "fill-current")} />
+                  <span className="truncate text-center">{contact.isClient ? "Client" : "Mark Client"}</span>
                 </Button>
               ) : (
-                <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1">
+                <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full text-xs h-8 opacity-70"
-                    onClick={(e) => e.stopPropagation()}
+                    className="w-full text-xs h-8 px-2 opacity-70 justify-center"
                   >
-                    <Star className="h-3 w-3 mr-1" />
-                    Mark Client
-                    <Lock className="h-2.5 w-2.5 ml-1 text-muted-foreground" />
+                    <Star className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                    <span className="truncate text-center">Mark Client</span>
                   </Button>
                 </LockedFeatureButton>
               )
@@ -255,26 +269,24 @@ export function ContactCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 text-xs h-8"
+                  className="flex-1 text-xs h-8 px-2 min-w-0 justify-center"
                   onClick={(e) => {
                     e.stopPropagation();
                     onMarkContacted();
                   }}
                 >
-                  <Clock className="h-3 w-3 mr-1" />
-                  Contacted
+                  <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                  <span className="truncate text-center">Contacted</span>
                 </Button>
               ) : (
-                <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1">
+                <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full text-xs h-8 opacity-70"
-                    onClick={(e) => e.stopPropagation()}
+                    className="w-full text-xs h-8 px-2 opacity-70 justify-center"
                   >
-                    <Clock className="h-3 w-3 mr-1" />
-                    Contacted
-                    <Lock className="h-2.5 w-2.5 ml-1 text-muted-foreground" />
+                    <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                    <span className="truncate text-center">Contacted</span>
                   </Button>
                 </LockedFeatureButton>
               )
@@ -282,13 +294,13 @@ export function ContactCard({
             <Button
               variant="secondary"
               size="sm"
-              className="flex-1 text-xs h-8"
+              className="flex-1 text-xs h-8 px-2 min-w-0"
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit();
               }}
             >
-              Edit
+              <span className="truncate">Edit</span>
             </Button>
           </div>
         )}
@@ -299,7 +311,7 @@ export function ContactCard({
   // Full desktop card
   return (
     <div
-      onClick={isTrashView ? undefined : (onView || onEdit)}
+      onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
       className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col"
       style={{ animationDelay: `${index * 50}ms` }}
     >
@@ -430,7 +442,7 @@ export function ContactCard({
                 variant={contact.isClient ? "default" : "outline"}
                 size="sm"
                 className={cn(
-                  "flex-1 text-xs",
+                  "flex-1 text-xs px-2 py-1.5 min-w-0 justify-center",
                   contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
                 )}
                 onClick={(e) => {
@@ -438,20 +450,18 @@ export function ContactCard({
                   onToggleClient(!contact.isClient);
                 }}
               >
-                <Star className={cn("h-3 w-3 mr-1.5", contact.isClient && "fill-current")} />
-                {contact.isClient ? "Client" : "Mark as Client"}
+                <Star className={cn("h-3 w-3 mr-1.5 flex-shrink-0", contact.isClient && "fill-current")} />
+                <span className="truncate text-center">{contact.isClient ? "Client" : "Mark as Client"}</span>
               </Button>
             ) : (
-              <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1">
+              <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full text-xs opacity-70"
-                  onClick={(e) => e.stopPropagation()}
+                  className="w-full text-xs px-2 py-1.5 opacity-70 justify-center"
                 >
-                  <Star className="h-3 w-3 mr-1.5" />
-                  Mark as Client
-                  <Lock className="h-3 w-3 ml-1.5 text-muted-foreground" />
+                  <Star className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                  <span className="truncate text-center">Mark as Client</span>
                 </Button>
               </LockedFeatureButton>
             )
@@ -461,26 +471,24 @@ export function ContactCard({
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 text-xs"
+                className="flex-1 text-xs px-2 py-1.5 min-w-0 justify-center"
                 onClick={(e) => {
                   e.stopPropagation();
                   onMarkContacted();
                 }}
               >
-                <Clock className="h-3 w-3 mr-1.5" />
-                Contacted
+                <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                <span className="truncate text-center">Contacted</span>
               </Button>
             ) : (
-              <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1">
+              <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full text-xs opacity-70"
-                  onClick={(e) => e.stopPropagation()}
+                  className="w-full text-xs px-2 py-1.5 opacity-70 justify-center"
                 >
-                  <Clock className="h-3 w-3 mr-1.5" />
-                  Contacted
-                  <Lock className="h-3 w-3 ml-1.5 text-muted-foreground" />
+                  <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                  <span className="truncate text-center">Contacted</span>
                 </Button>
               </LockedFeatureButton>
             )
