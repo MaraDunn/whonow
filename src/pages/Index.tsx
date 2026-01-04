@@ -49,28 +49,49 @@ const centerOnCursor: Modifier = ({
 }) => {
   if (!activatorEvent || !activeNodeRect || !overlayNodeRect) return transform;
 
-  // Get the initial click position relative to the active node
-  let initialX = 0;
-  let initialY = 0;
+  // Get the initial click position in window coordinates
+  let initialClientX = 0;
+  let initialClientY = 0;
   
   if ("touches" in activatorEvent) {
     const te = activatorEvent as TouchEvent;
     const t = te.touches?.[0] ?? te.changedTouches?.[0];
     if (t) {
-      initialX = t.clientX - activeNodeRect.left;
-      initialY = t.clientY - activeNodeRect.top;
+      initialClientX = t.clientX;
+      initialClientY = t.clientY;
     }
   } else if ("clientX" in activatorEvent && "clientY" in activatorEvent) {
     const e = activatorEvent as MouseEvent;
-    initialX = e.clientX - activeNodeRect.left;
-    initialY = e.clientY - activeNodeRect.top;
+    initialClientX = e.clientX;
+    initialClientY = e.clientY;
   }
 
-  // We want the cursor to be at the center-top of the preview
-  // The transform already accounts for mouse movement, so we just need to adjust
-  // the offset to center the preview horizontally and offset it slightly vertically
-  const centerOffsetX = overlayNodeRect.width / 2 - initialX;
-  const topOffsetY = 15 - initialY; // Small offset above cursor for better visibility
+  // Calculate where the cursor was relative to the original card when dragging started
+  const initialX = initialClientX - activeNodeRect.left;
+  const initialY = initialClientY - activeNodeRect.top;
+
+  // The default transform maintains the grab point at initialX from the left edge.
+  // We want to center the preview, so we need to shift it.
+  //
+  // Current behavior: overlay left edge = activeNodeRect.left + transform.x
+  //                   cursor position relative to overlay = initialX
+  //
+  // Desired behavior: overlay center = cursor position
+  //                   So: overlay left edge = cursor position - overlayNodeRect.width / 2
+  //
+  // The transform.x currently positions the overlay so:
+  //   activeNodeRect.left + transform.x + initialX = cursor position (at drag start)
+  //
+  // We want:
+  //   activeNodeRect.left + transform.x + centerOffsetX + overlayNodeRect.width / 2 = cursor position
+  //
+  // So: transform.x + centerOffsetX + overlayNodeRect.width / 2 = transform.x + initialX
+  //     centerOffsetX = initialX - overlayNodeRect.width / 2
+  
+  const centerOffsetX = initialX - (overlayNodeRect.width / 2);
+  
+  // Small vertical offset above cursor for better visibility
+  const topOffsetY = 15 - initialY;
 
   return {
     ...transform,
