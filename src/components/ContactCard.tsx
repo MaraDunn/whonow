@@ -23,6 +23,7 @@ interface ContactCardProps {
   index: number;
   action?: ActionType;
   onEdit: () => void;
+  onView?: () => void;
   isTrashView?: boolean;
   onDelete?: () => void;
   onRestore?: () => void;
@@ -42,6 +43,7 @@ export function ContactCard({
   index, 
   action, 
   onEdit,
+  onView,
   isTrashView = false,
   onDelete,
   onRestore,
@@ -93,7 +95,12 @@ export function ContactCard({
     if (compact && onToggleExpand) {
       onToggleExpand();
     } else {
-      onEdit();
+      // Use onView if provided, otherwise fall back to onEdit for backwards compatibility
+      if (onView) {
+        onView();
+      } else {
+        onEdit();
+      }
     }
   };
 
@@ -208,32 +215,6 @@ export function ContactCard({
           </div>
         </div>
 
-        {/* Description */}
-        {contact.description && (
-          <p className="mt-3 text-xs text-muted-foreground line-clamp-2 border-t border-border pt-3">
-            {contact.description}
-          </p>
-        )}
-
-        {/* Tags */}
-        {contact.tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {contact.tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className="px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-xs"
-              >
-                {tag}
-              </span>
-            ))}
-            {contact.tags.length > 3 && (
-              <span className="px-2 py-0.5 text-xs text-muted-foreground">
-                +{contact.tags.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-
         {/* Action buttons */}
         {!isTrashView && (
           <div className="mt-3 flex gap-2 border-t border-border pt-3">
@@ -318,7 +299,7 @@ export function ContactCard({
   // Full desktop card
   return (
     <div
-      onClick={isTrashView ? undefined : onEdit}
+      onClick={isTrashView ? undefined : (onView || onEdit)}
       className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col"
       style={{ animationDelay: `${index * 50}ms` }}
     >
@@ -438,23 +419,6 @@ export function ContactCard({
           </div>
           <span className="truncate">{contact.company}</span>
         </div>
-      </div>
-
-      {contact.description && (
-        <p className="mt-4 text-sm text-muted-foreground line-clamp-2">
-          {contact.description}
-        </p>
-      )}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        {contact.tags.map((tag) => (
-          <span
-            key={tag}
-            className="px-2.5 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium"
-          >
-            {tag}
-          </span>
-        ))}
       </div>
 
       {/* Action buttons row - show for non-trash view */}

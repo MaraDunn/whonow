@@ -10,6 +10,7 @@ export interface DraggableContactCardProps {
   index: number;
   action?: ActionType;
   onEdit: () => void;
+  onView?: () => void;
   isTrashView?: boolean;
   onDelete?: () => void;
   onRestore?: () => void;
@@ -29,6 +30,7 @@ export function DraggableContactCard({
   index, 
   action, 
   onEdit,
+  onView,
   isTrashView = false,
   onDelete,
   onRestore,
@@ -60,6 +62,7 @@ export function DraggableContactCard({
           index={index}
           action={action}
           onEdit={onEdit}
+          onView={onView}
           isTrashView={isTrashView}
           onDelete={onDelete}
           onRestore={onRestore}
@@ -90,6 +93,7 @@ export function DraggableContactCard({
         index={index}
         action={action}
         onEdit={onEdit}
+        onView={onView}
         isTrashView={isTrashView}
         onDelete={onDelete}
         onRestore={onRestore}

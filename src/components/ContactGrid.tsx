@@ -12,6 +12,7 @@ interface ContactGridProps {
   searchQuery: string;
   action?: ActionType;
   onEditContact: (contact: Contact) => void;
+  onViewContact?: (contact: Contact) => void;
   isTrashView?: boolean;
   onDeleteContact?: (id: string) => void;
   onRestoreContact?: (id: string) => void;
@@ -28,6 +29,7 @@ export function ContactGrid({
   searchQuery, 
   action, 
   onEditContact,
+  onViewContact,
   isTrashView = false,
   onDeleteContact,
   onRestoreContact,
@@ -105,6 +107,7 @@ export function ContactGrid({
             index={index}
             action={action}
             onEdit={() => onEditContact(contact)}
+            onView={onViewContact ? () => onViewContact(contact) : undefined}
             isTrashView={isTrashView}
             onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
             onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}

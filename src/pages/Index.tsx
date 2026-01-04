@@ -20,6 +20,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
+import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
 import { DragPreview } from "@/components/DragPreview";
@@ -110,6 +111,8 @@ const Index = () => {
   const [dialogMode, setDialogMode] = useState<"quick" | "full">("full");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [viewingContact, setViewingContact] = useState<Contact | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [isProfileMode, setIsProfileMode] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
@@ -388,6 +391,29 @@ const Index = () => {
     setDialogOpen(true);
   };
 
+  const handleViewContact = (contact: Contact) => {
+    setViewingContact(contact);
+    setDetailsDialogOpen(true);
+  };
+
+  const handleDeleteFromDetails = () => {
+    if (viewingContact) {
+      deleteContact(viewingContact.id);
+      setDetailsDialogOpen(false);
+      setViewingContact(null);
+      toast.success(`Deleted ${viewingContact.name}`);
+    }
+  };
+
+  const handleEditFromDetails = () => {
+    if (viewingContact) {
+      setDetailsDialogOpen(false);
+      setEditingContact(viewingContact);
+      setIsProfileMode(false);
+      setDialogOpen(true);
+    }
+  };
+
   const handleImportContacts = (contacts: Omit<Contact, "id">[]) => {
     contacts.forEach((contact) => addContact(contact));
     toast.success(`Imported ${contacts.length} contacts`);
@@ -542,6 +568,7 @@ const Index = () => {
                     searchQuery={searchQuery}
                     action={action}
                     onEditContact={handleEditContact}
+                    onViewContact={handleViewContact}
                     isTrashView={false}
                     onDeleteContact={deleteContact}
                     onRestoreContact={restoreContact}
@@ -559,6 +586,7 @@ const Index = () => {
                   searchQuery={searchQuery}
                   action={showTrash ? undefined : action}
                   onEditContact={handleEditContact}
+                  onViewContact={handleViewContact}
                   isTrashView={showTrash}
                   onDeleteContact={deleteContact}
                   onRestoreContact={restoreContact}
@@ -585,6 +613,19 @@ const Index = () => {
                 defaultFolderId={selectedFolderId}
                 initialMode={dialogMode}
                 hasCompany={!!company}
+              />
+
+              <ContactDetailsDialog
+                open={detailsDialogOpen}
+                onOpenChange={(open) => {
+                  setDetailsDialogOpen(open);
+                  if (!open) setViewingContact(null);
+                }}
+                contact={viewingContact}
+                folder={viewingContact?.folderId ? folders.find(f => f.id === viewingContact.folderId) : undefined}
+                showOwnershipBadge={!!company}
+                onEdit={handleEditFromDetails}
+                onDelete={handleDeleteFromDetails}
               />
 
               <SettingsDialog
