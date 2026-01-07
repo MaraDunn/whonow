@@ -35,6 +35,7 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 1,
     features: [
       "Basic contact management",
+      "Contact import/export",
       "Email support",
     ],
   },
@@ -66,7 +67,6 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
       "Everything in Pro",
       "Up to 25 team members",
       "Shared contact folders",
-      "Team dashboard",
       "Role-based permissions",
       "Slack & Teams integration",
     ],
@@ -81,7 +81,6 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     features: [
       "Everything in Team",
       "Up to 100 team members",
-      "Advanced analytics",
       "Custom branding",
       "API access",
       "Dedicated support",
