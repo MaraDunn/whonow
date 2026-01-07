@@ -35,7 +35,6 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 1,
     features: [
       "Basic contact management",
-      "Unlimited contacts",
       "Email support",
     ],
   },
