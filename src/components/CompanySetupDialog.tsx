@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, Users, ArrowRight, User } from "lucide-react";
+import { Building2, Users, ArrowRight, User, Lock, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { useSubscription } from "@/hooks/useSubscription";
+import { Badge } from "@/components/ui/badge";
 
 interface CompanySetupDialogProps {
   open: boolean;
@@ -29,9 +31,17 @@ export function CompanySetupDialog({
   const [companyName, setCompanyName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { canAccessFeature, createCheckout, tier } = useSubscription();
+  
+  const canCreateOrganization = canAccessFeature("organization_creation");
 
   const handleCreate = async () => {
     if (!companyName.trim()) return;
+    if (!canCreateOrganization) {
+      // Redirect to upgrade
+      await createCheckout("team");
+      return;
+    }
     setIsSubmitting(true);
     await onCreateCompany(companyName.trim());
     setIsSubmitting(false);
@@ -73,6 +83,22 @@ export function CompanySetupDialog({
           </TabsList>
 
           <TabsContent value="create" className="space-y-4 mt-4">
+            {!canCreateOrganization && (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <Lock className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-amber-900 dark:text-amber-100 mb-1">
+                      Organization Creation Requires Team or Business Tier
+                    </h4>
+                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
+                      You're currently on the <Badge variant="outline" className="mx-1">{tier}</Badge> tier. 
+                      Upgrade to Team or Business tier to create an organization and collaborate with your team.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="company-name">Company Name</Label>
               <Input
@@ -80,6 +106,7 @@ export function CompanySetupDialog({
                 placeholder="Acme Inc"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
+                disabled={!canCreateOrganization}
               />
             </div>
             <p className="text-sm text-muted-foreground">
@@ -95,10 +122,15 @@ export function CompanySetupDialog({
                   <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
                   Creating...
                 </span>
-              ) : (
+              ) : canCreateOrganization ? (
                 <span className="flex items-center gap-2">
                   Create Company
                   <ArrowRight className="h-4 w-4" />
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  Upgrade to Create Organization
                 </span>
               )}
             </Button>

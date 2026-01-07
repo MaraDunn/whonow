@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { AdminPdfImport } from "@/components/AdminPdfImport";
+import { OrganizationManagement } from "@/components/OrganizationManagement";
 import {
   Dialog,
   DialogContent,
@@ -53,9 +54,11 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const [newKeyword, setNewKeyword] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
+  const [showCreateOrgDialog, setShowCreateOrgDialog] = useState(false);
+  const [newOrgName, setNewOrgName] = useState("");
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
-  const { profile, company, isAdmin } = useProfile(user?.id);
+  const { profile, company, isAdmin, createCompany } = useProfile(user?.id);
   const { canAccessFeature, createCheckout } = useSubscription();
   
   // Feature access checks
@@ -103,6 +106,16 @@ export function SettingsDialog({
       toast.success("Invite code copied!");
       setTimeout(() => setCopiedCode(false), 2000);
     }
+  };
+
+  const handleCreateOrganization = () => {
+    if (!newOrgName.trim()) {
+      toast.error("Please enter an organization name");
+      return;
+    }
+    createCompany(newOrgName.trim());
+    setNewOrgName("");
+    setShowCreateOrgDialog(false);
   };
 
   const handleChangePassword = async () => {
@@ -186,47 +199,81 @@ export function SettingsDialog({
     }
   };
 
-  // Determine number of tabs based on admin status AND team+ subscription
+  // Determine number of tabs based on subscription and admin status
   const hasTeamFeatures = canAccessFeature("team_features");
+  const canCreateOrg = canAccessFeature("organization_creation");
+  const showOrganizationTab = canCreateOrg; // Show org tab for Team/Business tier
   const showAdminTab = isAdmin && company && hasTeamFeatures;
-  const tabCount = showAdminTab ? 5 : 4;
+  
+  // Calculate tab count: base 4 (general, keywords, account, security) + org tab + admin tab
+  let tabCount = 4;
+  if (showOrganizationTab) tabCount++;
+  if (showAdminTab) tabCount++;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-4xl max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="font-display text-xl">Settings</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className={`grid w-full grid-cols-${tabCount}`} style={{ gridTemplateColumns: `repeat(${tabCount}, minmax(0, 1fr))` }}>
-            <TabsTrigger value="general" className="flex items-center gap-2">
-              <Palette className="h-4 w-4" />
-              <span className="hidden sm:inline">General</span>
-            </TabsTrigger>
-            <TabsTrigger value="keywords" className="flex items-center gap-2">
-              <Tags className="h-4 w-4" />
-              <span className="hidden sm:inline">Keywords</span>
-            </TabsTrigger>
-            <TabsTrigger value="account" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">Account</span>
-            </TabsTrigger>
-            <TabsTrigger value="security" className="flex items-center gap-2">
-              <Lock className="h-4 w-4" />
-              <span className="hidden sm:inline">Security</span>
-            </TabsTrigger>
-            {showAdminTab && (
-              <TabsTrigger value="admin" className="flex items-center gap-2">
-                <Shield className="h-4 w-4" />
-                <span className="hidden sm:inline">Admin</span>
+        <Tabs defaultValue="general" className="flex-1 flex flex-col sm:flex-row overflow-hidden">
+          {/* Sidebar with tabs */}
+          <div className="w-full sm:w-48 border-b sm:border-b-0 sm:border-r bg-muted/30 flex-shrink-0">
+            <TabsList className="flex sm:flex-col h-auto sm:h-full w-full bg-transparent p-2 gap-1">
+              <TabsTrigger 
+                value="general" 
+                className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                <Palette className="h-4 w-4" />
+                <span className="hidden sm:inline">General</span>
               </TabsTrigger>
-            )}
-          </TabsList>
+              <TabsTrigger 
+                value="keywords" 
+                className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                <Tags className="h-4 w-4" />
+                <span className="hidden sm:inline">Keywords</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="account" 
+                className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                <User className="h-4 w-4" />
+                <span className="hidden sm:inline">Account</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="security" 
+                className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                <Lock className="h-4 w-4" />
+                <span className="hidden sm:inline">Security</span>
+              </TabsTrigger>
+              {showOrganizationTab && (
+                <TabsTrigger 
+                  value="organization" 
+                  className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                >
+                  <Building2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Organization</span>
+                </TabsTrigger>
+              )}
+              {showAdminTab && (
+                <TabsTrigger 
+                  value="admin" 
+                  className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                >
+                  <Shield className="h-4 w-4" />
+                  <span className="hidden sm:inline">Admin</span>
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
 
-          <div className="flex-1 overflow-y-auto mt-4">
+          {/* Content area */}
+          <div className="flex-1 overflow-y-auto">
             {/* General Tab */}
-            <TabsContent value="general" className="space-y-6 mt-0">
+            <TabsContent value="general" className="space-y-6 p-6 m-0">
               <div className="space-y-4">
                 <Label className="text-base font-medium">Appearance</Label>
                 <p className="text-sm text-muted-foreground">
@@ -265,7 +312,7 @@ export function SettingsDialog({
             </TabsContent>
 
             {/* Keywords Tab - View only for company members */}
-            <TabsContent value="keywords" className="space-y-4 mt-0">
+            <TabsContent value="keywords" className="space-y-4 p-6 m-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Label className="text-base font-medium">Preset Keywords</Label>
@@ -339,7 +386,7 @@ export function SettingsDialog({
             </TabsContent>
 
             {/* Account Tab */}
-            <TabsContent value="account" className="space-y-6 mt-0">
+            <TabsContent value="account" className="space-y-6 p-6 m-0">
               {/* User Info */}
               <div className="space-y-2">
                 <Label className="text-base font-medium">Profile</Label>
@@ -362,11 +409,76 @@ export function SettingsDialog({
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-sm text-muted-foreground">
-                      You're using the app as an individual. Company features are available when you join or create an organization.
-                    </p>
-                  </div>
+                  <>
+                    <div className="p-3 bg-muted/50 rounded-lg space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        You're using the app as an individual. 
+                        {canAccessFeature("organization_creation") 
+                          ? " Create an organization to collaborate with your team." 
+                          : " Upgrade to Team or Business tier to create an organization."}
+                      </p>
+                      {showCreateOrgDialog ? (
+                        <div className="space-y-3">
+                          <Input
+                            placeholder="Organization name"
+                            value={newOrgName}
+                            onChange={(e) => setNewOrgName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleCreateOrganization();
+                              }
+                            }}
+                          />
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              className="flex-1"
+                              onClick={handleCreateOrganization}
+                              disabled={!newOrgName.trim()}
+                            >
+                              <Building2 className="h-4 w-4 mr-2" />
+                              Create
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                setShowCreateOrgDialog(false);
+                                setNewOrgName("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            if (canAccessFeature("organization_creation")) {
+                              setShowCreateOrgDialog(true);
+                            } else {
+                              createCheckout("team");
+                            }
+                          }}
+                        >
+                          {canAccessFeature("organization_creation") ? (
+                            <>
+                              <Building2 className="h-4 w-4 mr-2" />
+                              Create Organization
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Upgrade to Create Organization
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -386,7 +498,7 @@ export function SettingsDialog({
             </TabsContent>
 
             {/* Security Tab */}
-            <TabsContent value="security" className="space-y-6 mt-0">
+            <TabsContent value="security" className="space-y-6 p-6 m-0">
               {/* Change Password */}
               <div className="space-y-4">
                 <Label className="text-base font-medium">Change Password</Label>
@@ -522,9 +634,16 @@ export function SettingsDialog({
               </div>
             </TabsContent>
 
+            {/* Organization Tab - Visible to Team/Business tier users */}
+            {showOrganizationTab && (
+              <TabsContent value="organization" className="space-y-6 p-6 m-0">
+                <OrganizationManagement />
+              </TabsContent>
+            )}
+
             {/* Admin Tab - Only visible to admins */}
             {showAdminTab && (
-              <TabsContent value="admin" className="space-y-6 mt-0">
+              <TabsContent value="admin" className="space-y-6 p-6 m-0">
                 {/* Invite Code */}
                 <div className="space-y-4">
                   <Label className="text-base font-medium">Invite Members</Label>
@@ -659,7 +778,8 @@ export function SettingsDialog({
           </div>
         </Tabs>
 
-        <div className="flex justify-end pt-4 border-t border-border mt-4">
+        {/* Footer with Done button */}
+        <div className="flex justify-end px-6 py-4 border-t border-border">
           <Button onClick={() => onOpenChange(false)}>
             Done
           </Button>

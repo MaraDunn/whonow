@@ -65,6 +65,7 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 25,
     features: [
       "Everything in Pro",
+      "Create organization",
       "Up to 25 team members",
       "Shared contact folders",
       "Role-based permissions",
@@ -80,6 +81,7 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 100,
     features: [
       "Everything in Team",
+      "Create organization",
       "Up to 100 team members",
       "Custom branding",
       "API access",
@@ -92,6 +94,7 @@ export type FeatureName =
   | "basic_contacts"
   | "client_management"
   | "advanced_search"
+  | "organization_creation"
   | "team_features"
   | "integrations"
   | "advanced_analytics"
@@ -103,6 +106,7 @@ export const FEATURE_ACCESS: Record<FeatureName, SubscriptionTier[]> = {
   basic_contacts: ["starter", "pro", "team", "business"],
   client_management: ["pro", "team", "business"],
   advanced_search: ["pro", "team", "business"],
+  organization_creation: ["team", "business"],
   team_features: ["team", "business"],
   integrations: ["team", "business"],
   advanced_analytics: ["business"],
