@@ -4,8 +4,6 @@ import { Contact } from "@/types/contact";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
-import { useSubscription } from "@/hooks/useSubscription";
-import { STARTER_CONTACT_LIMIT } from "@/types/subscription";
 
 type DbContact = {
   id: string;
@@ -77,8 +75,6 @@ export const useContacts = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
-  const { canAccessFeature } = useSubscription();
-  const hasUnlimitedContacts = canAccessFeature("unlimited_contacts");
 
   // Fetch active contacts (not deleted)
   const { data: contacts = [], isLoading } = useQuery({
@@ -114,11 +110,6 @@ export const useContacts = () => {
 
   const addContact = useMutation({
     mutationFn: async (contact: Omit<Contact, "id"> & { isShared?: boolean }) => {
-      // Check contact limit for starter tier
-      if (!hasUnlimitedContacts && contacts.length >= STARTER_CONTACT_LIMIT) {
-        throw new Error(`You've reached the ${STARTER_CONTACT_LIMIT} contact limit. Upgrade to Pro for unlimited contacts.`);
-      }
-      
       const { isShared, ...contactData } = contact;
       const { data, error } = await supabase
         .from("contacts")
@@ -281,11 +272,6 @@ export const useContacts = () => {
     },
   });
 
-  // Calculate contact limit info
-  const contactLimit = hasUnlimitedContacts ? null : STARTER_CONTACT_LIMIT;
-  const isAtContactLimit = !hasUnlimitedContacts && contacts.length >= STARTER_CONTACT_LIMIT;
-  const contactsRemaining = hasUnlimitedContacts ? null : Math.max(0, STARTER_CONTACT_LIMIT - contacts.length);
-
   return {
     contacts,
     trashedContacts,
@@ -299,10 +285,5 @@ export const useContacts = () => {
     emptyTrash: emptyTrash.mutate,
     updateLastContacted: updateLastContacted.mutate,
     toggleClientStatus: toggleClientStatus.mutate,
-    // Contact limit info
-    contactLimit,
-    isAtContactLimit,
-    contactsRemaining,
-    hasUnlimitedContacts,
   };
 };

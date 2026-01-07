@@ -25,8 +25,6 @@ export interface TierConfig {
   badge?: string;
 }
 
-export const STARTER_CONTACT_LIMIT = 100;
-
 export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
   starter: {
     name: "Starter",
@@ -37,7 +35,7 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 1,
     features: [
       "Basic contact management",
-      `Up to ${STARTER_CONTACT_LIMIT} contacts`,
+      "Unlimited contacts",
       "Email support",
     ],
   },
@@ -50,7 +48,6 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 1,
     features: [
       "Everything in Starter",
-      "Unlimited contacts",
       "Client management",
       "Advanced search & filters",
       "Contact import/export",
@@ -95,7 +92,6 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
 
 export type FeatureName = 
   | "basic_contacts"
-  | "unlimited_contacts"
   | "client_management"
   | "advanced_search"
   | "team_features"
@@ -107,7 +103,6 @@ export type FeatureName =
 
 export const FEATURE_ACCESS: Record<FeatureName, SubscriptionTier[]> = {
   basic_contacts: ["starter", "pro", "team", "business"],
-  unlimited_contacts: ["pro", "team", "business"],
   client_management: ["pro", "team", "business"],
   advanced_search: ["pro", "team", "business"],
   team_features: ["team", "business"],
