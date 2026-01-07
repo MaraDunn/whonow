@@ -68,6 +68,11 @@ interface FolderSidebarProps {
   teamFolders?: FolderType[];
   selectedTeamFolderId?: string | null;
   onSelectTeamFolder?: (folderId: string | null) => void;
+  // Organization folders props
+  organizationFolders?: FolderType[];
+  organizationClientFolders?: FolderType[];
+  organizationTeamFolders?: FolderType[];
+  isAdmin?: boolean;
 }
 
 export function FolderSidebar({
@@ -99,6 +104,10 @@ export function FolderSidebar({
   teamFolders = [],
   selectedTeamFolderId,
   onSelectTeamFolder,
+  organizationFolders = [],
+  organizationClientFolders = [],
+  organizationTeamFolders = [],
+  isAdmin = false,
 }: FolderSidebarProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
@@ -135,12 +144,22 @@ export function FolderSidebar({
   const getExistingNamesForDirectory = (type: DirectoryType): string[] => {
     switch (type) {
       case "clients":
-        return clientFolders.map((f) => f.name);
+        return [...clientFolders, ...organizationClientFolders].map((f) => f.name);
       case "team":
-        return teamFolders.map((f) => f.name);
+        return [...teamFolders, ...organizationTeamFolders].map((f) => f.name);
       default:
-        return folders.map((f) => f.name);
+        return [...folders, ...organizationFolders].map((f) => f.name);
     }
+  };
+
+  // Check if user can edit/delete a folder
+  const canManageFolder = (folder: FolderType): boolean => {
+    // Organization folders can only be managed by admins
+    if (folder.isOrganizationFolder) {
+      return isAdmin;
+    }
+    // Personal folders can be managed by the owner
+    return true;
   };
 
   return (
@@ -285,7 +304,7 @@ export function FolderSidebar({
                   </>
                 )}
 
-                {/* Contact Folder List */}
+                {/* Personal Contact Folders */}
                 {folders.map((folder) => (
                   <SidebarMenuItem key={folder.id} className="group relative">
                     <DroppableFolder
@@ -296,7 +315,7 @@ export function FolderSidebar({
                       collapsed={isCollapsed}
                       tooltip={isCollapsed ? folder.name : undefined}
                     />
-                    {!isCollapsed && (
+                    {!isCollapsed && canManageFolder(folder) && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -324,6 +343,58 @@ export function FolderSidebar({
                     )}
                   </SidebarMenuItem>
                 ))}
+
+                {/* Organization Contact Folders */}
+                {hasCompany && organizationFolders.length > 0 && (
+                  <>
+                    {!isCollapsed && (
+                      <div className="px-2 py-1.5 mt-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                          <Building2 className="h-3 w-3" />
+                          Organization
+                        </p>
+                      </div>
+                    )}
+                    {organizationFolders.map((folder) => (
+                      <SidebarMenuItem key={folder.id} className="group relative">
+                        <DroppableFolder
+                          folder={folder}
+                          isSelected={selectedFolderId === folder.id}
+                          contactCount={contactCountByFolder[folder.id] || 0}
+                          onClick={() => onSelectFolder(folder.id)}
+                          collapsed={isCollapsed}
+                          tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
+                        />
+                        {!isCollapsed && canManageFolder(folder) && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEditFolder(folder)}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Rename
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => onDeleteFolder(folder.id)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </SidebarMenuItem>
+                    ))}
+                  </>
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -401,7 +472,7 @@ export function FolderSidebar({
                       )}
                     </SidebarMenuItem>
 
-                    {/* Client Folders */}
+                    {/* Personal Client Folders */}
                     {hasClientAccess && clientFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <SidebarMenuButton
@@ -421,7 +492,7 @@ export function FolderSidebar({
                             <span className="flex-1 text-left truncate">{folder.name}</span>
                           )}
                         </SidebarMenuButton>
-                        {!isCollapsed && (
+                        {!isCollapsed && canManageFolder(folder) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
@@ -449,6 +520,67 @@ export function FolderSidebar({
                         )}
                       </SidebarMenuItem>
                     ))}
+
+                    {/* Organization Client Folders */}
+                    {hasClientAccess && hasCompany && organizationClientFolders.length > 0 && (
+                      <>
+                        {!isCollapsed && (
+                          <div className="px-2 py-1.5 mt-2">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                              <Building2 className="h-3 w-3" />
+                              Organization
+                            </p>
+                          </div>
+                        )}
+                        {organizationClientFolders.map((folder) => (
+                          <SidebarMenuItem key={folder.id} className="group relative">
+                            <SidebarMenuButton
+                              onClick={() => {
+                                onSelectClientDirectory();
+                                onSelectClientFolder?.(folder.id);
+                              }}
+                              isActive={showClientDirectory && selectedClientFolderId === folder.id}
+                              tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
+                              className={isCollapsed ? "w-full" : "w-full pl-6"}
+                            >
+                              <div
+                                className={isCollapsed ? "h-4 w-4 rounded-sm shrink-0" : "h-3 w-3 rounded-sm shrink-0"}
+                                style={{ backgroundColor: folder.color || "#6B7280" }}
+                              />
+                              {!isCollapsed && (
+                                <span className="flex-1 text-left truncate">{folder.name}</span>
+                              )}
+                            </SidebarMenuButton>
+                            {!isCollapsed && canManageFolder(folder) && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <MoreHorizontal className="h-3.5 w-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleEditFolder(folder)}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Rename
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => onDeleteFolder(folder.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </SidebarMenuItem>
+                        ))}
+                      </>
+                    )}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -504,7 +636,7 @@ export function FolderSidebar({
                       </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Team Folders */}
+                    {/* Personal Team Folders */}
                     {teamFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <SidebarMenuButton
@@ -524,7 +656,7 @@ export function FolderSidebar({
                             <span className="flex-1 text-left truncate">{folder.name}</span>
                           )}
                         </SidebarMenuButton>
-                        {!isCollapsed && (
+                        {!isCollapsed && canManageFolder(folder) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
@@ -552,6 +684,67 @@ export function FolderSidebar({
                         )}
                       </SidebarMenuItem>
                     ))}
+
+                    {/* Organization Team Folders */}
+                    {hasCompany && organizationTeamFolders.length > 0 && (
+                      <>
+                        {!isCollapsed && (
+                          <div className="px-2 py-1.5 mt-2">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                              <Building2 className="h-3 w-3" />
+                              Organization
+                            </p>
+                          </div>
+                        )}
+                        {organizationTeamFolders.map((folder) => (
+                          <SidebarMenuItem key={folder.id} className="group relative">
+                            <SidebarMenuButton
+                              onClick={() => {
+                                onSelectDirectory();
+                                onSelectTeamFolder?.(folder.id);
+                              }}
+                              isActive={showDirectory && selectedTeamFolderId === folder.id}
+                              tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
+                              className={isCollapsed ? "w-full" : "w-full pl-6"}
+                            >
+                              <div
+                                className={isCollapsed ? "h-4 w-4 rounded-sm shrink-0" : "h-3 w-3 rounded-sm shrink-0"}
+                                style={{ backgroundColor: folder.color || "#6B7280" }}
+                              />
+                              {!isCollapsed && (
+                                <span className="flex-1 text-left truncate">{folder.name}</span>
+                              )}
+                            </SidebarMenuButton>
+                            {!isCollapsed && canManageFolder(folder) && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <MoreHorizontal className="h-3.5 w-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleEditFolder(folder)}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Rename
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => onDeleteFolder(folder.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </SidebarMenuItem>
+                        ))}
+                      </>
+                    )}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -594,6 +787,8 @@ export function FolderSidebar({
           folder={editingFolder}
           directoryType={activeDirectoryType}
           existingNames={getExistingNamesForDirectory(activeDirectoryType)}
+          isAdmin={isAdmin}
+          hasCompany={hasCompany}
         />
       </Sidebar>
 

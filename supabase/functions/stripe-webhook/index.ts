@@ -122,6 +122,16 @@ serve(async (req) => {
         const seatsLimit = SEAT_LIMITS[tier] || 1;
         const status = subscription.status === "active" ? "active" : subscription.status;
 
+        // Validate subscription has date fields
+        if (!subscription.current_period_end || !subscription.current_period_start) {
+          logStep("Subscription missing date fields, skipping sync", { 
+            subscriptionId: subscription.id,
+            hasPeriodEnd: !!subscription.current_period_end,
+            hasPeriodStart: !!subscription.current_period_start 
+          });
+          break;
+        }
+
         // Upsert subscription
         const { error: upsertError } = await supabase
           .from("subscriptions")

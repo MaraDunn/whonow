@@ -6,4 +6,7 @@ export interface Folder {
   color: string;
   createdAt: string;
   directoryType: DirectoryType;
+  isOrganizationFolder?: boolean;
+  ownerId?: string | null;
+  companyId?: string | null;
 }

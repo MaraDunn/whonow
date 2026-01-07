@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Subscription Check</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Subscription Debug Tool</h1>
+    <button onclick="checkSubscription()">Check Subscription</button>
+    <button onclick="checkStripeData()">Check Raw Stripe Data</button>
+    <button onclick="checkDatabase()">Check Database</button>
+    <pre id="output"></pre>
+
+    <script>
+        // Replace with your Supabase URL and anon key
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        function output(text) {
+            document.getElementById('output').textContent = text;
+        }
+
+        async function checkSubscription() {
+            output('Checking subscription...');
+            try {
+                const { data: session } = await supabase.auth.getSession();
+                if (!session.session) {
+                    output('ERROR: Not logged in. Please log in first.');
+                    return;
+                }
+
+                const token = session.session.access_token;
+                
+                const response = await supabase.functions.invoke('check-subscription', {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+
+                output(JSON.stringify({
+                    data: response.data,
+                    error: response.error,
+                    timestamp: new Date().toISOString()
+                }, null, 2));
+            } catch (error) {
+                output('ERROR: ' + error.message + '\n\n' + JSON.stringify(error, null, 2));
+            }
+        }
+
+        async function checkDatabase() {
+            output('Checking database...');
+            try {
+                const { data: session } = await supabase.auth.getSession();
+                if (!session.session) {
+                    output('ERROR: Not logged in');
+                    return;
+                }
+
+                const userId = session.session.user.id;
+                
+                const { data, error } = await supabase
+                    .from('subscriptions')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .single();
+
+                if (error) {
+                    output('Database Error: ' + error.message + '\n\nDetails: ' + JSON.stringify(error, null, 2));
+                } else {
+                    output('Database Record:\n' + JSON.stringify(data, null, 2));
+                }
+            } catch (error) {
+                output('ERROR: ' + error.message);
+            }
+        }
+
+        async function checkStripeData() {
+            output('Fetching Stripe customer data via check-subscription...');
+            try {
+                const { data: session } = await supabase.auth.getSession();
+                if (!session.session) {
+                    output('ERROR: Not logged in');
+                    return;
+                }
+
+                const token = session.session.access_token;
+                const userEmail = session.session.user.email;
+                
+                output(`User Email: ${userEmail}\n\nCalling check-subscription...`);
+                
+                const response = await supabase.functions.invoke('check-subscription', {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+
+                output(`Response:\n${JSON.stringify(response, null, 2)}\n\nNext Steps:\n1. Check Stripe Dashboard for this email\n2. Verify subscription status is "Active"\n3. Copy the Price ID from the subscription`);
+            } catch (error) {
+                output('ERROR: ' + error.message);
+            }
+        }
+
+        // Auto-check on load if logged in
+        window.addEventListener('load', async () => {
+            const { data: session } = await supabase.auth.getSession();
+            if (session.session) {
+                output('Logged in as: ' + session.session.user.email + '\n\nClick buttons above to debug subscription.');
+            } else {
+                output('Not logged in. Please log in to your app first, then return to this page.');
+            }
+        });
+    </script>
+</body>
+</html>
+

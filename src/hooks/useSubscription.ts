@@ -43,7 +43,7 @@ export const useSubscription = () => {
   };
 
   const checkSubscription = useCallback(async () => {
-    if (!session?.access_token) {
+    if (!session?.access_token || !user) {
       setSubscription({
         subscribed: false,
         tier: "starter",
@@ -56,6 +56,28 @@ export const useSubscription = () => {
     }
 
     try {
+      // First, try reading directly from database (more reliable)
+      const { data: dbData, error: dbError } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!dbError && dbData) {
+        // We have subscription data from database
+        const isSubscribed = dbData.status === "active" && dbData.tier !== "starter";
+        setSubscription({
+          subscribed: isSubscribed,
+          tier: normalizeTier(dbData.tier, isSubscribed),
+          seatsLimit: dbData.employee_seats_limit ?? 1,
+          seatsUsed: dbData.employee_seats_used ?? 0,
+          subscriptionEnd: dbData.current_period_end ?? null,
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Fallback: Try Edge Function if database doesn't have subscription
       const { data, error } = await supabase.functions.invoke("check-subscription", {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -114,7 +136,7 @@ export const useSubscription = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [session?.access_token]);
+  }, [session?.access_token, user]);
 
   useEffect(() => {
     checkSubscription();

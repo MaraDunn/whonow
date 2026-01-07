@@ -113,13 +113,39 @@ serve(async (req) => {
     }
 
     const subscription = subscriptions.data[0];
+    
+    // Validate subscription has required date fields
+    if (!subscription.current_period_end || !subscription.current_period_start) {
+      logStep("Subscription missing date fields", { 
+        hasPeriodEnd: !!subscription.current_period_end,
+        hasPeriodStart: !!subscription.current_period_start 
+      });
+      return new Response(JSON.stringify({ 
+        subscribed: false, 
+        tier: "starter",
+        seats_limit: 1,
+        seats_used: 0,
+        subscription_end: null,
+        error: "Subscription is being processed, please try again in a moment"
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+    
     const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
+    const subscriptionStart = new Date(subscription.current_period_start * 1000).toISOString();
     logStep("Active subscription found", { subscriptionId: subscription.id });
 
-    const priceId = subscription.items.data[0].price.id as string | undefined;
+    const priceId = subscription.items.data[0]?.price?.id as string | undefined;
     const tier = priceToTier(priceId);
     const seatsLimit = SEAT_LIMITS[tier] || 1;
-    logStep("Determined subscription tier", { tier, seatsLimit });
+    logStep("Determined subscription tier", { 
+      tier, 
+      seatsLimit, 
+      priceId: priceId || 'undefined',
+      subscriptionStatus: subscription.status 
+    });
 
     // Sync to database
     const { error: upsertError } = await supabaseClient
@@ -130,7 +156,7 @@ serve(async (req) => {
         stripe_customer_id: customerId,
         stripe_subscription_id: subscription.id,
         status: "active",
-        current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+        current_period_start: subscriptionStart,
         current_period_end: subscriptionEnd,
         employee_seats_limit: seatsLimit,
         employee_seats_used: 0, // Will be calculated separately

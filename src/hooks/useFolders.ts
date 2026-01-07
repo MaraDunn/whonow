@@ -15,6 +15,7 @@ type DbFolder = {
   owner_id: string | null;
   company_id: string | null;
   directory_type: string;
+  is_organization_folder: boolean | null;
 };
 
 const mapDbToFolder = (db: DbFolder): Folder => ({
@@ -23,6 +24,9 @@ const mapDbToFolder = (db: DbFolder): Folder => ({
   color: db.color || "#6366f1",
   createdAt: db.created_at,
   directoryType: (db.directory_type as DirectoryType) || "contacts",
+  isOrganizationFolder: db.is_organization_folder || false,
+  ownerId: db.owner_id,
+  companyId: db.company_id,
 });
 
 const mapFolderToDb = (
@@ -32,9 +36,10 @@ const mapFolderToDb = (
 ) => ({
   name: folder.name,
   color: folder.color || "#6366f1",
-  owner_id: userId || null,
+  owner_id: folder.isOrganizationFolder ? null : (userId || null),
   company_id: companyId || null,
   directory_type: folder.directoryType || "contacts",
+  is_organization_folder: folder.isOrganizationFolder || false,
 });
 
 export const useFolders = () => {
@@ -56,19 +61,34 @@ export const useFolders = () => {
     enabled: !!user,
   });
 
-  // Filter folders by directory type
+  // Filter folders by directory type and organization status
   const folders = useMemo(
-    () => allFolders.filter((f) => f.directoryType === "contacts"),
+    () => allFolders.filter((f) => f.directoryType === "contacts" && !f.isOrganizationFolder),
+    [allFolders]
+  );
+
+  const organizationFolders = useMemo(
+    () => allFolders.filter((f) => f.directoryType === "contacts" && f.isOrganizationFolder),
     [allFolders]
   );
 
   const clientFolders = useMemo(
-    () => allFolders.filter((f) => f.directoryType === "clients"),
+    () => allFolders.filter((f) => f.directoryType === "clients" && !f.isOrganizationFolder),
+    [allFolders]
+  );
+
+  const organizationClientFolders = useMemo(
+    () => allFolders.filter((f) => f.directoryType === "clients" && f.isOrganizationFolder),
     [allFolders]
   );
 
   const teamFolders = useMemo(
-    () => allFolders.filter((f) => f.directoryType === "team"),
+    () => allFolders.filter((f) => f.directoryType === "team" && !f.isOrganizationFolder),
+    [allFolders]
+  );
+
+  const organizationTeamFolders = useMemo(
+    () => allFolders.filter((f) => f.directoryType === "team" && f.isOrganizationFolder),
     [allFolders]
   );
 
@@ -158,8 +178,11 @@ export const useFolders = () => {
 
   return {
     folders,
+    organizationFolders,
     clientFolders,
+    organizationClientFolders,
     teamFolders,
+    organizationTeamFolders,
     allFolders,
     isLoading,
     addFolder: addFolder.mutate,

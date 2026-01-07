@@ -105,7 +105,7 @@ const Index = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, companyMembers, company } = useProfile(user?.id);
+  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, companyMembers, company, isAdmin } = useProfile(user?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"quick" | "full">("full");
@@ -138,7 +138,17 @@ const Index = () => {
     updateLastContacted,
     toggleClientStatus,
   } = useContacts();
-  const { folders, clientFolders, teamFolders, addFolder, updateFolder, deleteFolder } = useFolders();
+  const { 
+    folders, 
+    organizationFolders, 
+    clientFolders, 
+    organizationClientFolders, 
+    teamFolders, 
+    organizationTeamFolders, 
+    addFolder, 
+    updateFolder, 
+    deleteFolder 
+  } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
 
   // Handle OAuth callback redirects (e.g., from Slack)
@@ -435,6 +445,7 @@ const Index = () => {
           {/* Folder Sidebar */}
           <FolderSidebar
             folders={folders}
+            organizationFolders={organizationFolders}
             selectedFolderId={selectedFolderId}
             onSelectFolder={handleSelectFolder}
             onAddFolder={addFolder}
@@ -457,11 +468,14 @@ const Index = () => {
             onSelectClientDirectory={handleSelectClientDirectory}
             clientDirectoryCount={clientCount}
             clientFolders={clientFolders}
+            organizationClientFolders={organizationClientFolders}
             selectedClientFolderId={selectedClientFolderId}
             onSelectClientFolder={setSelectedClientFolderId}
             teamFolders={teamFolders}
+            organizationTeamFolders={organizationTeamFolders}
             selectedTeamFolderId={selectedTeamFolderId}
             onSelectTeamFolder={setSelectedTeamFolderId}
+            isAdmin={isAdmin}
           />
 
           {/* Main Content */}

@@ -1,0 +1,200 @@
+/**
+ * Browser Console Version - Add 100 Test Contacts
+ * 
+ * Instructions:
+ * 1. Sign in to your app at http://localhost:8080
+ * 2. Open browser console (F12 → Console tab)
+ * 3. Copy and paste this entire file into the console
+ * 4. Press Enter
+ */
+
+(async function() {
+  // Get Supabase client - try to use the one from the app, or create a new one
+  let supabase;
+  try {
+    // Try to get from window if available
+    if (window.supabase) {
+      supabase = window.supabase;
+    } else {
+      // Create client using environment variables from the app
+      const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL || 'https://yinicwvgwdjlkwjegrun.supabase.co';
+      const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_nd05Lzm_bfT5ZCMTjkVPBQ_WBqO8dx6';
+      const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+      supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+  } catch (e) {
+    // Fallback: use hardcoded values (update these if needed)
+    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+    supabase = createClient(
+      'https://yinicwvgwdjlkwjegrun.supabase.co',
+      'sb_publishable_nd05Lzm_bfT5ZCMTjkVPBQ_WBqO8dx6'
+    );
+  }
+  
+  // Check authentication
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  
+  if (sessionError || !session) {
+    console.error('❌ Not authenticated. Please sign in first.');
+    return;
+  }
+
+  const userId = session.user.id;
+  console.log(`✅ Authenticated as: ${session.user.email}`);
+  console.log(`📝 Generating 100 contacts for user: ${userId}\n`);
+
+  // Name lists
+  const firstNames = [
+    'James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer', 'Michael', 'Linda', 'William', 'Elizabeth',
+    'David', 'Barbara', 'Richard', 'Susan', 'Joseph', 'Jessica', 'Thomas', 'Sarah', 'Charles', 'Karen',
+    'Christopher', 'Nancy', 'Daniel', 'Lisa', 'Matthew', 'Betty', 'Anthony', 'Margaret', 'Mark', 'Sandra',
+    'Donald', 'Ashley', 'Steven', 'Kimberly', 'Paul', 'Emily', 'Andrew', 'Donna', 'Joshua', 'Michelle',
+    'Kenneth', 'Dorothy', 'Kevin', 'Carol', 'Brian', 'Amanda', 'George', 'Melissa', 'Timothy', 'Deborah',
+    'Ronald', 'Stephanie', 'Edward', 'Rebecca', 'Jason', 'Sharon', 'Jeffrey', 'Laura', 'Ryan', 'Cynthia',
+    'Jacob', 'Kathleen', 'Gary', 'Amy', 'Nicholas', 'Angela', 'Eric', 'Shirley', 'Jonathan', 'Anna',
+    'Stephen', 'Brenda', 'Larry', 'Pamela', 'Justin', 'Emma', 'Scott', 'Nicole', 'Brandon', 'Helen',
+    'Benjamin', 'Samantha', 'Samuel', 'Katherine', 'Raymond', 'Christine', 'Gregory', 'Debra', 'Frank', 'Rachel',
+    'Alexander', 'Carolyn', 'Patrick', 'Janet', 'Jack', 'Catherine', 'Dennis', 'Maria', 'Jerry', 'Heather'
+  ];
+
+  const lastNames = [
+    'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez',
+    'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin',
+    'Lee', 'Perez', 'Thompson', 'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson',
+    'Walker', 'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores',
+    'Green', 'Adams', 'Nelson', 'Baker', 'Hall', 'Rivera', 'Campbell', 'Mitchell', 'Carter', 'Roberts',
+    'Gomez', 'Phillips', 'Evans', 'Turner', 'Diaz', 'Parker', 'Cruz', 'Edwards', 'Collins', 'Reyes',
+    'Stewart', 'Morris', 'Morales', 'Murphy', 'Cook', 'Rogers', 'Gutierrez', 'Ortiz', 'Morgan', 'Cooper',
+    'Peterson', 'Bailey', 'Reed', 'Kelly', 'Howard', 'Ramos', 'Kim', 'Cox', 'Ward', 'Richardson',
+    'Watson', 'Brooks', 'Chavez', 'Wood', 'James', 'Bennett', 'Gray', 'Mendoza', 'Ruiz', 'Hughes',
+    'Price', 'Alvarez', 'Castillo', 'Sanders', 'Patel', 'Myers', 'Long', 'Ross', 'Foster', 'Jimenez'
+  ];
+
+  const companies = [
+    'TechCorp Solutions', 'CloudBase Inc', 'DataSync Technologies', 'ByteForge Systems', 'QuantumSoft Labs',
+    'FinancePlus Holdings', 'Capital Partners Group', 'Apex Investments LLC', 'Sterling Bank & Trust', 'HealthTech Medical',
+    'MedCore Systems', 'Wellness Labs Inc', 'BioGenix Research', 'DesignLab Creative', 'MediaHub Productions',
+    'Creative Studios Agency', 'BrandWorks Marketing', 'Legal Partners LLP', 'Consulting Group International', 'HR Solutions Corp',
+    'Logistics Pro Services', 'Global Trade Enterprises', 'Precision Manufacturing', 'EcoGreen Industries', 'NextGen Robotics'
+  ];
+
+  const roles = [
+    'Software Engineer', 'Product Manager', 'Marketing Director', 'Sales Manager', 'HR Manager',
+    'CEO', 'CTO', 'CFO', 'VP of Engineering', 'VP of Sales', 'Design Director', 'Operations Manager',
+    'Business Analyst', 'Data Scientist', 'UX Designer', 'Account Executive', 'Customer Success Manager',
+    'Financial Analyst', 'HR Business Partner', 'Legal Counsel', 'Project Manager', 'Content Strategist'
+  ];
+
+  const departments = ['Engineering', 'Marketing', 'Sales', 'Finance', 'HR', 'Design', 'Product', 'Operations', 'Legal', 'Customer Success'];
+
+  function randomElement(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function randomPhone() {
+    const area = Math.floor(Math.random() * 900) + 100;
+    const prefix = Math.floor(Math.random() * 900) + 100;
+    const line = Math.floor(Math.random() * 9000) + 1000;
+    return `(${area}) ${prefix}-${line}`;
+  }
+
+  function generateDescription(firstName, role, company, department) {
+    const templates = [
+      `${firstName} is a ${role} at ${company}, bringing expertise in ${department.toLowerCase()} strategy and execution.`,
+      `Experienced ${role} with ${Math.floor(Math.random() * 15) + 2}+ years in ${department.toLowerCase()}. Currently leading initiatives at ${company}.`,
+      `${role} specializing in ${department.toLowerCase()} operations. ${firstName} drives results through innovative approaches at ${company}.`,
+      `Dynamic ${role} at ${company}. ${firstName} focuses on ${department.toLowerCase()} excellence and team collaboration.`,
+      `${firstName} leads ${department.toLowerCase()} efforts at ${company} as ${role}. Known for strategic thinking and execution.`,
+    ];
+    return randomElement(templates);
+  }
+
+  // Get user's profile to get company_id
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('company_id')
+    .eq('id', userId)
+    .single();
+
+  const companyId = profile?.company_id || null;
+
+  // Get existing folders for the user
+  const { data: folders } = await supabase
+    .from('folders')
+    .select('id, name')
+    .eq('owner_id', userId);
+
+  const folderIds = folders?.map(f => f.id) || [];
+  console.log(`📁 Found ${folderIds.length} folders\n`);
+
+  // Generate 100 contacts
+  const contacts = [];
+  for (let i = 0; i < 100; i++) {
+    const firstName = randomElement(firstNames);
+    const lastName = randomElement(lastNames);
+    const name = `${firstName} ${lastName}`;
+    
+    const company = randomElement(companies);
+    const department = randomElement(departments);
+    const role = randomElement(roles);
+    
+    const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@${company.toLowerCase().replace(/\s+/g, '')}.com`;
+    const phone = randomPhone();
+    
+    // Build tags
+    const tags = [department.toLowerCase()];
+    if (Math.random() > 0.7) tags.push('priority');
+    if (Math.random() > 0.6) tags.push('client');
+    
+    const description = generateDescription(firstName, role, company, department);
+    
+    // Assign to folder (30% chance) or leave unassigned
+    const folderId = folderIds.length > 0 && Math.random() > 0.7 
+      ? randomElement(folderIds) 
+      : null;
+
+    contacts.push({
+      name,
+      email,
+      phone,
+      company,
+      role,
+      description,
+      tags,
+      folder_id: folderId,
+      owner_id: userId,
+      company_id: companyId,
+      is_shared: false, // Personal contacts
+    });
+  }
+
+  console.log(`📦 Inserting ${contacts.length} contacts in batches...\n`);
+
+  // Insert in batches of 50
+  const batchSize = 50;
+  let inserted = 0;
+  
+  for (let i = 0; i < contacts.length; i += batchSize) {
+    const batch = contacts.slice(i, i + batchSize);
+    const { data, error } = await supabase.from('contacts').insert(batch).select('id');
+    
+    if (error) {
+      console.error(`❌ Batch ${Math.floor(i / batchSize) + 1} error:`, error);
+      throw error;
+    }
+    
+    inserted += batch.length;
+    console.log(`✅ Inserted ${inserted}/${contacts.length} contacts`);
+  }
+
+  console.log(`\n🎉 Successfully created ${inserted} contacts!`);
+  console.log(`\n📊 Summary:`);
+  console.log(`   - Contacts created: ${inserted}`);
+  console.log(`   - Assigned to folders: ${contacts.filter(c => c.folder_id).length}`);
+  console.log(`   - Personal contacts (not shared): ${inserted}`);
+  
+  // Refresh the page to see new contacts
+  console.log('\n🔄 Refreshing page to show new contacts...');
+  setTimeout(() => window.location.reload(), 1000);
+})();
+

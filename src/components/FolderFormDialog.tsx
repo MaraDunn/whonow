@@ -4,11 +4,20 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Folder, DirectoryType } from "@/types/folder";
+import { Building2, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const PRESET_COLORS = [
   "#6366f1", // indigo
@@ -30,6 +39,8 @@ interface FolderFormDialogProps {
   folder?: Folder | null;
   directoryType?: DirectoryType;
   existingNames?: string[];
+  isAdmin?: boolean;
+  hasCompany?: boolean;
 }
 
 export function FolderFormDialog({ 
@@ -39,10 +50,13 @@ export function FolderFormDialog({
   folder,
   directoryType = "contacts",
   existingNames = [],
+  isAdmin = false,
+  hasCompany = false,
 }: FolderFormDialogProps) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(PRESET_COLORS[0]);
   const [error, setError] = useState<string | null>(null);
+  const [isOrganizationFolder, setIsOrganizationFolder] = useState(false);
 
   const isEditing = !!folder;
 
@@ -50,9 +64,11 @@ export function FolderFormDialog({
     if (folder) {
       setName(folder.name);
       setColor(folder.color);
+      setIsOrganizationFolder(folder.isOrganizationFolder || false);
     } else {
       setName("");
       setColor(PRESET_COLORS[0]);
+      setIsOrganizationFolder(false);
     }
     setError(null);
   }, [folder, open]);
@@ -95,6 +111,7 @@ export function FolderFormDialog({
       name: name.trim(), 
       color,
       directoryType: folder?.directoryType || directoryType,
+      isOrganizationFolder: isOrganizationFolder,
     });
     onOpenChange(false);
   };
@@ -117,6 +134,11 @@ export function FolderFormDialog({
           <DialogTitle className="font-display text-xl">
             {getTitle()}
           </DialogTitle>
+          {isAdmin && hasCompany && (
+            <DialogDescription>
+              Create a {isOrganizationFolder ? "shared organization" : "personal"} folder
+            </DialogDescription>
+          )}
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
@@ -134,6 +156,41 @@ export function FolderFormDialog({
               <p className="text-sm text-destructive">{error}</p>
             )}
           </div>
+
+          {/* Organization Folder Toggle - Only show for admins with company */}
+          {isAdmin && hasCompany && (
+            <div className="space-y-2 pb-2 border-b">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="organization-folder"
+                  checked={isOrganizationFolder}
+                  onCheckedChange={(checked) => setIsOrganizationFolder(checked === true)}
+                />
+                <Label 
+                  htmlFor="organization-folder" 
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex items-center gap-2"
+                >
+                  <Building2 className="h-4 w-4" />
+                  Organization Folder
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Organization folders are visible to all members of your company. Only admins can create, edit, or delete organization folders.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+              </div>
+              {isOrganizationFolder && (
+                <p className="text-xs text-muted-foreground pl-6">
+                  This folder will be shared with all members of your organization
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Color</Label>
