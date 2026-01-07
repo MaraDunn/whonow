@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Check, Camera, Loader2, Sparkles, ChevronDown, ChevronUp, Building2, UserCircle } from "lucide-react";
+import { X, Check, Camera, Loader2, Zap, ChevronDown, ChevronUp, Building2, UserCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,9 +29,9 @@ import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { generateAutoKeywords } from "@/utils/autoKeywords";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatName, formatPhoneNumber } from "@/utils/formatContact";
+import { parseContactText } from "@/utils/contactTextParser";
 
 // Moved outside to prevent re-creation on every render (which causes input focus loss)
 interface CollapsibleSectionProps {
@@ -82,7 +82,6 @@ export function ContactFormDialog({
 }: ContactFormDialogProps) {
   const [mode, setMode] = useState<"quick" | "full">(initialMode);
   const [quickInput, setQuickInput] = useState("");
-  const [parsing, setParsing] = useState(false);
   
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -197,42 +196,32 @@ export function ContactFormDialog({
     }
   };
 
-  const handleQuickParse = async () => {
+  const handleQuickParse = () => {
     if (!quickInput.trim()) {
       toast.error("Please enter some contact information");
       return;
     }
 
-    setParsing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("parse-contact-input", {
-        body: { input: quickInput }
-      });
-
-      if (error) throw error;
-
-      if (data?.parsed) {
-        const parsed = data.parsed;
-        // Apply formatting (backend already formats, but ensure consistency)
-        setName(formatName(parsed.name || ""));
-        setEmail(parsed.email || "");
-        setPhone(formatPhoneNumber(parsed.phone || ""));
-        setCompany(parsed.company || "");
-        setRole(parsed.role || "");
-        setDescription(parsed.description || "");
-        
-        if (parsed.suggestedKeywords?.length > 0) {
-          setAutoTags(parsed.suggestedKeywords);
-        }
-        
-        setMode("full");
-        toast.success("Contact info parsed! Review and save.");
+      const parsed = parseContactText(quickInput);
+      
+      // Apply parsed data to form fields
+      setName(parsed.name || "");
+      setEmail(parsed.email || "");
+      setPhone(parsed.phone || "");
+      setCompany(parsed.company || "");
+      setRole(parsed.role || "");
+      setDescription(parsed.description || "");
+      
+      if (parsed.suggestedKeywords?.length > 0) {
+        setAutoTags(parsed.suggestedKeywords);
       }
+      
+      setMode("full");
+      toast.success("Contact info extracted! Review and save.");
     } catch (error) {
       console.error("Parse error:", error);
-      toast.error("Failed to parse contact info. Try entering details manually.");
-    } finally {
-      setParsing(false);
+      toast.error("Failed to extract contact info. Try entering details manually.");
     }
   };
 
@@ -285,7 +274,7 @@ export function ContactFormDialog({
                 onClick={() => setMode("quick")}
                 className={mode === "quick" ? "gradient-hero text-primary-foreground" : ""}
               >
-                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                <Zap className="h-3.5 w-3.5 mr-1.5" />
                 Quick Add
               </Button>
               <Button
@@ -314,26 +303,17 @@ export function ContactFormDialog({
                   className="resize-none"
                 />
                 <p className="text-xs text-muted-foreground">
-                  AI will extract name, email, phone, company, role, and keywords automatically.
+                  Smart parse will extract name, email, phone, company, role, and keywords automatically.
                 </p>
               </div>
               <Button
                 type="button"
                 onClick={handleQuickParse}
-                disabled={parsing || !quickInput.trim()}
+                disabled={!quickInput.trim()}
                 className="w-full gradient-hero text-primary-foreground"
               >
-                {parsing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Parsing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Parse with AI
-                  </>
-                )}
+                <Zap className="h-4 w-4 mr-2" />
+                Smart Parse
               </Button>
             </div>
           )}
@@ -495,7 +475,7 @@ export function ContactFormDialog({
                 {/* Auto-generated keywords */}
                 {autoTags.length > 0 && (
                   <div className="space-y-1.5">
-                    <span className="text-xs text-muted-foreground">AI suggested:</span>
+                    <span className="text-xs text-muted-foreground">Suggested keywords:</span>
                     <div className="flex flex-wrap gap-1.5">
                       {autoTags.map((tag) => (
                         <Badge
