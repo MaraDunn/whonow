@@ -14,6 +14,13 @@ export interface Contact {
   lastContactedAt?: string;
   isClient?: boolean;
   createdAt?: string; // Timestamp when contact was added (hidden from UI, used for time-based searches)
+  address?: string; // Full address string
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  latitude?: number; // For location-based searches
+  longitude?: number; // For location-based searches
 }
 
 export type ContactOwnershipFilter = "all" | "personal" | "shared";

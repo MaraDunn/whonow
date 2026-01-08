@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Check, Camera, Loader2, Zap, ChevronDown, ChevronUp, Building2, UserCircle } from "lucide-react";
+import { X, Check, Camera, Loader2, Zap, ChevronDown, ChevronUp, Building2, UserCircle, MapPin, Navigation } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -96,9 +96,20 @@ export function ContactFormDialog({
   const [folderId, setFolderId] = useState<string | undefined>(undefined);
   const [isShared, setIsShared] = useState(false);
   
+  // Address fields
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [country, setCountry] = useState("");
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  
   const [contactOpen, setContactOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
   const [keywordsOpen, setKeywordsOpen] = useState(false);
+  const [addressOpen, setAddressOpen] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadAvatar, uploading } = useAvatarUpload();
@@ -126,6 +137,13 @@ export function ContactFormDialog({
       setAvatar(contact.avatar);
       setFolderId(contact.folderId);
       setIsShared(contact.isShared || false);
+      setAddress(contact.address || "");
+      setCity(contact.city || "");
+      setState(contact.state || "");
+      setZipCode(contact.zipCode || "");
+      setCountry(contact.country || "");
+      setLatitude(contact.latitude);
+      setLongitude(contact.longitude);
     } else {
       resetForm();
       setMode(initialMode);
@@ -147,9 +165,17 @@ export function ContactFormDialog({
     setAvatar(undefined);
     setFolderId(undefined);
     setIsShared(false);
+    setAddress("");
+    setCity("");
+    setState("");
+    setZipCode("");
+    setCountry("");
+    setLatitude(undefined);
+    setLongitude(undefined);
     setContactOpen(false);
     setWorkOpen(false);
     setKeywordsOpen(false);
+    setAddressOpen(false);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -225,6 +251,102 @@ export function ContactFormDialog({
     }
   };
 
+  const handleGetCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      return;
+    }
+
+    // Check permissions if available (some browsers support this)
+    if (navigator.permissions && 'query' in navigator.permissions) {
+      try {
+        // Type assertion needed as TypeScript doesn't recognize geolocation in PermissionDescriptor
+        const permissionStatus = await navigator.permissions.query({ 
+          name: 'geolocation' 
+        } as PermissionDescriptor);
+        
+        if (permissionStatus.state === 'denied') {
+          toast.error(
+            "Location permission is currently denied. Please enable location access in your browser settings (usually in Privacy/Security settings) and refresh the page.",
+            { duration: 6000 }
+          );
+          return;
+        }
+      } catch (e) {
+        // Permissions API might not be fully supported or geolocation not in the spec
+        // This is fine - we'll rely on the error callback instead
+        console.log("Permissions API check not available, will use error callback");
+      }
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude: lat, longitude: lng } = position.coords;
+        setLatitude(lat);
+        setLongitude(lng);
+
+        // Try to reverse geocode to get address
+        try {
+          const response = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
+          );
+          const data = await response.json();
+          
+          if (data.locality) setCity(data.locality);
+          if (data.principalSubdivision) setState(data.principalSubdivision);
+          if (data.postcode) setZipCode(data.postcode);
+          if (data.countryName) setCountry(data.countryName);
+          if (data.localityInfo?.administrative) {
+            const admin = data.localityInfo.administrative;
+            const addressParts = [
+              admin.find((a: { name: string }) => a.name === data.locality)?.name,
+              admin.find((a: { name: string }) => a.name === data.principalSubdivision)?.name,
+            ].filter(Boolean);
+            if (addressParts.length > 0) {
+              setAddress(addressParts.join(", "));
+            }
+          }
+          
+          toast.success("Location retrieved successfully");
+        } catch (error) {
+          console.error("Reverse geocoding error:", error);
+          toast.success("Location coordinates saved (address lookup failed)");
+        }
+        
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        setIsGettingLocation(false);
+        
+        // Provide user-friendly error messages based on error code
+        let errorMessage = "Failed to get location";
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = "Location permission denied. Please enable location access in your browser settings and try again.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = "Location information is unavailable. Please check your device settings.";
+            break;
+          case error.TIMEOUT:
+            errorMessage = "Location request timed out. Please try again.";
+            break;
+          default:
+            errorMessage = `Failed to get location: ${error.message}`;
+            break;
+        }
+        
+        toast.error(errorMessage, { duration: 5000 });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -247,6 +369,13 @@ export function ContactFormDialog({
       avatar,
       folderId,
       isShared: hasCompany ? isShared : false,
+      address: address.trim() || undefined,
+      city: city.trim() || undefined,
+      state: state.trim() || undefined,
+      zipCode: zipCode.trim() || undefined,
+      country: country.trim() || undefined,
+      latitude,
+      longitude,
     });
 
     resetForm();
@@ -466,6 +595,96 @@ export function ContactFormDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+              </CollapsibleSection>
+
+              {/* Address - Collapsible */}
+              <CollapsibleSection title="Address" open={addressOpen} onOpenChange={setAddressOpen}>
+                {/* Use Current Location Button */}
+                {navigator.geolocation && (
+                  <div className="mb-3 space-y-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGetCurrentLocation}
+                      disabled={isGettingLocation}
+                      className="w-full"
+                    >
+                      {isGettingLocation ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Getting location...
+                        </>
+                      ) : (
+                        <>
+                          <Navigation className="h-4 w-4 mr-2" />
+                          Use Current Location
+                        </>
+                      )}
+                    </Button>
+                    <p className="text-xs text-muted-foreground px-1">
+                      Your browser will ask for location permission. If denied, you can still enter the address manually.
+                    </p>
+                  </div>
+                )}
+                
+                <div className="space-y-2">
+                  <Label htmlFor="address">Street Address</Label>
+                  <Input
+                    id="address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="123 Main St"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City</Label>
+                    <Input
+                      id="city"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="San Francisco"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="state">State</Label>
+                    <Input
+                      id="state"
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                      placeholder="CA"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="zipCode">ZIP Code</Label>
+                    <Input
+                      id="zipCode"
+                      value={zipCode}
+                      onChange={(e) => setZipCode(e.target.value)}
+                      placeholder="94102"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="country">Country</Label>
+                    <Input
+                      id="country"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      placeholder="USA"
+                    />
+                  </div>
+                </div>
+                {(latitude !== undefined || longitude !== undefined) && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+                    <MapPin className="h-3 w-3" />
+                    <span>
+                      Coordinates: {latitude?.toFixed(6)}, {longitude?.toFixed(6)}
+                    </span>
                   </div>
                 )}
               </CollapsibleSection>

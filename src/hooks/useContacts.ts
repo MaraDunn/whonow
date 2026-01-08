@@ -24,6 +24,13 @@ type DbContact = {
   is_shared: boolean | null;
   last_contacted_at: string | null;
   is_client: boolean | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 interface ContactWithMeta extends Contact {
@@ -49,6 +56,13 @@ const mapDbToContact = (db: DbContact): ContactWithMeta => ({
   lastContactedAt: db.last_contacted_at || undefined,
   isClient: db.is_client || false,
   createdAt: db.created_at || undefined, // Include timestamp for time-based searches
+  address: db.address || undefined,
+  city: db.city || undefined,
+  state: db.state || undefined,
+  zipCode: db.zip_code || undefined,
+  country: db.country || undefined,
+  latitude: db.latitude || undefined,
+  longitude: db.longitude || undefined,
 });
 
 const mapContactToDb = (
@@ -69,6 +83,13 @@ const mapContactToDb = (
   owner_id: isShared ? null : userId,
   company_id: companyId || null,
   is_shared: isShared || false,
+  address: contact.address || null,
+  city: contact.city || null,
+  state: contact.state || null,
+  zip_code: contact.zipCode || null,
+  country: contact.country || null,
+  latitude: contact.latitude || null,
+  longitude: contact.longitude || null,
 });
 
 export const useContacts = () => {
@@ -141,6 +162,13 @@ export const useContacts = () => {
         tags: contact.tags || [],
         avatar: contact.avatar || null,
         folder_id: contact.folderId || null,
+        address: contact.address || null,
+        city: contact.city || null,
+        state: contact.state || null,
+        zip_code: contact.zipCode || null,
+        country: contact.country || null,
+        latitude: contact.latitude || null,
+        longitude: contact.longitude || null,
       };
       
       // Only update sharing status if provided

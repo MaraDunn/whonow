@@ -15,6 +15,10 @@ const FIELD_WEIGHTS = {
   company: 4,
   email: 2,
   phone: 2,
+  address: 6,     // Address fields for location searches
+  city: 5,
+  state: 4,
+  country: 3,
 };
 
 // Minimum score threshold for results
@@ -252,6 +256,10 @@ function scoreContact(
     company: (contact.company || "").toLowerCase(),
     email: (contact.email || "").toLowerCase(),
     phone: (contact.phone || "").replace(/\D/g, ""),
+    address: (contact.address || "").toLowerCase(),
+    city: (contact.city || "").toLowerCase(),
+    state: (contact.state || "").toLowerCase(),
+    country: (contact.country || "").toLowerCase(),
   };
   
   const allText = Object.values(fields).join(" ");
@@ -462,16 +470,21 @@ export function searchWithParsedQuery(
         }
       }
       
-      // Check location filter - search in description and tags
+      // Check location filter - search in address fields, description, and tags
       if (hasLocationFilter) {
-        const contactText = [
+        const contactLocationText = [
+          contact.address || "",
+          contact.city || "",
+          contact.state || "",
+          contact.country || "",
+          contact.zipCode || "",
           contact.description || "",
           ...(contact.tags || []),
         ].join(" ").toLowerCase();
         
         const matchesLocation = parsedQuery.entities.locations.some(location => {
           const locationLower = location.toLowerCase();
-          return contactText.includes(locationLower);
+          return contactLocationText.includes(locationLower);
         });
         
         if (!matchesLocation) {
@@ -678,14 +691,32 @@ export function searchWithParsedQuery(
       
       // Boost for location matches
       if (hasLocationFilter) {
-        const contactText = [
+        const contactLocationText = [
+          contact.address || "",
+          contact.city || "",
+          contact.state || "",
+          contact.country || "",
+          contact.zipCode || "",
           contact.description || "",
           ...(contact.tags || []),
         ].join(" ").toLowerCase();
         
         for (const location of parsedQuery.entities.locations) {
-          if (contactText.includes(location.toLowerCase())) {
-            result.score += 12; // Boost for location match
+          const locationLower = location.toLowerCase();
+          if (contactLocationText.includes(locationLower)) {
+            // Higher boost for exact matches in address fields
+            let boost = 12;
+            if (contact.city?.toLowerCase().includes(locationLower)) {
+              boost += 5; // Extra boost for city match
+            }
+            if (contact.state?.toLowerCase().includes(locationLower)) {
+              boost += 3; // Extra boost for state match
+            }
+            if (contact.country?.toLowerCase().includes(locationLower)) {
+              boost += 2; // Extra boost for country match
+            }
+            
+            result.score += boost;
             if (!result.matchedFields.includes("location")) {
               result.matchedFields.push("location");
             }
