@@ -10,6 +10,7 @@ import { ParsedQuery } from "./searchQueryParser";
 const FIELD_WEIGHTS = {
   name: 10,       // Highest priority
   role: 8,
+  businessName: 8, // Business name (same weight as role)
   tags: 7,
   description: 5,
   company: 4,
@@ -19,6 +20,7 @@ const FIELD_WEIGHTS = {
   city: 5,
   state: 4,
   country: 3,
+  businessType: 3, // Business type (lower weight)
 };
 
 // Minimum score threshold for results
@@ -251,6 +253,8 @@ function scoreContact(
   const fields = {
     name: (contact.name || "").toLowerCase(),
     role: (contact.role || "").toLowerCase(),
+    businessName: (contact.businessName || "").toLowerCase(),
+    businessType: (contact.businessType || "").toLowerCase(),
     tags: (contact.tags || []).join(" ").toLowerCase(),
     description: (contact.description || "").toLowerCase(),
     company: (contact.company || "").toLowerCase(),
@@ -361,6 +365,7 @@ export function searchWithParsedQuery(
   // Check which filters are active
   const hasCompanyFilter = parsedQuery.entities.companies.length > 0;
   const hasRoleFilter = parsedQuery.entities.roles.length > 0;
+  const hasBusinessFilter = parsedQuery.entities.businesses.length > 0;
   const hasTimeFilter = !!parsedQuery.timeRange;
   const hasLocationFilter = parsedQuery.entities.locations.length > 0;
   const hasRelationshipFilter = parsedQuery.entities.relationships.length > 0;
@@ -377,7 +382,7 @@ export function searchWithParsedQuery(
     // DON'T include companies, roles, locations, relationships in general search terms
   ].filter(Boolean).map(t => t.toLowerCase());
   
-  const hasAnyFilter = hasCompanyFilter || hasRoleFilter || hasTimeFilter || 
+  const hasAnyFilter = hasCompanyFilter || hasRoleFilter || hasBusinessFilter || hasTimeFilter || 
                        hasLocationFilter || hasRelationshipFilter || hasInteractionFilter ||
                        hasInteractionTimeFilter || hasNeedsFollowUp || hasResponsibilityFilter;
   
@@ -461,6 +466,36 @@ export function searchWithParsedQuery(
         
         // If role filter is specified but contact doesn't match, exclude it
         if (!matchesRole) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      // Check business filter - search in business name AND address fields
+      if (hasBusinessFilter) {
+        const contactBusinessName = (contact.businessName || "").toLowerCase();
+        const contactAddressText = [
+          contact.address || "",
+          contact.city || "",
+          contact.state || "",
+          contact.zipCode || "",
+          contact.country || "",
+        ].join(" ").toLowerCase();
+        
+        const matchesBusiness = parsedQuery.entities.businesses.some(business => {
+          const businessLower = business.toLowerCase();
+          // Check business name field
+          const matchesBusinessName = contactBusinessName.includes(businessLower) || businessLower.includes(contactBusinessName);
+          // Also check address fields (in case business is stored in address)
+          const matchesAddress = contactAddressText.includes(businessLower);
+          return matchesBusinessName || matchesAddress;
+        });
+        
+        if (!matchesBusiness) {
           return {
             contact,
             score: 0,
@@ -672,6 +707,61 @@ export function searchWithParsedQuery(
             result.score += 15; // Strong boost for role match
             if (!result.matchedFields.includes("role")) {
               result.matchedFields.push("role");
+            }
+          }
+        }
+      }
+      
+      // Boost for business name matches (from parsed query entities)
+      if (hasBusinessFilter) {
+        const contactBusinessName = (contact.businessName || "").toLowerCase();
+        const contactAddressText = [
+          contact.address || "",
+          contact.city || "",
+          contact.state || "",
+          contact.zipCode || "",
+          contact.country || "",
+        ].join(" ").toLowerCase();
+        
+        for (const business of parsedQuery.entities.businesses) {
+          const businessLower = business.toLowerCase();
+          // Check if business name matches
+          const matchesBusinessName = contactBusinessName.includes(businessLower) || businessLower.includes(contactBusinessName);
+          // Also check address fields
+          const matchesAddress = contactAddressText.includes(businessLower);
+          
+          if (matchesBusinessName) {
+            result.score += 20; // Strong boost for business name match (higher than role)
+            if (!result.matchedFields.includes("businessName")) {
+              result.matchedFields.push("businessName");
+            }
+            // Extra boost for exact match
+            if (contactBusinessName === businessLower) {
+              result.score += 5;
+            }
+          } else if (matchesAddress) {
+            result.score += 15; // Good boost for address match
+            if (!result.matchedFields.includes("address")) {
+              result.matchedFields.push("address");
+            }
+          }
+        }
+      }
+      
+      // Also boost for business name in general search terms (fallback)
+      if (contact.businessName && !hasBusinessFilter) {
+        const contactBusinessName = (contact.businessName || "").toLowerCase();
+        for (const term of searchTerms) {
+          const termLower = term.toLowerCase();
+          // Check if search term matches business name
+          if (contactBusinessName.includes(termLower) || termLower.includes(contactBusinessName)) {
+            result.score += 18; // Strong boost for business name match
+            if (!result.matchedFields.includes("businessName")) {
+              result.matchedFields.push("businessName");
+            }
+            // Extra boost for exact match
+            if (contactBusinessName === termLower) {
+              result.score += 5;
             }
           }
         }

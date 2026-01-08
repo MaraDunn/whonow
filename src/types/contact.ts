@@ -21,6 +21,8 @@ export interface Contact {
   country?: string;
   latitude?: number; // For location-based searches
   longitude?: number; // For location-based searches
+  businessName?: string; // Business name at this address (from OpenStreetMap lookup)
+  businessType?: string; // Business type/category (e.g., "restaurant", "retail", "office")
 }
 
 export type ContactOwnershipFilter = "all" | "personal" | "shared";

@@ -32,6 +32,7 @@ import { generateAutoKeywords } from "@/utils/autoKeywords";
 import { toast } from "sonner";
 import { formatName, formatPhoneNumber } from "@/utils/formatContact";
 import { parseContactText } from "@/utils/contactTextParser";
+import { lookupBusinessAtAddress } from "@/utils/businessLookup";
 
 // Moved outside to prevent re-creation on every render (which causes input focus loss)
 interface CollapsibleSectionProps {
@@ -105,6 +106,11 @@ export function ContactFormDialog({
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [businessName, setBusinessName] = useState<string | undefined>(undefined);
+  const [businessType, setBusinessType] = useState<string | undefined>(undefined);
+  const [isLookingUpBusiness, setIsLookingUpBusiness] = useState(false);
+  const [detectedBusinessName, setDetectedBusinessName] = useState<string | undefined>(undefined);
+  const [detectedBusinessType, setDetectedBusinessType] = useState<string | undefined>(undefined);
   
   const [contactOpen, setContactOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
@@ -144,6 +150,8 @@ export function ContactFormDialog({
       setCountry(contact.country || "");
       setLatitude(contact.latitude);
       setLongitude(contact.longitude);
+      setBusinessName(contact.businessName);
+      setBusinessType(contact.businessType);
     } else {
       resetForm();
       setMode(initialMode);
@@ -172,6 +180,11 @@ export function ContactFormDialog({
     setCountry("");
     setLatitude(undefined);
     setLongitude(undefined);
+    setBusinessName(undefined);
+    setBusinessType(undefined);
+    setDetectedBusinessName(undefined);
+    setDetectedBusinessType(undefined);
+    setIsLookingUpBusiness(false);
     setContactOpen(false);
     setWorkOpen(false);
     setKeywordsOpen(false);
@@ -251,6 +264,64 @@ export function ContactFormDialog({
     }
   };
 
+  // Lookup business when address is entered
+  useEffect(() => {
+    // Only lookup if we have enough address info and no existing business name
+    if (businessName) {
+      // User has manually set a business, don't auto-lookup
+      return;
+    }
+    
+    const hasAddress = address.trim() || city.trim() || state.trim() || zipCode.trim();
+    const hasCoordinates = latitude !== undefined && longitude !== undefined;
+    
+    if (!hasAddress && !hasCoordinates) {
+      setDetectedBusinessName(undefined);
+      setDetectedBusinessType(undefined);
+      return;
+    }
+    
+    // Debounce the lookup - wait 1 second after user stops typing
+    const timeoutId = setTimeout(async () => {
+      setIsLookingUpBusiness(true);
+      try {
+        const addressParts = [
+          address.trim(),
+          city.trim(),
+          state.trim(),
+          zipCode.trim(),
+          country.trim(),
+        ].filter(Boolean);
+        const addressString = addressParts.join(", ");
+        
+        if (addressString || (latitude && longitude)) {
+          const businessInfo = await lookupBusinessAtAddress(
+            addressString,
+            latitude,
+            longitude
+          );
+          
+          if (businessInfo) {
+            setDetectedBusinessName(businessInfo.name);
+            setDetectedBusinessType(businessInfo.type);
+            // Don't auto-populate - let user verify first
+          } else {
+            setDetectedBusinessName(undefined);
+            setDetectedBusinessType(undefined);
+          }
+        }
+      } catch (error) {
+        console.error("Business lookup error:", error);
+        setDetectedBusinessName(undefined);
+        setDetectedBusinessType(undefined);
+      } finally {
+        setIsLookingUpBusiness(false);
+      }
+    }, 1000); // Wait 1 second after user stops typing
+    
+    return () => clearTimeout(timeoutId);
+  }, [address, city, state, zipCode, country, latitude, longitude, businessName]);
+
   const handleGetCurrentLocation = async () => {
     if (!navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
@@ -309,6 +380,9 @@ export function ContactFormDialog({
           }
           
           toast.success("Location retrieved successfully");
+          
+          // Trigger business lookup after address is populated
+          // The useEffect will handle this automatically
         } catch (error) {
           console.error("Reverse geocoding error:", error);
           toast.success("Location coordinates saved (address lookup failed)");
@@ -376,6 +450,8 @@ export function ContactFormDialog({
       country: country.trim() || undefined,
       latitude,
       longitude,
+      businessName,
+      businessType,
     });
 
     resetForm();
@@ -685,6 +761,116 @@ export function ContactFormDialog({
                     <span>
                       Coordinates: {latitude?.toFixed(6)}, {longitude?.toFixed(6)}
                     </span>
+                  </div>
+                )}
+                
+                {/* Business Lookup Section */}
+                {(isLookingUpBusiness || detectedBusinessName || businessName) && (
+                  <div className="mt-3 space-y-2">
+                    {isLookingUpBusiness && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Looking up business at this address...</span>
+                      </div>
+                    )}
+                    
+                    {detectedBusinessName && !businessName && (
+                      <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                        <div className="flex items-start gap-2 mb-2">
+                          <Building2 className="h-4 w-4 text-primary mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">Business Detected</p>
+                            <p className="text-sm mt-1">{detectedBusinessName}</p>
+                            {detectedBusinessType && detectedBusinessType !== 'unknown' && (
+                              <p className="text-xs text-muted-foreground capitalize mt-0.5">
+                                {detectedBusinessType.replace(':', ' - ')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="default"
+                            onClick={() => {
+                              setBusinessName(detectedBusinessName);
+                              setBusinessType(detectedBusinessType);
+                            }}
+                            className="h-7 text-xs"
+                          >
+                            <Check className="h-3 w-3 mr-1" />
+                            Use This
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setDetectedBusinessName(undefined);
+                              setDetectedBusinessType(undefined);
+                            }}
+                            className="h-7 text-xs"
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {businessName && (
+                      <div className="p-3 rounded-lg bg-secondary/50 border border-border">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-start gap-2 flex-1">
+                            <Building2 className="h-4 w-4 text-primary mt-0.5" />
+                            <div className="flex-1">
+                              <Label htmlFor="businessName" className="text-xs text-muted-foreground mb-1 block">
+                                Business Name
+                              </Label>
+                              <Input
+                                id="businessName"
+                                value={businessName}
+                                onChange={(e) => setBusinessName(e.target.value)}
+                                placeholder="Business name"
+                                className="h-8 text-sm"
+                              />
+                              {businessType && businessType !== 'unknown' && (
+                                <>
+                                  <Label htmlFor="businessType" className="text-xs text-muted-foreground mb-1 block mt-2">
+                                    Business Type
+                                  </Label>
+                                  <Input
+                                    id="businessType"
+                                    value={businessType}
+                                    onChange={(e) => setBusinessType(e.target.value)}
+                                    placeholder="Business type"
+                                    className="h-8 text-sm"
+                                  />
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setBusinessName(undefined);
+                              setBusinessType(undefined);
+                              setDetectedBusinessName(undefined);
+                              setDetectedBusinessType(undefined);
+                            }}
+                            className="h-6 w-6 p-0"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {detectedBusinessName === businessName ? "Auto-detected" : "Manually entered"}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </CollapsibleSection>

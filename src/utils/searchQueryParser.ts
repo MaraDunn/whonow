@@ -42,11 +42,13 @@ export interface ParsedQuery {
     departments: string[];
     locations: string[];
     relationships: string[]; // Relationship types: client, prospect, vendor, etc.
+    businesses: string[]; // Business names (e.g., "mcdonalds", "starbucks")
   };
   keywords: string[];
   filters: Record<string, string>;
   originalQuery: string;
   searchTerms: string[];
+  searchType?: "business" | "location" | "both"; // Type of search for OpenStreetMap lookup
   timeRange?: TimeRange; // Time range for filtering contacts by creation date
   interactionType?: "email" | "call" | "meeting" | "text" | null; // Type of interaction
   interactionTimeRange?: TimeRange; // Time range for last interaction
@@ -256,6 +258,7 @@ const ENTITY_PREPOSITIONS = {
   role: new Set(["as", "works"]),
   department: new Set(["in", "handles", "does"]),
   location: new Set(["in", "at", "from", "near"]),
+  business: new Set(["at", "in"]), // "who do I know at mcdonalds"
 };
 
 /**
@@ -478,6 +481,7 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
     departments: [],
     locations: [],
     relationships: [],
+    businesses: [],
   };
   
   const text = words.join(" ");
@@ -614,6 +618,42 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
   if (potentialNames.length > 0) {
     // Simple heuristic: treat consecutive potential name words as a single name
     entities.names = potentialNames.slice(0, 3); // Max 3 name parts
+  }
+  
+  // Extract businesses (e.g., "who do I know at mcdonalds")
+  // Pattern: "at [business name]" - typically single word or short phrase
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].toLowerCase();
+    const nextWord = words[i + 1]?.toLowerCase();
+    
+    // Pattern: "at [business]" - business names are usually 1-2 words
+    if (ENTITY_PREPOSITIONS.business.has(word) && nextWord) {
+      // Check if this looks like a business (not a company with suffix, not a location)
+      const businessWords: string[] = [];
+      for (let j = i + 1; j < words.length && j < i + 3; j++) { // Max 2 words for business
+        const w = words[j];
+        const wLower = w.toLowerCase();
+        
+        // Stop if we hit a stop word (but allow first word)
+        if (j > i + 1 && STOP_WORDS.has(wLower)) break;
+        
+        // Stop if we hit a company suffix (this is probably a company, not a business)
+        if (COMPANY_SUFFIXES.has(wLower)) break;
+        
+        businessWords.push(w);
+      }
+      
+      if (businessWords.length > 0) {
+        const businessName = businessWords.join(" ");
+        // Only add if it doesn't look like a location (common location words)
+        const commonLocationWords = ["san", "francisco", "new", "york", "los", "angeles", "chicago", "boston", "seattle"];
+        const isLocation = commonLocationWords.some(loc => businessName.toLowerCase().includes(loc));
+        
+        if (!isLocation && !entities.companies.includes(businessName)) {
+          entities.businesses.push(businessName);
+        }
+      }
+    }
   }
   
   // Extract relationships
@@ -1055,6 +1095,22 @@ export function parseSearchQuery(query: string): ParsedQuery {
   // Extract needs follow-up
   const needsFollowUp = extractNeedsFollowUp(query);
   
+  // Determine search type for OpenStreetMap lookup
+  // If query has businesses, it's a business search
+  // If query has locations, it's a location search
+  // If both, it's "both"
+  let searchType: "business" | "location" | "both" | undefined;
+  const hasBusinesses = entities.businesses.length > 0;
+  const hasLocations = entities.locations.length > 0;
+  
+  if (hasBusinesses && hasLocations) {
+    searchType = "both";
+  } else if (hasBusinesses) {
+    searchType = "business";
+  } else if (hasLocations) {
+    searchType = "location";
+  }
+  
   // Extract responsibility
   const responsibilityResult = extractResponsibility(query);
   const responsibility = responsibilityResult.match;
@@ -1117,6 +1173,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
     filters: {},
     originalQuery: query,
     searchTerms,
+    searchType,
     timeRange,
     interactionType,
     interactionTimeRange,

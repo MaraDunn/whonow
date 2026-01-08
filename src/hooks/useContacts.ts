@@ -31,6 +31,8 @@ type DbContact = {
   country: string | null;
   latitude: number | null;
   longitude: number | null;
+  business_name: string | null;
+  business_type: string | null;
 };
 
 interface ContactWithMeta extends Contact {
@@ -63,6 +65,8 @@ const mapDbToContact = (db: DbContact): ContactWithMeta => ({
   country: db.country || undefined,
   latitude: db.latitude || undefined,
   longitude: db.longitude || undefined,
+  businessName: db.business_name || undefined,
+  businessType: db.business_type || undefined,
 });
 
 const mapContactToDb = (
@@ -90,6 +94,8 @@ const mapContactToDb = (
   country: contact.country || null,
   latitude: contact.latitude || null,
   longitude: contact.longitude || null,
+  business_name: contact.businessName || null,
+  business_type: contact.businessType || null,
 });
 
 export const useContacts = () => {
@@ -132,6 +138,9 @@ export const useContacts = () => {
   const addContact = useMutation({
     mutationFn: async (contact: Omit<Contact, "id"> & { isShared?: boolean }) => {
       const { isShared, ...contactData } = contact;
+      
+      // Business info is already set in the form (user verified it)
+      // Just use what's provided
       const { data, error } = await supabase
         .from("contacts")
         .insert(mapContactToDb(contactData, user?.id, profile?.companyId, isShared))
@@ -139,11 +148,13 @@ export const useContacts = () => {
         .single();
 
       if (error) throw error;
-      return mapDbToContact(data as DbContact);
+      
+      const savedContact = mapDbToContact(data as DbContact);
+      
+      return savedContact;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      toast.success("Contact added successfully");
     },
     onError: (error) => {
       toast.error(error.message);
@@ -152,6 +163,8 @@ export const useContacts = () => {
 
   const updateContact = useMutation({
     mutationFn: async ({ id, isShared, ...contact }: Contact & { isShared?: boolean }) => {
+      // Business info is already set in the form (user verified it)
+      // Just use what's provided
       const updateData: Record<string, unknown> = {
         name: contact.name,
         email: contact.email || null,
@@ -169,6 +182,8 @@ export const useContacts = () => {
         country: contact.country || null,
         latitude: contact.latitude || null,
         longitude: contact.longitude || null,
+        business_name: contact.businessName || null,
+        business_type: contact.businessType || null,
       };
       
       // Only update sharing status if provided
@@ -185,11 +200,11 @@ export const useContacts = () => {
         .single();
 
       if (error) throw error;
+      
       return mapDbToContact(data as DbContact);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      toast.success("Contact updated successfully");
     },
     onError: (error) => {
       toast.error("Failed to update contact: " + error.message);
