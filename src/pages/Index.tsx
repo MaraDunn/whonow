@@ -106,7 +106,7 @@ const Index = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, company, isAdmin } = useProfile(user?.id);
+  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -488,6 +488,7 @@ const Index = () => {
             selectedTeamFolderId={selectedTeamFolderId}
             onSelectTeamFolder={setSelectedTeamFolderId}
             isAdmin={isAdmin}
+            isSuperAdmin={isSuperAdmin}
           />
 
           {/* Main Content */}

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, UserCircle, Briefcase, Menu, Lock } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, ChevronDown, UserCircle, Briefcase, Menu, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -35,6 +35,8 @@ import { ContactOwnershipFilter } from "@/types/contact";
 import { cn } from "@/lib/utils";
 import { useSubscription } from "@/hooks/useSubscription";
 import { LockedFeatureButton } from "@/components/LockedFeatureButton";
+import { WhoNowLogo } from "@/components/WhoNowLogo";
+import { useBranding } from "@/hooks/useBranding";
 
 interface FolderSidebarProps {
   folders: FolderType[];
@@ -73,6 +75,7 @@ interface FolderSidebarProps {
   organizationClientFolders?: FolderType[];
   organizationTeamFolders?: FolderType[];
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
 }
 
 export function FolderSidebar({
@@ -108,6 +111,7 @@ export function FolderSidebar({
   organizationClientFolders = [],
   organizationTeamFolders = [],
   isAdmin = false,
+  isSuperAdmin = false,
 }: FolderSidebarProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
@@ -115,6 +119,75 @@ export function FolderSidebar({
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const { canAccessFeature } = useSubscription();
+  const branding = useBranding();
+  
+  // Helper functions for localStorage
+  const loadDirectoryState = (key: string, defaultValue: boolean): boolean => {
+    if (typeof window === "undefined") return defaultValue;
+    const saved = localStorage.getItem(`directory:${key}`);
+    return saved !== null ? saved === "true" : defaultValue;
+  };
+
+  const saveDirectoryState = (key: string, value: boolean) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(`directory:${key}`, value.toString());
+  };
+
+  // State for collapsed/expanded directories - load from localStorage
+  const [isContactDirectoryExpanded, setIsContactDirectoryExpanded] = useState(() => 
+    loadDirectoryState("contact", true)
+  );
+  const [isClientDirectoryExpanded, setIsClientDirectoryExpanded] = useState(() => 
+    loadDirectoryState("client", true)
+  );
+  const [isTeamDirectoryExpanded, setIsTeamDirectoryExpanded] = useState(() => 
+    loadDirectoryState("team", true)
+  );
+
+  // Wrapper functions that save to localStorage when user manually toggles
+  const toggleContactDirectory = () => {
+    const newValue = !isContactDirectoryExpanded;
+    setIsContactDirectoryExpanded(newValue);
+    if (!isCollapsed) {
+      saveDirectoryState("contact", newValue);
+    }
+  };
+
+  const toggleClientDirectory = () => {
+    const newValue = !isClientDirectoryExpanded;
+    setIsClientDirectoryExpanded(newValue);
+    if (!isCollapsed) {
+      saveDirectoryState("client", newValue);
+    }
+  };
+
+  const toggleTeamDirectory = () => {
+    const newValue = !isTeamDirectoryExpanded;
+    setIsTeamDirectoryExpanded(newValue);
+    if (!isCollapsed) {
+      saveDirectoryState("team", newValue);
+    }
+  };
+
+  // When sidebar is collapsed, collapse all directories
+  // When sidebar is expanded, restore saved states
+  useEffect(() => {
+    if (isCollapsed) {
+      // Sidebar collapsed - collapse all directories (don't save to localStorage)
+      setIsContactDirectoryExpanded(false);
+      setIsClientDirectoryExpanded(false);
+      setIsTeamDirectoryExpanded(false);
+    } else {
+      // Sidebar expanded - restore saved states from localStorage
+      const savedContact = loadDirectoryState("contact", true);
+      const savedClient = loadDirectoryState("client", true);
+      const savedTeam = loadDirectoryState("team", true);
+      setIsContactDirectoryExpanded(savedContact);
+      setIsClientDirectoryExpanded(savedClient);
+      setIsTeamDirectoryExpanded(savedTeam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCollapsed]);
   
   const hasClientAccess = canAccessFeature("client_management");
   const hasTeamAccess = canAccessFeature("team_features");
@@ -168,7 +241,7 @@ export function FolderSidebar({
         <SidebarHeader className="p-2">
           <div className={cn(
             "flex items-center gap-2",
-            isCollapsed ? "justify-center" : "justify-between px-2"
+            isCollapsed ? "justify-center" : "justify-start px-2"
           )}>
             {/* Hamburger Menu Button */}
             <TooltipProvider>
@@ -189,21 +262,46 @@ export function FolderSidebar({
               </Tooltip>
             </TooltipProvider>
             
+            {/* Company Logo */}
             {!isCollapsed && (
-              <>
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex-1">
-                  Folders
-                </h2>
+              <WhoNowLogo size="sm" showText={false} className="shrink-0" />
+            )}
+          </div>
+        </SidebarHeader>
+
+        <TooltipProvider>
+          <SidebarContent>
+          {/* Contact Directory Section */}
+          <SidebarGroup>
+            {!isCollapsed && (
+              <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-1.5 flex-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 -ml-1"
+                        onClick={toggleContactDirectory}
+                      >
+                        {isContactDirectoryExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <SidebarGroupLabel className="p-0 cursor-pointer" onClick={toggleContactDirectory}>
+                        Contact Directory
+                      </SidebarGroupLabel>
+                </div>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-7 w-7" 
+                        className="h-6 w-6" 
                         onClick={() => handleAddFolder("contacts")}
                       >
-                        <FolderPlus className="h-4 w-4" />
+                        <FolderPlus className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
@@ -211,14 +309,8 @@ export function FolderSidebar({
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              </>
+              </div>
             )}
-          </div>
-        </SidebarHeader>
-
-        <TooltipProvider>
-          <SidebarContent>
-          <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
                 {/* All Contacts - droppable to remove from folders */}
@@ -239,7 +331,7 @@ export function FolderSidebar({
                 </SidebarMenuItem>
 
                 {/* Personal/Shared filter - only show for company users */}
-                {hasCompany && !isCollapsed && (
+                {hasCompany && !isCollapsed && isContactDirectoryExpanded && (
                   <>
                     <SidebarMenuItem>
                       <SidebarMenuButton
@@ -305,7 +397,7 @@ export function FolderSidebar({
                 )}
 
                 {/* Personal Contact Folders */}
-                {folders.map((folder) => (
+                {isContactDirectoryExpanded && folders.map((folder) => (
                   <SidebarMenuItem key={folder.id} className="group relative">
                     <DroppableFolder
                       folder={folder}
@@ -407,7 +499,23 @@ export function FolderSidebar({
               <SidebarGroup>
                 {!isCollapsed && (
                   <div className="flex items-center justify-between px-2">
-                    <SidebarGroupLabel className="p-0">Client Directory</SidebarGroupLabel>
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 -ml-1"
+                        onClick={toggleClientDirectory}
+                      >
+                        {isClientDirectoryExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <SidebarGroupLabel className="p-0 cursor-pointer" onClick={toggleClientDirectory}>
+                        Client Directory
+                      </SidebarGroupLabel>
+                    </div>
                     {hasClientAccess && (
                       <TooltipProvider>
                         <Tooltip>
@@ -473,7 +581,7 @@ export function FolderSidebar({
                     </SidebarMenuItem>
 
                     {/* Personal Client Folders */}
-                    {hasClientAccess && clientFolders.map((folder) => (
+                    {hasClientAccess && isClientDirectoryExpanded && clientFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <SidebarMenuButton
                           onClick={() => {
@@ -594,24 +702,42 @@ export function FolderSidebar({
               <SidebarGroup>
                 {!isCollapsed && (
                   <div className="flex items-center justify-between px-2">
-                    <SidebarGroupLabel className="p-0">Team Directory</SidebarGroupLabel>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-6 w-6" 
-                            onClick={() => handleAddFolder("team")}
-                          >
-                            <FolderPlus className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                          <p>Add team folder</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 -ml-1"
+                        onClick={toggleTeamDirectory}
+                      >
+                        {isTeamDirectoryExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <SidebarGroupLabel className="p-0 cursor-pointer" onClick={toggleTeamDirectory}>
+                        Team Directory
+                      </SidebarGroupLabel>
+                    </div>
+                    {(isAdmin || isSuperAdmin) && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6" 
+                              onClick={() => handleAddFolder("team")}
+                            >
+                              <FolderPlus className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>Add team folder</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
                 )}
                 <SidebarGroupContent>
@@ -637,7 +763,7 @@ export function FolderSidebar({
                     </SidebarMenuItem>
 
                     {/* Personal Team Folders */}
-                    {teamFolders.map((folder) => (
+                    {isTeamDirectoryExpanded && teamFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <SidebarMenuButton
                           onClick={() => {
@@ -686,7 +812,7 @@ export function FolderSidebar({
                     ))}
 
                     {/* Organization Team Folders */}
-                    {hasCompany && organizationTeamFolders.length > 0 && (
+                    {hasCompany && organizationTeamFolders.length > 0 && isTeamDirectoryExpanded && (
                       <>
                         {!isCollapsed && (
                           <div className="px-2 py-1.5 mt-2">

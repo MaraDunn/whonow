@@ -71,7 +71,7 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
     }
 
     return (
-      <button
+      <SidebarMenuButton
         ref={(node) => {
           setNodeRef(node);
           if (typeof ref === "function") {
@@ -81,11 +81,9 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
           }
         }}
         onClick={onClick}
+        isActive={isActive}
         className={cn(
-          "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 relative overflow-hidden",
-          isActive
-            ? "bg-primary text-primary-foreground"
-            : "text-foreground hover:bg-accent",
+          "w-full relative overflow-hidden",
           // Enhanced drop target styling
           isOver && !isActive && "ring-2 ring-primary bg-primary/15 scale-[1.02] shadow-md",
           // Subtle indication when dragging
@@ -96,29 +94,26 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
         {isOver && (
           <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/5 animate-pulse" />
         )}
-
-        <div className="relative z-10 flex items-center gap-3 w-full">
-          {isOver ? (
-            <FolderOutput className="h-4 w-4 animate-scale-in shrink-0" />
-          ) : (
-            <Users
-              className={cn(
-                "h-4 w-4 shrink-0 transition-transform duration-200",
-                isDragging && !isActive && "scale-110"
-              )}
-            />
-          )}
-          <span className="flex-1 text-left truncate">All Contacts</span>
-          <span
+        {isOver ? (
+          <FolderOutput className="h-4 w-4 animate-scale-in shrink-0 relative z-10" />
+        ) : (
+          <Users
             className={cn(
-              "text-xs shrink-0 transition-all duration-200",
-              isOver ? "opacity-100 font-medium" : "opacity-70"
+              "h-4 w-4 shrink-0 transition-transform duration-200 relative z-10",
+              isDragging && !isActive && "scale-110"
             )}
-          >
-            {isOver ? "Remove folder" : totalContacts}
-          </span>
-        </div>
-      </button>
+          />
+        )}
+        <span className="flex-1 text-left">All Contacts</span>
+        <span
+          className={cn(
+            "text-xs opacity-70 shrink-0 transition-all duration-200 relative z-10",
+            isOver && "opacity-100 font-medium"
+          )}
+        >
+          {isOver ? "Remove folder" : totalContacts}
+        </span>
+      </SidebarMenuButton>
     );
   }
 );
