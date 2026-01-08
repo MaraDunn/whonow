@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, Users, Key, CreditCard, Shield, Plus, Trash2, Copy, Check, ArrowRight, X } from "lucide-react";
+import { Building2, Users, Key, CreditCard, Shield, Plus, Trash2, Copy, Check, ArrowRight, X, ShieldCheck, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,12 +16,28 @@ import { BrandingSettings } from "@/components/BrandingSettings";
 
 export function OrganizationManagement() {
   const { user } = useAuth();
-  const { company, companyMembers, isAdmin, joinCompany, removeUserFromCompany } = useProfile(user?.id);
+  const { 
+    company, 
+    companyMembers, 
+    isAdmin, 
+    isSuperAdmin: isSuperAdminFromHook,
+    joinCompany, 
+    removeUserFromCompany,
+    grantAdminRole,
+    revokeAdminRole,
+    refreshInviteCode,
+    deleteCompany,
+  } = useProfile(user?.id);
   const { tier, subscription, createCheckout, isLoading: subLoading, refreshSubscription } = useSubscription();
   const [copiedCode, setCopiedCode] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [managingAdminUserId, setManagingAdminUserId] = useState<string | null>(null);
+
+  // Fallback: if no owner is set and user is admin, treat as super admin (backwards compatibility)
+  // Also, if the user created the company (they're the first admin), they're the super admin
+  const isSuperAdmin = isSuperAdminFromHook || (isAdmin && (!company?.ownerId || company?.ownerId === user?.id));
 
   const tierConfig = TIER_CONFIGS[tier];
 
@@ -90,6 +106,52 @@ export function OrganizationManagement() {
         setRemovingUserId(null);
       },
     });
+  };
+
+  const handleGrantAdmin = (memberId: string, memberName: string) => {
+    if (!confirm(`Grant admin permissions to ${memberName || "this user"}?`)) {
+      return;
+    }
+
+    setManagingAdminUserId(memberId);
+    grantAdminRole(memberId, {
+      onSuccess: () => {
+        setManagingAdminUserId(null);
+      },
+      onError: () => {
+        setManagingAdminUserId(null);
+      },
+    });
+  };
+
+  const handleRevokeAdmin = (memberId: string, memberName: string) => {
+    if (!confirm(`Revoke admin permissions from ${memberName || "this user"}?`)) {
+      return;
+    }
+
+    setManagingAdminUserId(memberId);
+    revokeAdminRole(memberId, {
+      onSuccess: () => {
+        setManagingAdminUserId(null);
+      },
+      onError: () => {
+        setManagingAdminUserId(null);
+      },
+    });
+  };
+
+  const handleRefreshInviteCode = () => {
+    if (!confirm("Are you sure you want to refresh the invite code? The old code will no longer work.")) {
+      return;
+    }
+    refreshInviteCode();
+  };
+
+  const handleDeleteOrganization = () => {
+    if (!confirm("Are you sure you want to delete this organization? This action cannot be undone. All data will be permanently deleted.")) {
+      return;
+    }
+    deleteCompany();
   };
 
   if (!company) {
@@ -342,50 +404,116 @@ export function OrganizationManagement() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {companyMembers.map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between p-3 rounded-lg border"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="font-medium text-primary">
-                      {member.fullName?.[0]?.toUpperCase() || member.email?.[0]?.toUpperCase() || "?"}
-                    </span>
+            {companyMembers.map((member) => {
+              const memberRoles = (member as any).roles || [];
+              const isMemberAdmin = memberRoles.includes("admin");
+              const isMemberSuperAdmin = member.id === company?.ownerId;
+              const isCurrentUser = member.id === user?.id;
+
+              return (
+                <div
+                  key={member.id}
+                  className="flex items-center justify-between p-3 rounded-lg border"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="font-medium text-primary">
+                        {member.fullName?.[0]?.toUpperCase() || member.email?.[0]?.toUpperCase() || "?"}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium">{member.fullName || "Unnamed"}</p>
+                      <p className="text-sm text-muted-foreground">{member.email}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">{member.fullName || "Unnamed"}</p>
-                    <p className="text-sm text-muted-foreground">{member.email}</p>
+                  <div className="flex items-center gap-2">
+                    {member.role && (
+                      <Badge variant="outline" className="text-xs">
+                        {member.role}
+                      </Badge>
+                    )}
+                    {isMemberSuperAdmin ? (
+                      <Badge variant="default" className="text-xs">
+                        <Shield className="h-3 w-3 mr-1" />
+                        Owner
+                      </Badge>
+                    ) : isMemberAdmin ? (
+                      <Badge variant="secondary" className="text-xs">
+                        <ShieldCheck className="h-3 w-3 mr-1" />
+                        Admin
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">
+                        Member
+                      </Badge>
+                    )}
+                    {isCurrentUser && (
+                      <Badge variant="outline" className="text-xs">
+                        You
+                      </Badge>
+                    )}
+                    {/* Show admin management buttons only for super admins (or admins if no owner set yet for backwards compatibility) */}
+                    {isSuperAdmin && !isMemberSuperAdmin && member.id !== user?.id && (
+                      <div className="flex items-center gap-1">
+                        {isMemberAdmin ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => handleRevokeAdmin(member.id, member.fullName || member.email || "this user")}
+                            disabled={managingAdminUserId === member.id}
+                            title="Revoke admin permissions"
+                          >
+                            {managingAdminUserId === member.id ? (
+                              <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+                            ) : (
+                              <>
+                                <ShieldX className="h-3 w-3 mr-1" />
+                                Revoke Admin
+                              </>
+                            )}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => handleGrantAdmin(member.id, member.fullName || member.email || "this user")}
+                            disabled={managingAdminUserId === member.id}
+                            title="Grant admin permissions"
+                          >
+                            {managingAdminUserId === member.id ? (
+                              <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+                            ) : (
+                              <>
+                                <ShieldCheck className="h-3 w-3 mr-1" />
+                                Make Admin
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    {isAdmin && member.id !== user?.id && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleRemoveUser(member.id, member.fullName || member.email || "this user")}
+                        disabled={removingUserId === member.id}
+                        title="Remove from organization"
+                      >
+                        {removingUserId === member.id ? (
+                          <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {member.role && (
-                    <Badge variant="outline" className="text-xs">
-                      {member.role}
-                    </Badge>
-                  )}
-                  <Badge variant={member.id === user?.id ? "default" : "secondary"}>
-                    {member.id === user?.id ? "You" : "Member"}
-                  </Badge>
-                  {isAdmin && member.id !== user?.id && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => handleRemoveUser(member.id, member.fullName || member.email || "this user")}
-                      disabled={removingUserId === member.id}
-                      title="Remove from organization"
-                    >
-                      {removingUserId === member.id ? (
-                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
-                      ) : (
-                        <X className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {companyMembers.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
@@ -423,15 +551,39 @@ export function OrganizationManagement() {
             </p>
           </div>
 
-          <Button variant="outline" className="w-full" disabled>
-            <Key className="h-4 w-4 mr-2" />
-            Regenerate Invite Code (Coming Soon)
-          </Button>
+          {isSuperAdmin ? (
+            <>
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={handleRefreshInviteCode}
+              >
+                <Key className="h-4 w-4 mr-2" />
+                Regenerate Invite Code
+              </Button>
 
-          <Button variant="outline" className="w-full text-destructive" disabled>
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Organization (Coming Soon)
-          </Button>
+              <Button 
+                variant="outline" 
+                className="w-full text-destructive hover:text-destructive hover:bg-destructive/10" 
+                onClick={handleDeleteOrganization}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Organization
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" className="w-full" disabled>
+                <Key className="h-4 w-4 mr-2" />
+                Regenerate Invite Code (Owner Only)
+              </Button>
+
+              <Button variant="outline" className="w-full text-destructive" disabled>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Organization (Owner Only)
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

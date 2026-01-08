@@ -21,8 +21,13 @@ export interface Company {
   faviconUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
+  ownerId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CompanyMember extends Profile {
+  roles: AppRole[];
 }
 
 export type AppRole = 'admin' | 'member';

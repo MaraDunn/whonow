@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Profile, Company, AppRole } from "@/types/profile";
+import { Profile, Company, AppRole, CompanyMember } from "@/types/profile";
 import { toast } from "sonner";
 
 type DbProfile = {
@@ -26,6 +26,7 @@ type DbCompany = {
   favicon_url: string | null;
   primary_color: string | null;
   secondary_color: string | null;
+  owner_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -53,6 +54,7 @@ const mapDbToCompany = (db: DbCompany): Company => ({
   faviconUrl: db.favicon_url || undefined,
   primaryColor: db.primary_color || undefined,
   secondaryColor: db.secondary_color || undefined,
+  ownerId: db.owner_id || undefined,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });
@@ -112,7 +114,23 @@ export const useProfile = (userId?: string) => {
 
   const isAdmin = roles.includes("admin");
 
-  // Fetch company members (employee directory)
+  // Check if current user is super admin (owner) of their company
+  const { data: isSuperAdmin = false } = useQuery({
+    queryKey: ["is-super-admin", userId, company?.id],
+    queryFn: async () => {
+      if (!userId || !company?.id) return false;
+      // Use is_current_user_super_admin which includes backwards compatibility for null owner_id
+      const { data, error } = await supabase.rpc("is_current_user_super_admin");
+      if (error) {
+        console.error("Error checking super admin status:", error);
+        return false;
+      }
+      return data || false;
+    },
+    enabled: !!userId && !!company?.id,
+  });
+
+  // Fetch company members (employee directory) with their roles
   // For admins, show all members. For regular members, show all members in the company
   // (not just those visible in directory) so they can see the full team
   const { data: companyMembers = [], isLoading: membersLoading } = useQuery({
@@ -122,13 +140,39 @@ export const useProfile = (userId?: string) => {
       
       // Show all company members - don't filter by visibility
       // This ensures all members can see the team directory
-      const { data, error } = await supabase
+      const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("*")
         .eq("company_id", profile.companyId);
 
-      if (error) throw error;
-      return (data as DbProfile[]).map(mapDbToProfile);
+      if (profilesError) throw profilesError;
+
+      // Get roles for all members
+      const memberIds = (profilesData as DbProfile[]).map(p => p.id);
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("user_id", memberIds);
+
+      if (rolesError) throw rolesError;
+
+      // Create a map of user_id to roles
+      const rolesMap = new Map<string, AppRole[]>();
+      (rolesData || []).forEach((r: { user_id: string; role: AppRole }) => {
+        if (!rolesMap.has(r.user_id)) {
+          rolesMap.set(r.user_id, []);
+        }
+        rolesMap.get(r.user_id)!.push(r.role);
+      });
+
+      // Map profiles and include their roles
+      return (profilesData as DbProfile[]).map(profile => {
+        const mapped = mapDbToProfile(profile);
+        return {
+          ...mapped,
+          roles: rolesMap.get(mapped.id) || [],
+        };
+      });
     },
     enabled: !!profile?.companyId,
   });
@@ -386,11 +430,127 @@ export const useProfile = (userId?: string) => {
     },
   });
 
+  // Grant admin role to a user (super admin only)
+  const grantAdminRole = useMutation({
+    mutationFn: async (targetUserId: string) => {
+      if (!userId) throw new Error("No user ID");
+
+      const { data, error } = await supabase.rpc("grant_admin_role", {
+        p_user_id: targetUserId,
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-roles"] });
+      queryClient.invalidateQueries({ queryKey: ["company-members"] });
+      queryClient.invalidateQueries({ queryKey: ["is-super-admin", userId] });
+      toast.success("Admin permissions granted");
+    },
+    onError: (error) => {
+      const errorMessage = error.message || "Failed to grant admin role";
+      if (errorMessage.includes("insufficient_privilege")) {
+        toast.error("Only the organization owner can grant admin permissions");
+      } else if (errorMessage.includes("cannot_grant_admin_to_self")) {
+        toast.error("You are already the organization owner");
+      } else if (errorMessage.includes("user_not_in_company")) {
+        toast.error("User is not in your organization");
+      } else {
+        toast.error("Failed to grant admin role: " + errorMessage);
+      }
+    },
+  });
+
+  // Revoke admin role from a user (super admin only)
+  const revokeAdminRole = useMutation({
+    mutationFn: async (targetUserId: string) => {
+      if (!userId) throw new Error("No user ID");
+
+      const { data, error } = await supabase.rpc("revoke_admin_role", {
+        p_user_id: targetUserId,
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-roles"] });
+      queryClient.invalidateQueries({ queryKey: ["company-members"] });
+      queryClient.invalidateQueries({ queryKey: ["is-super-admin", userId] });
+      toast.success("Admin permissions revoked");
+    },
+    onError: (error) => {
+      const errorMessage = error.message || "Failed to revoke admin role";
+      if (errorMessage.includes("insufficient_privilege")) {
+        toast.error("Only the organization owner can revoke admin permissions");
+      } else if (errorMessage.includes("cannot_revoke_admin_from_self")) {
+        toast.error("You cannot revoke admin from yourself");
+      } else if (errorMessage.includes("user_not_in_company")) {
+        toast.error("User is not in your organization");
+      } else {
+        toast.error("Failed to revoke admin role: " + errorMessage);
+      }
+    },
+  });
+
+  // Refresh invite code (super admin only)
+  const refreshInviteCode = useMutation({
+    mutationFn: async () => {
+      if (!userId) throw new Error("No user ID");
+
+      const { data, error } = await supabase.rpc("refresh_company_invite_code");
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (newInviteCode) => {
+      queryClient.invalidateQueries({ queryKey: ["company"] });
+      toast.success(`New invite code: ${newInviteCode}`);
+    },
+    onError: (error) => {
+      const errorMessage = error.message || "Failed to refresh invite code";
+      if (errorMessage.includes("insufficient_privilege")) {
+        toast.error("Only the organization owner can refresh the invite code");
+      } else {
+        toast.error("Failed to refresh invite code: " + errorMessage);
+      }
+    },
+  });
+
+  // Delete organization (super admin only)
+  const deleteCompany = useMutation({
+    mutationFn: async () => {
+      if (!userId) throw new Error("No user ID");
+
+      const { data, error } = await supabase.rpc("delete_company");
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+      queryClient.invalidateQueries({ queryKey: ["company"] });
+      queryClient.invalidateQueries({ queryKey: ["company-members"] });
+      queryClient.invalidateQueries({ queryKey: ["user-roles", userId] });
+      toast.success("Organization deleted");
+    },
+    onError: (error) => {
+      const errorMessage = error.message || "Failed to delete organization";
+      if (errorMessage.includes("insufficient_privilege")) {
+        toast.error("Only the organization owner can delete the organization");
+      } else {
+        toast.error("Failed to delete organization: " + errorMessage);
+      }
+    },
+  });
+
   return {
     profile,
     company,
     roles,
     isAdmin,
+    isSuperAdmin,
     companyMembers,
     isLoading: profileLoading || companyLoading || membersLoading,
     updateProfile: updateProfile.mutate,
@@ -398,6 +558,10 @@ export const useProfile = (userId?: string) => {
     joinCompany: joinCompany.mutate,
     skipCompanySetup: skipCompanySetup.mutate,
     removeUserFromCompany: removeUserFromCompany.mutate,
+    grantAdminRole: grantAdminRole.mutate,
+    revokeAdminRole: revokeAdminRole.mutate,
+    refreshInviteCode: refreshInviteCode.mutate,
+    deleteCompany: deleteCompany.mutate,
     needsCompanySetup: !!profile && !profile.companyId && !profile.hasCompletedCompanySetup,
   };
 };
