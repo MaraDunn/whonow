@@ -1,20 +1,25 @@
-import { Search, BookOpen, Link2 } from "lucide-react";
+import { Search, FolderTree, Link2, MapPin } from "lucide-react";
 
 const features = [
   {
     icon: Search,
-    title: "Find who you need when you need",
-    description: "Reduce time spent searching for the right contact across teams and systems.",
+    title: "Natural language search",
+    description: "Search your contacts using plain English. Ask questions like 'who do I know at mcdonalds' or 'engineers in San Francisco' and get instant results.",
   },
   {
-    icon: BookOpen,
-    title: "Make your company directory work for you",
-    description: "Turn static directories into dynamic, searchable sources of organizational knowledge.",
+    icon: FolderTree,
+    title: "Organize your contacts",
+    description: "Create folders, add tags, and mark clients to keep your network organized. Track interactions and manage your contacts efficiently.",
+  },
+  {
+    icon: MapPin,
+    title: "Location-based contacts",
+    description: "Add addresses to contacts and automatically detect businesses at those locations. Find contacts by location or business name.",
   },
   {
     icon: Link2,
-    title: "Integrate the platforms you use to improve workflow",
-    description: "Connect WhoNow with existing tools to create a single source of truth for people data.",
+    title: "Slack and Teams integration",
+    description: "Connect Slack or Microsoft Teams to import workspace members as contacts and share contact cards directly from your chat.",
   },
 ];
 
@@ -33,7 +38,7 @@ export const ValueProps = () => {
         </div>
 
         {/* Feature cards */}
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
           {features.map((feature, index) => (
             <div
               key={feature.title}

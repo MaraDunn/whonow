@@ -153,12 +153,16 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
                 <span className="text-muted-foreground text-sm">/month</span>
               </div>
 
+              <p className="text-sm text-muted-foreground mb-4">
+                Need more seats, custom features, or better pricing? Let's work together to create a solution that fits your organization.
+              </p>
+
               <ul className="space-y-2">
                 {[
-                  "SSO/SAML",
-                  "Custom integrations",
-                  "Dedicated success manager",
-                  "Security reviews & SLA",
+                  "Everything in Business",
+                  "Custom seat limits",
+                  "Tailored feature set",
+                  "Volume pricing available",
                 ].map((feature, index) => (
                   <li key={index} className="flex items-start gap-2 text-sm">
                     <Check className="w-4 h-4 text-primary mt-0.5 shrink-0" />
