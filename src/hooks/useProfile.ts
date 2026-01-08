@@ -22,6 +22,10 @@ type DbCompany = {
   id: string;
   name: string;
   invite_code: string | null;
+  logo_url: string | null;
+  favicon_url: string | null;
+  primary_color: string | null;
+  secondary_color: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -45,6 +49,10 @@ const mapDbToCompany = (db: DbCompany): Company => ({
   id: db.id,
   name: db.name,
   inviteCode: db.invite_code || undefined,
+  logoUrl: db.logo_url || undefined,
+  faviconUrl: db.favicon_url || undefined,
+  primaryColor: db.primary_color || undefined,
+  secondaryColor: db.secondary_color || undefined,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });
@@ -105,15 +113,19 @@ export const useProfile = (userId?: string) => {
   const isAdmin = roles.includes("admin");
 
   // Fetch company members (employee directory)
+  // For admins, show all members. For regular members, show all members in the company
+  // (not just those visible in directory) so they can see the full team
   const { data: companyMembers = [], isLoading: membersLoading } = useQuery({
-    queryKey: ["company-members", profile?.companyId],
+    queryKey: ["company-members", profile?.companyId, isAdmin],
     queryFn: async () => {
       if (!profile?.companyId) return [];
+      
+      // Show all company members - don't filter by visibility
+      // This ensures all members can see the team directory
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq("company_id", profile.companyId)
-        .eq("is_visible_in_directory", true);
+        .eq("company_id", profile.companyId);
 
       if (error) throw error;
       return (data as DbProfile[]).map(mapDbToProfile);
@@ -204,10 +216,23 @@ export const useProfile = (userId?: string) => {
 
       return mapDbToCompany(joinedCompany as DbCompany);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["profile", userId] });
       queryClient.invalidateQueries({ queryKey: ["company"] });
       queryClient.invalidateQueries({ queryKey: ["user-roles", userId] });
+      queryClient.invalidateQueries({ queryKey: ["company-members"] });
+      // Clear subscription cache so it refreshes with company subscription
+      try {
+        localStorage.removeItem("whonow_subscription_cache");
+        localStorage.removeItem("whonow_subscription_cache_time");
+      } catch (error) {
+        console.error("Failed to clear subscription cache:", error);
+      }
+      // Wait a moment for profile/company queries to complete, then refresh subscription
+      setTimeout(() => {
+        // Trigger subscription refresh by dispatching a custom event
+        window.dispatchEvent(new CustomEvent("refresh-subscription"));
+      }, 500);
       toast.success("Joined company");
     },
     onError: (error) => {
@@ -236,6 +261,39 @@ export const useProfile = (userId?: string) => {
     },
   });
 
+  // Remove user from company (admin only)
+  const removeUserFromCompany = useMutation({
+    mutationFn: async (targetUserId: string) => {
+      if (!userId) throw new Error("No user ID");
+
+      const { data, error } = await supabase.rpc("remove_user_from_company", {
+        p_user_id: targetUserId,
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+      queryClient.invalidateQueries({ queryKey: ["company"] });
+      queryClient.invalidateQueries({ queryKey: ["company-members"] });
+      queryClient.invalidateQueries({ queryKey: ["user-roles", userId] });
+      toast.success("User removed from organization");
+    },
+    onError: (error) => {
+      const errorMessage = error.message || "Failed to remove user";
+      if (errorMessage.includes("cannot_remove_self")) {
+        toast.error("You cannot remove yourself from the organization");
+      } else if (errorMessage.includes("insufficient_privilege")) {
+        toast.error("Only admins can remove users from the organization");
+      } else if (errorMessage.includes("user_not_in_company")) {
+        toast.error("User is not in your organization");
+      } else {
+        toast.error("Failed to remove user: " + errorMessage);
+      }
+    },
+  });
+
   return {
     profile,
     company,
@@ -247,6 +305,7 @@ export const useProfile = (userId?: string) => {
     createCompany: createCompany.mutate,
     joinCompany: joinCompany.mutate,
     skipCompanySetup: skipCompanySetup.mutate,
+    removeUserFromCompany: removeUserFromCompany.mutate,
     needsCompanySetup: !!profile && !profile.companyId && !profile.hasCompletedCompanySetup,
   };
 };

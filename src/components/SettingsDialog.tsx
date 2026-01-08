@@ -202,7 +202,8 @@ export function SettingsDialog({
   // Determine number of tabs based on subscription and admin status
   const hasTeamFeatures = canAccessFeature("team_features");
   const canCreateOrg = canAccessFeature("organization_creation");
-  const showOrganizationTab = canCreateOrg; // Show org tab for Team/Business tier
+  // Show org tab if user can create orgs OR if they don't have a company (so they can join one)
+  const showOrganizationTab = canCreateOrg || !company;
   const showAdminTab = isAdmin && company && hasTeamFeatures;
   
   // Calculate tab count: base 4 (general, keywords, account, security) + org tab + admin tab

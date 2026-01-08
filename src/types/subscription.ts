@@ -99,6 +99,7 @@ export type FeatureName =
   | "integrations"
   | "advanced_analytics"
   | "api_access"
+  | "custom_branding"
   | "sso"
   | "custom_integrations";
 
@@ -111,6 +112,7 @@ export const FEATURE_ACCESS: Record<FeatureName, SubscriptionTier[]> = {
   integrations: ["team", "business"],
   advanced_analytics: ["business"],
   api_access: ["business"],
+  custom_branding: ["business"],
   // No self-serve enterprise tiers: direct large orgs to sales instead.
   sso: [],
   custom_integrations: [],

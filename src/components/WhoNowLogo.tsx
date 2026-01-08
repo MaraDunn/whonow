@@ -1,4 +1,4 @@
-import whonowLogo from "@/assets/whonow-logo.png";
+import { useBranding } from "@/hooks/useBranding";
 
 interface WhoNowLogoProps {
   size?: "sm" | "md" | "lg";
@@ -19,16 +19,18 @@ const textSizes = {
 };
 
 export function WhoNowLogo({ size = "md", showText = true, className = "" }: WhoNowLogoProps) {
+  const branding = useBranding();
+
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <img
-        src={whonowLogo}
-        alt="WhoNow Logo"
+        src={branding.logo}
+        alt={branding.companyName || "Logo"}
         className={`${sizeClasses[size]} object-contain`}
       />
       {showText && (
         <span className={`font-display font-bold ${textSizes[size]} text-foreground`}>
-          WhoNow
+          {branding.companyName || "WhoNow"}
         </span>
       )}
     </div>

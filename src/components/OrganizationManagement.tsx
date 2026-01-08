@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, Users, Key, CreditCard, Shield, Plus, Trash2, Copy, Check } from "lucide-react";
+import { Building2, Users, Key, CreditCard, Shield, Plus, Trash2, Copy, Check, ArrowRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,12 +12,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { TIER_CONFIGS } from "@/types/subscription";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
+import { BrandingSettings } from "@/components/BrandingSettings";
 
 export function OrganizationManagement() {
   const { user } = useAuth();
-  const { company, companyMembers, isAdmin } = useProfile(user?.id);
-  const { tier, subscription, createCheckout, isLoading: subLoading } = useSubscription();
+  const { company, companyMembers, isAdmin, joinCompany, removeUserFromCompany } = useProfile(user?.id);
+  const { tier, subscription, createCheckout, isLoading: subLoading, refreshSubscription } = useSubscription();
   const [copiedCode, setCopiedCode] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
 
   const tierConfig = TIER_CONFIGS[tier];
 
@@ -40,6 +44,54 @@ export function OrganizationManagement() {
     }
   };
 
+  const handleJoinCompany = () => {
+    if (!inviteCode.trim()) {
+      toast.error("Please enter an invite code");
+      return;
+    }
+
+    setIsJoining(true);
+    // joinCompany is the mutate function from useProfile
+    // It already has onSuccess/onError handlers that show toasts
+    // We add our own callbacks to handle UI state
+    joinCompany(inviteCode.trim(), {
+      onSuccess: () => {
+        setInviteCode("");
+        setIsJoining(false);
+        // Refresh subscription to get company subscription tier
+        refreshSubscription();
+      },
+      onError: (error: any) => {
+        setIsJoining(false);
+        // The mutation's built-in onError will show a toast
+        // We can add more specific error handling here if needed
+        if (error?.message?.includes("invalid_invite_code")) {
+          // Override with more specific message
+          toast.error("Invalid invite code. Please check and try again.");
+        } else if (error?.message?.includes("already_in_company")) {
+          // Override with more specific message
+          toast.error("You are already a member of an organization.");
+        }
+      },
+    });
+  };
+
+  const handleRemoveUser = (memberId: string, memberName: string) => {
+    if (!confirm(`Are you sure you want to remove ${memberName || "this user"} from the organization?`)) {
+      return;
+    }
+
+    setRemovingUserId(memberId);
+    removeUserFromCompany(memberId, {
+      onSuccess: () => {
+        setRemovingUserId(null);
+      },
+      onError: () => {
+        setRemovingUserId(null);
+      },
+    });
+  };
+
   if (!company) {
     return (
       <Card>
@@ -49,17 +101,54 @@ export function OrganizationManagement() {
             Organization
           </CardTitle>
           <CardDescription>
-            You don't have an organization yet.
+            Join an organization to collaborate with your team, share contacts, and manage members.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            Create an organization to collaborate with your team, share contacts, and manage members.
-          </p>
-          <Button className="w-full" disabled>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Organization (Requires Team/Business Tier)
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="join-invite-code">Invite Code</Label>
+            <Input
+              id="join-invite-code"
+              placeholder="Enter organization invite code..."
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && inviteCode.trim()) {
+                  handleJoinCompany();
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Ask your organization admin for the invite code to join.
+            </p>
+          </div>
+          <Button 
+            onClick={handleJoinCompany}
+            disabled={!inviteCode.trim() || isJoining}
+            className="w-full"
+          >
+            {isJoining ? (
+              <span className="flex items-center gap-2">
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                Joining...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                Join Organization
+                <ArrowRight className="h-4 w-4" />
+              </span>
+            )}
           </Button>
+          <Separator />
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+            <p className="text-sm text-amber-900 dark:text-amber-100 mb-2">
+              <strong>Want to create your own organization?</strong>
+            </p>
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              Organization creation requires a Team or Business tier subscription. 
+              Contact your organization admin to upgrade, or upgrade your personal account.
+            </p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -278,6 +367,22 @@ export function OrganizationManagement() {
                   <Badge variant={member.id === user?.id ? "default" : "secondary"}>
                     {member.id === user?.id ? "You" : "Member"}
                   </Badge>
+                  {isAdmin && member.id !== user?.id && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleRemoveUser(member.id, member.fullName || member.email || "this user")}
+                      disabled={removingUserId === member.id}
+                      title="Remove from organization"
+                    >
+                      {removingUserId === member.id ? (
+                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                      ) : (
+                        <X className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -295,6 +400,9 @@ export function OrganizationManagement() {
 
       {/* Organization Integrations */}
       <OrganizationIntegrationsPanel />
+
+      {/* Custom Branding */}
+      <BrandingSettings />
 
       {/* Admin Section */}
       <Card className="border-amber-500/50">

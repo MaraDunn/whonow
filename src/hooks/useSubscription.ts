@@ -101,27 +101,147 @@ export const useSubscription = () => {
     // Create a new request and store it
     pendingRequest = (async (): Promise<SubscriptionData> => {
       try {
-        // First, try reading directly from database (more reliable)
-        const { data: dbData, error: dbError } = await supabase
+        // First, get the effective subscription tier (includes company subscriptions via employee access)
+        const { data: effectiveTier, error: tierError } = await supabase
+          .rpc("get_user_subscription_tier", { _user_id: user.id });
+
+        if (tierError) {
+          console.error("Error getting effective subscription tier:", tierError);
+        }
+
+        // Try to get subscription data - check both user's own subscription and company subscription
+        const { data: userSubscription, error: userSubError } = await supabase
           .from("subscriptions")
           .select("*")
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (!dbError && dbData) {
-          // We have subscription data from database
-          const isSubscribed = dbData.status === "active" && dbData.tier !== "starter";
+        // Also check for company subscription (if user is in a company)
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        let companySubscription = null;
+        if (profile?.company_id) {
+          // Look for company subscription - it could be tied to company_id
+          // Note: company subscriptions might have user_id set to the admin who created it
+          // So we need to check both: subscriptions with company_id, or subscriptions where
+          // the user_id belongs to someone in the same company
+          const { data: companySub, error: companySubError } = await supabase
+            .from("subscriptions")
+            .select("*")
+            .eq("company_id", profile.company_id)
+            .eq("status", "active")
+            .maybeSingle();
+          
+          if (companySubError) {
+            console.error("Error fetching company subscription:", companySubError);
+          }
+          
+          companySubscription = companySub;
+          
+          // If no subscription found with company_id, try finding subscription of any company member
+          // (With the updated RLS policy, we should be able to see these)
+          if (!companySubscription) {
+            // Get all company member IDs
+            const { data: companyProfiles } = await supabase
+              .from("profiles")
+              .select("id")
+              .eq("company_id", profile.company_id);
+            
+            if (companyProfiles && companyProfiles.length > 0) {
+              const memberIds = companyProfiles.map(p => p.id);
+              // Find any active subscription for company members (prioritize non-starter tiers)
+              const { data: memberSubs } = await supabase
+                .from("subscriptions")
+                .select("*")
+                .in("user_id", memberIds)
+                .eq("status", "active")
+                .order("tier", { ascending: false }); // Order by tier (business > team > pro > starter)
+              
+              if (memberSubs && memberSubs.length > 0) {
+                // Find the highest tier subscription (prefer business > team > pro)
+                const bestSub = memberSubs.find(s => s.tier !== "starter") || memberSubs[0];
+                if (bestSub && bestSub.tier !== "starter") {
+                  companySubscription = bestSub;
+                }
+              }
+            }
+          }
+        }
+
+        // Priority: effective tier (includes employee access keys) > company subscription > user subscription > starter
+        // If user is in a company and company has a subscription, use that tier
+        // This allows company members to inherit company subscription benefits
+        let tier = effectiveTier || companySubscription?.tier || userSubscription?.tier || "starter";
+        let subscriptionToUse = companySubscription || userSubscription;
+
+        // If user is in a company and company has a subscription, use company subscription
+        // This ensures company members get access to company features even without employee access keys
+        if (companySubscription && companySubscription.status === "active") {
+          tier = companySubscription.tier;
+          subscriptionToUse = companySubscription;
+        } else if (effectiveTier && effectiveTier !== "starter") {
+          // Use effective tier if available (from employee access keys)
+          tier = effectiveTier;
+        }
+
+        // If we have a subscription (personal or company), use it
+        if (subscriptionToUse) {
+          // Use the tier we determined (which prioritizes company subscription)
+          const finalTier = tier;
+          const isSubscribed = subscriptionToUse.status === "active" && finalTier !== "starter";
           const subscriptionData: SubscriptionData = {
             subscribed: isSubscribed,
-            tier: normalizeTier(dbData.tier, isSubscribed),
-            seatsLimit: dbData.employee_seats_limit ?? 1,
-            seatsUsed: dbData.employee_seats_used ?? 0,
-            subscriptionEnd: dbData.current_period_end ?? null,
+            tier: normalizeTier(finalTier, isSubscribed),
+            seatsLimit: subscriptionToUse.employee_seats_limit ?? 1,
+            seatsUsed: subscriptionToUse.employee_seats_used ?? 0,
+            subscriptionEnd: subscriptionToUse.current_period_end ?? null,
           };
           setSubscription(subscriptionData);
           cacheSubscription(subscriptionData);
           setIsLoading(false);
           return subscriptionData;
+        }
+
+        // If we have an effective tier from the function but no subscription record,
+        // create subscription data from the tier (e.g., from employee access key)
+        if (effectiveTier && effectiveTier !== "starter") {
+          const isSubscribed = true;
+          const subscriptionData: SubscriptionData = {
+            subscribed: isSubscribed,
+            tier: normalizeTier(effectiveTier, isSubscribed),
+            seatsLimit: 1,
+            seatsUsed: 0,
+            subscriptionEnd: null,
+          };
+          setSubscription(subscriptionData);
+          cacheSubscription(subscriptionData);
+          setIsLoading(false);
+          return subscriptionData;
+        }
+
+        // If user is in a company with a subscription but no subscriptionToUse was set,
+        // use the company subscription tier directly (for members who joined via invite code)
+        // This is critical for users who join via invite code to get company features
+        if (companySubscription && companySubscription.status === "active" && !subscriptionToUse) {
+          const companyTier = companySubscription.tier;
+          if (companyTier && companyTier !== "starter") {
+            const isSubscribed = true;
+            const subscriptionData: SubscriptionData = {
+              subscribed: isSubscribed,
+              tier: normalizeTier(companyTier, isSubscribed),
+              seatsLimit: companySubscription.employee_seats_limit ?? 1,
+              seatsUsed: companySubscription.employee_seats_used ?? 0,
+              subscriptionEnd: companySubscription.current_period_end ?? null,
+            };
+            setSubscription(subscriptionData);
+            cacheSubscription(subscriptionData);
+            setIsLoading(false);
+            return subscriptionData;
+          }
         }
 
         // Fallback: Try Edge Function if database doesn't have subscription
@@ -205,9 +325,18 @@ export const useSubscription = () => {
 
     checkSubscription();
 
+    // Listen for manual refresh events (e.g., after joining a company)
+    const handleRefresh = () => {
+      checkSubscription();
+    };
+    window.addEventListener("refresh-subscription", handleRefresh);
+
     // Refresh subscription status every minute
     const interval = setInterval(checkSubscription, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("refresh-subscription", handleRefresh);
+    };
   }, [checkSubscription, user]);
 
   // Check on URL change for post-checkout refresh

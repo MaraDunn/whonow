@@ -17,6 +17,10 @@ export interface Company {
   id: string;
   name: string;
   inviteCode?: string;
+  logoUrl?: string;
+  faviconUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
   createdAt: string;
   updatedAt: string;
 }

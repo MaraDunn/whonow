@@ -199,9 +199,9 @@ export function ContactCard({
             <a
               href={`mailto:${contact.email}`}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-2 text-sm text-secondary-foreground hover:text-primary transition-colors"
+              className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors"
             >
-              <Mail className="h-4 w-4 text-muted-foreground" />
+              <Mail className="h-4 w-4 text-secondary-foreground" />
               <span className="truncate">{contact.email}</span>
             </a>
           )}
@@ -210,22 +210,22 @@ export function ContactCard({
             <a
               href={`tel:${contact.phone}`}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-2 text-sm text-secondary-foreground hover:text-primary transition-colors"
+              className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors"
             >
-              <Phone className="h-4 w-4 text-muted-foreground" />
+              <Phone className="h-4 w-4 text-secondary-foreground" />
               <span>{contact.phone}</span>
             </a>
           )}
 
-          <div className="flex items-center gap-2 text-sm text-secondary-foreground">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-2 text-sm text-foreground">
+            <Building2 className="h-4 w-4 text-secondary-foreground" />
             <span className="truncate">{contact.company}</span>
           </div>
 
           {/* Last contacted */}
           <div className="flex items-center gap-2 text-xs">
             <Clock className="h-3 w-3 text-muted-foreground" />
-            <span className={lastContactedText ? 'text-muted-foreground' : 'text-orange-500 font-medium'}>
+            <span className={lastContactedText ? 'text-muted-foreground' : 'text-orange-600 dark:text-orange-400 font-medium'}>
               {lastContactedText || "Never contacted"}
             </span>
           </div>
@@ -324,8 +324,8 @@ export function ContactCard({
               borderLeft: `3px solid ${folder.color}`,
             }}
           >
-            <FolderIcon className="h-3 w-3" style={{ color: folder.color }} />
-            <span className="text-muted-foreground truncate max-w-[120px]">{folder.name}</span>
+            <FolderIcon className="h-3 w-3 text-secondary-foreground" />
+            <span className="text-secondary-foreground truncate max-w-[120px]">{folder.name}</span>
           </div>
         )}
       </div>
@@ -376,7 +376,7 @@ export function ContactCard({
           {/* Last contacted indicator */}
           <div className="flex items-center gap-1.5 mt-1">
             <Clock className="h-3 w-3 text-muted-foreground" />
-            <span className={`text-xs ${lastContactedText ? 'text-muted-foreground' : 'text-orange-500 font-medium'}`}>
+            <span className={`text-xs ${lastContactedText ? 'text-muted-foreground' : 'text-orange-600 dark:text-orange-400 font-medium'}`}>
               {lastContactedText || "Never contacted"}
             </span>
           </div>
@@ -403,10 +403,10 @@ export function ContactCard({
           <a
             href={`mailto:${contact.email}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-3 text-sm text-secondary-foreground hover:text-primary transition-colors group/email"
+            className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/email"
           >
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/email:bg-primary/10 transition-colors">
-              <Mail className="h-4 w-4 text-muted-foreground group-hover/email:text-primary" />
+              <Mail className="h-4 w-4 text-secondary-foreground group-hover/email:text-primary" />
             </div>
             <span className="truncate hover:underline">{contact.email}</span>
           </a>
@@ -416,18 +416,18 @@ export function ContactCard({
           <a
             href={`tel:${contact.phone}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-3 text-sm text-secondary-foreground hover:text-primary transition-colors group/phone"
+            className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/phone"
           >
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/phone:bg-primary/10 transition-colors">
-              <Phone className="h-4 w-4 text-muted-foreground group-hover/phone:text-primary" />
+              <Phone className="h-4 w-4 text-secondary-foreground group-hover/phone:text-primary" />
             </div>
             <span className="hover:underline">{contact.phone}</span>
           </a>
         )}
 
-        <div className="flex items-center gap-3 text-sm text-secondary-foreground">
+        <div className="flex items-center gap-3 text-sm text-foreground">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <Building2 className="h-4 w-4 text-secondary-foreground" />
           </div>
           <span className="truncate">{contact.company}</span>
         </div>
