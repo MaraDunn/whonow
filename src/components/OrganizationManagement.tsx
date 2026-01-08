@@ -11,6 +11,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { TIER_CONFIGS } from "@/types/subscription";
+import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 
 export function OrganizationManagement() {
   const { user } = useAuth();
@@ -291,6 +292,9 @@ export function OrganizationManagement() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Organization Integrations */}
+      <OrganizationIntegrationsPanel />
 
       {/* Admin Section */}
       <Card className="border-amber-500/50">

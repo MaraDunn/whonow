@@ -34,12 +34,29 @@ export function useSlackIntegration() {
         return { connected: false };
       }
 
-      const { data, error } = await supabase.functions.invoke("slack-integration", {
-        body: { action: "get-status" },
+      // Use direct fetch to pass JWT in body (since Supabase strips Authorization header when verify_jwt=false)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        setStatus({ connected: false });
+        return { connected: false };
+      }
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/slack-integration`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
         },
+        body: JSON.stringify({ 
+          action: "get-status",
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) {
         // Handle auth errors silently - user may not be authenticated
@@ -63,9 +80,9 @@ export function useSlackIntegration() {
       setIsLoading(true);
       
       // Force refresh the session to get a fresh token
-      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+      const { data: { session: refreshedSession }, error: sessionError } = await supabase.auth.refreshSession();
       
-      if (sessionError || !session) {
+      if (sessionError || !refreshedSession) {
         console.error("Session refresh failed:", sessionError);
         toast({
           title: "Authentication required",
@@ -75,14 +92,50 @@ export function useSlackIntegration() {
         return;
       }
 
-      console.log("Calling slack-integration with fresh token");
+      // Use the refreshed session token
+      const accessToken = refreshedSession.access_token;
+      console.log("Calling slack-integration with fresh token (length:", accessToken.length, ")");
       
-      const { data, error } = await supabase.functions.invoke("slack-integration", {
-        body: { action: "get-oauth-url" },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
+      // Use direct fetch to pass JWT in body (since Supabase strips Authorization header when verify_jwt=false)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        toast({
+          title: "Configuration error",
+          description: "Missing Supabase configuration",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log("Sending request to slack-integration with JWT in both header and body");
+      const requestBody = JSON.stringify({ 
+        action: "get-oauth-url",
+        jwt: accessToken,
       });
+      console.log("Request body (first 100 chars):", requestBody.substring(0, 100));
+      
+      const resp = await fetch(`${supabaseUrl}/functions/v1/slack-integration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${accessToken}`, // Gateway needs this
+        },
+        body: requestBody, // Function code reads from here
+      });
+      
+      console.log("Response status:", resp.status);
+      const responseText = await resp.text();
+      console.log("Response body:", responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        data = { error: responseText || `Edge function error (${resp.status})` };
+      }
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       console.log("Slack connect response:", { data, error });
 
@@ -135,9 +188,29 @@ export function useSlackIntegration() {
   const disconnect = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase.functions.invoke("slack-integration", {
-        body: { action: "disconnect" },
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/slack-integration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
+        },
+        body: JSON.stringify({ 
+          action: "disconnect",
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -161,9 +234,36 @@ export function useSlackIntegration() {
   const importMembers = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase.functions.invoke("slack-integration", {
-        body: { action: "import-members" },
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to import members",
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return null;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/slack-integration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
+        },
+        body: JSON.stringify({ 
+          action: "import-members",
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -198,9 +298,29 @@ export function useSlackIntegration() {
   const getChannels = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase.functions.invoke("slack-integration", {
-        body: { action: "get-channels" },
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return [];
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return [];
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/slack-integration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
+        },
+        body: JSON.stringify({ 
+          action: "get-channels",
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -226,9 +346,31 @@ export function useSlackIntegration() {
   const shareContact = useCallback(async (contactId: string, channelId: string) => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase.functions.invoke("slack-integration", {
-        body: { action: "share-contact", contactId, channelId },
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return false;
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return false;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/slack-integration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
+        },
+        body: JSON.stringify({ 
+          action: "share-contact", 
+          contactId, 
+          channelId,
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -265,9 +407,31 @@ export function useSlackIntegration() {
     contactData?: { name: string; email?: string }
   ) => {
     try {
-      const { data, error } = await supabase.functions.invoke("slack-integration", {
-        body: { action: "send-notification", webhookUrl, message, contactData },
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return false;
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return false;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/slack-integration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
+        },
+        body: JSON.stringify({ 
+          action: "send-notification", 
+          webhookUrl, 
+          message, 
+          contactData,
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
       return data.success;

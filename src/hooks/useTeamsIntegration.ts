@@ -48,12 +48,28 @@ export function useTeamsIntegration() {
         return { connected: false };
       }
 
-      const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "get-status" },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        setStatus({ connected: false });
+        return { connected: false };
+      }
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
         },
+        body: JSON.stringify({ 
+          action: "get-status",
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) {
         // Handle auth errors silently - user may not be authenticated
@@ -75,8 +91,11 @@ export function useTeamsIntegration() {
   const connect = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      
+      // Force refresh the session to get a fresh token
+      const { data: { session: refreshedSession }, error: sessionError } = await supabase.auth.refreshSession();
+      
+      if (sessionError || !refreshedSession) {
         toast({
           title: "Authentication required",
           description: "Please sign in to connect Microsoft Teams",
@@ -85,12 +104,63 @@ export function useTeamsIntegration() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "get-oauth-url", origin: window.location.origin },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
+      // Use the refreshed session token
+      const accessToken = refreshedSession.access_token;
+      console.log("Calling teams-integration with fresh token (length:", accessToken.length, ")");
+      console.log("Token starts with:", accessToken.substring(0, 50));
+      console.log("Token ends with:", accessToken.substring(accessToken.length - 50));
+      
+      // Validate token format (should be JWT: header.payload.signature)
+      if (!accessToken || accessToken.split('.').length !== 3) {
+        console.error("Invalid token format - not a valid JWT");
+        toast({
+          title: "Authentication error",
+          description: "Invalid session token. Please log out and log back in.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        toast({
+          title: "Configuration error",
+          description: "Missing Supabase configuration",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log("Sending request to teams-integration with JWT in both header and body");
+      const requestBody = JSON.stringify({ 
+        action: "get-oauth-url", 
+        origin: window.location.origin,
+        jwt: accessToken, // Function code reads from here
       });
+      console.log("Request body (first 100 chars):", requestBody.substring(0, 100));
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${accessToken}`, // Gateway needs this
+        },
+        body: requestBody,
+      });
+
+      console.log("Response status:", resp.status);
+      const responseText = await resp.text();
+      console.log("Response body:", responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        data = { error: responseText || `Edge function error (${resp.status})` };
+      }
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -123,12 +193,25 @@ export function useTeamsIntegration() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "disconnect" },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
         },
+        body: JSON.stringify({ 
+          action: "disconnect",
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -157,12 +240,25 @@ export function useTeamsIntegration() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return [];
 
-      const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "get-teams" },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return [];
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
         },
+        body: JSON.stringify({ 
+          action: "get-teams",
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -196,12 +292,26 @@ export function useTeamsIntegration() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return [];
 
-      const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "get-channels", teamId },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return [];
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
         },
+        body: JSON.stringify({ 
+          action: "get-channels", 
+          teamId,
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -242,12 +352,25 @@ export function useTeamsIntegration() {
         return null;
       }
 
-      const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "import-members" },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return null;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
         },
+        body: JSON.stringify({ 
+          action: "import-members",
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -284,12 +407,28 @@ export function useTeamsIntegration() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return null;
 
-      const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "send-to-channel", teamId, channelId, message },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return null;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
         },
+        body: JSON.stringify({ 
+          action: "send-to-channel", 
+          teamId, 
+          channelId, 
+          message,
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 
@@ -326,12 +465,26 @@ export function useTeamsIntegration() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return null;
 
-      const { data, error } = await supabase.functions.invoke("teams-integration", {
-        body: { action: "create-meeting", ...params },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return null;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`, // Gateway needs this
         },
+        body: JSON.stringify({ 
+          action: "create-meeting", 
+          ...params,
+          jwt: session.access_token,
+        }),
       });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
       if (error) throw error;
 

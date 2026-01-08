@@ -19,6 +19,7 @@ type TeamsContactRow = {
   company: string;
   owner_id: string;
   company_id: string | null;
+  is_shared?: boolean;
   tags: string[];
 };
 
@@ -56,9 +57,10 @@ serve(async (req) => {
         return new Response("Missing code or credentials", { status: 400 });
       }
 
-      // Parse the state to get user ID and origin
+      // Parse the state to get user ID, origin, and scope
       let userId = "";
       let appOrigin = "";
+      let integrationScope = "user";
 
       const rawState = state ?? "";
       const parseState = (value: string) => {
@@ -80,9 +82,10 @@ serve(async (req) => {
         })();
 
       if (parsedState && typeof parsedState === "object") {
-        const stateObj = parsedState as { userId?: unknown; origin?: unknown };
+        const stateObj = parsedState as { userId?: unknown; origin?: unknown; scope?: unknown };
         userId = String(stateObj.userId || "");
         appOrigin = String(stateObj.origin || "");
+        integrationScope = String(stateObj.scope || "user");
       } else {
         // Fallback for old format where state was just the user ID
         userId = rawState;
@@ -135,25 +138,37 @@ serve(async (req) => {
       });
       const profileData = await profileResponse.json();
 
+      // Get user's company_id for org-level integrations
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", userId)
+        .single();
+
       // Calculate token expiry
       const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
 
-      // Store the integration
-      await supabase.from("integrations").upsert(
-        {
-          user_id: userId,
-          provider: "teams",
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
-          token_expires_at: expiresAt.toISOString(),
-          is_active: true,
-          settings: {
-            email: profileData.mail || profileData.userPrincipalName,
-            display_name: profileData.displayName,
-          },
+      // Store the integration with appropriate scope
+      const integrationData: any = {
+        user_id: userId,
+        provider: "teams",
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        token_expires_at: expiresAt.toISOString(),
+        is_active: true,
+        scope: integrationScope,
+        settings: {
+          email: profileData.mail || profileData.userPrincipalName,
+          display_name: profileData.displayName,
         },
-        { onConflict: "user_id,provider" }
-      );
+      };
+
+      // Add company_id for organization-level integrations
+      if (integrationScope === 'organization' && userProfile?.company_id) {
+        integrationData.company_id = userProfile.company_id;
+      }
+
+      await supabase.from("integrations").upsert(integrationData);
 
       // Redirect back to the app using absolute URL
       const successRedirect = appOrigin
@@ -169,27 +184,38 @@ serve(async (req) => {
     }
 
     // For non-OAuth requests, require authentication
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
+    // Parse body first to get JWT (since Supabase strips Authorization header when verify_jwt=false)
+    const body = await req.json();
+    const { action, scope = 'user', jwt, ...params } = body;
+    
+    console.log("[teams-integration] Action:", action, "Scope:", scope, "JWT present:", !!jwt);
+    
+    if (!jwt) {
+      console.log("[teams-integration] No JWT in request body");
+      return new Response(JSON.stringify({ error: "No JWT token provided" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
+    const token = jwt;
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ error: "Unauthorized", details: authError?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { action, ...params } = await req.json();
-    console.log(`Teams integration action: ${action}`, params);
+    console.log("[teams-integration] User verified:", user.id);
+
+    // Get user's company for org-level integrations
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
 
     switch (action) {
       case "get-oauth-url": {
@@ -200,6 +226,23 @@ serve(async (req) => {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
+        }
+
+        // For org-level, check if user is admin
+        if (scope === 'organization') {
+          const { data: isAdminData } = await supabase.rpc('has_role', {
+            user_id: user.id,
+            role_to_check: 'admin'
+          });
+          
+          if (!isAdminData) {
+            return new Response(JSON.stringify({ 
+              error: "Only organization admins can setup organization integrations" 
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
         }
 
         const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
@@ -216,12 +259,12 @@ serve(async (req) => {
           "OnlineMeetings.ReadWrite",
         ].join(" ");
         
-        // Encode both user ID and app origin in the state parameter
+        // Encode user ID, origin, and scope in the state parameter
         const origin = typeof params.origin === "string" && params.origin
           ? params.origin
           : (req.headers.get("origin") || "");
 
-        const stateData = JSON.stringify({ userId: user.id, origin });
+        const stateData = JSON.stringify({ userId: user.id, origin, scope });
         const encodedState = encodeURIComponent(stateData);
         
         const oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?` +
@@ -355,15 +398,32 @@ serve(async (req) => {
       }
 
       case "import-members": {
-        console.log("Starting import-members for user:", user.id);
+        console.log("Starting import-members for user:", user.id, "scope:", scope);
         
-        const integration = await getValidIntegration(
-          supabase,
-          user.id,
-          MICROSOFT_CLIENT_ID,
-          MICROSOFT_CLIENT_SECRET,
-          MICROSOFT_TENANT_ID
-        );
+        // Try org-level integration first if scope is organization
+        let integration = null;
+        
+        if (scope === 'organization' && profile?.company_id) {
+          integration = await getValidIntegration(
+            supabase,
+            user.id,
+            MICROSOFT_CLIENT_ID,
+            MICROSOFT_CLIENT_SECRET,
+            MICROSOFT_TENANT_ID,
+            'organization',
+            profile.company_id
+          );
+        }
+        
+        if (!integration) {
+          integration = await getValidIntegration(
+            supabase,
+            user.id,
+            MICROSOFT_CLIENT_ID,
+            MICROSOFT_CLIENT_SECRET,
+            MICROSOFT_TENANT_ID
+          );
+        }
 
         if (!integration) {
           console.log("No valid Teams integration found");
@@ -416,13 +476,6 @@ serve(async (req) => {
           );
         }
 
-        // Get user's company_id
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("company_id")
-          .eq("id", user.id)
-          .single();
-
         const allMembers: TeamsContactRow[] = [];
         const teamsList = teamsData.value || [];
         console.log("Found", teamsList.length, "teams");
@@ -453,7 +506,8 @@ serve(async (req) => {
                   role: member.roles?.join(", ") || "Member",
                   company: team.displayName || "Microsoft Teams",
                   owner_id: user.id,
-                  company_id: profile?.company_id ?? null,
+                  company_id: integration.scope === 'organization' ? integration.company_id : profile?.company_id,
+                  is_shared: integration.scope === 'organization', // Share org-level imports
                   tags: ["teams-import", team.displayName || "Microsoft Teams"],
                 });
               }
@@ -636,15 +690,36 @@ serve(async (req) => {
       }
 
       case "get-status": {
-        const { data: integration } = await supabase
-          .from("integrations")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("provider", "teams")
-          .single();
+        // Check for org-level integration first, then user-level
+        let integration = null;
+        
+        if (scope === 'organization' && profile?.company_id) {
+          const { data: orgIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("company_id", profile.company_id)
+            .eq("provider", "teams")
+            .eq("scope", "organization")
+            .eq("is_active", true)
+            .maybeSingle();
+          
+          integration = orgIntegration;
+        }
+        
+        if (!integration) {
+          const { data: userIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("provider", "teams")
+            .maybeSingle();
+          
+          integration = userIntegration;
+        }
 
         return new Response(JSON.stringify({
           connected: !!integration?.is_active,
+          scope: integration?.scope || 'user',
           settings: integration?.settings,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -652,11 +727,37 @@ serve(async (req) => {
       }
 
       case "disconnect": {
-        await supabase
-          .from("integrations")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("provider", "teams");
+        // Delete based on scope
+        if (scope === 'organization' && profile?.company_id) {
+          // Verify user is admin before allowing org-level disconnect
+          const { data: isAdminData } = await supabase.rpc('has_role', {
+            user_id: user.id,
+            role_to_check: 'admin'
+          });
+          
+          if (!isAdminData) {
+            return new Response(JSON.stringify({ 
+              error: "Only organization admins can disconnect organization integrations" 
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          
+          await supabase
+            .from("integrations")
+            .delete()
+            .eq("company_id", profile.company_id)
+            .eq("provider", "teams")
+            .eq("scope", "organization");
+        } else {
+          await supabase
+            .from("integrations")
+            .delete()
+            .eq("user_id", user.id)
+            .eq("provider", "teams")
+            .eq("scope", "user");
+        }
 
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -685,14 +786,22 @@ async function getValidIntegration(
   userId: string,
   clientId?: string,
   clientSecret?: string,
-  tenantId?: string
+  tenantId?: string,
+  scope: 'user' | 'organization' = 'user',
+  companyId?: string
 ) {
-  const { data: integration } = await supabase
+  let query = supabase
     .from("integrations")
     .select("*")
-    .eq("user_id", userId)
-    .eq("provider", "teams")
-    .single();
+    .eq("provider", "teams");
+  
+  if (scope === 'organization' && companyId) {
+    query = query.eq("company_id", companyId).eq("scope", "organization");
+  } else {
+    query = query.eq("user_id", userId).eq("scope", "user");
+  }
+
+  const { data: integration } = await query.maybeSingle();
 
   if (!integration?.access_token) return null;
 

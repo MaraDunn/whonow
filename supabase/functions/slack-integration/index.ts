@@ -52,7 +52,7 @@ serve(async (req) => {
     if (isOAuthCallback) {
       // Handle OAuth callback separately - no auth required
       const code = url.searchParams.get("code");
-      const state = url.searchParams.get("state"); // user_id
+      const stateParam = url.searchParams.get("state");
       const errorParam = url.searchParams.get("error");
       
       if (errorParam) {
@@ -66,16 +66,29 @@ serve(async (req) => {
       const SLACK_CLIENT_ID = Deno.env.get("SLACK_CLIENT_ID");
       const SLACK_CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
       
-      if (!code || !SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET || !state) {
-        console.error("Missing OAuth params:", { hasCode: !!code, hasClientId: !!SLACK_CLIENT_ID, hasSecret: !!SLACK_CLIENT_SECRET, hasState: !!state });
+      if (!code || !SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET || !stateParam) {
+        console.error("Missing OAuth params:", { hasCode: !!code, hasClientId: !!SLACK_CLIENT_ID, hasSecret: !!SLACK_CLIENT_SECRET, hasState: !!stateParam });
         return new Response(null, {
           status: 302,
           headers: { Location: `${appUrl}/?integration=slack&status=error&message=missing_params` },
         });
       }
 
+      // Parse state to extract userId and scope
+      let userId = stateParam;
+      let integrationScope = 'user';
+      
+      try {
+        const parsedState = JSON.parse(decodeURIComponent(stateParam));
+        userId = parsedState.userId;
+        integrationScope = parsedState.scope || 'user';
+      } catch {
+        // Legacy format: state is just the user ID
+        console.log("Using legacy state format (user ID only)");
+      }
+
       const redirectUri = `${supabaseUrl}/functions/v1/slack-integration`;
-      console.log("Exchanging code for token with redirect URI:", redirectUri);
+      console.log("Exchanging code for token with redirect URI:", redirectUri, "scope:", integrationScope);
       
       const tokenResponse = await fetch("https://slack.com/api/oauth.v2.access", {
         method: "POST",
@@ -99,18 +112,33 @@ serve(async (req) => {
         });
       }
 
-      // Store the integration
-      const { error: upsertError } = await supabase.from("integrations").upsert({
-        user_id: state,
+      // Get user's company_id for org-level integrations
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", userId)
+        .single();
+
+      // Store the integration with appropriate scope
+      const integrationData: any = {
+        user_id: userId,
         provider: "slack",
         access_token: tokenData.access_token,
         is_active: true,
+        scope: integrationScope,
         settings: {
           team_id: tokenData.team?.id,
           team_name: tokenData.team?.name,
           bot_user_id: tokenData.bot_user_id,
         },
-      }, { onConflict: "user_id,provider" });
+      };
+
+      // Add company_id for organization-level integrations
+      if (integrationScope === 'organization' && profile?.company_id) {
+        integrationData.company_id = profile.company_id;
+      }
+
+      const { error: upsertError } = await supabase.from("integrations").upsert(integrationData);
 
       if (upsertError) {
         console.error("Error storing integration:", upsertError);
@@ -130,24 +158,38 @@ serve(async (req) => {
     }
 
     // For all other requests, require authentication
-    const reqAuthHeader = req.headers.get("Authorization");
-    console.log("[slack-integration] Checking auth header:", reqAuthHeader ? "present" : "missing");
+    // Parse body to get JWT (since Supabase strips Authorization header when verify_jwt=false)
+    console.log("[slack-integration] Parsing request body...");
+    let body;
+    try {
+      const bodyText = await req.text();
+      console.log("[slack-integration] Raw body (first 200 chars):", bodyText.substring(0, 200));
+      body = JSON.parse(bodyText);
+      console.log("[slack-integration] Parsed body keys:", Object.keys(body));
+    } catch (e) {
+      console.error("[slack-integration] Failed to parse request body:", e);
+      return new Response(JSON.stringify({ error: "Invalid request body", details: String(e) }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     
-    if (!reqAuthHeader) {
-      console.log("[slack-integration] Returning 401 - no auth header");
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
+    const { action, scope = 'user', jwt, ...params } = body;
+    
+    console.log("[slack-integration] Action:", action, "Scope:", scope, "JWT present:", !!jwt, "JWT length:", jwt?.length || 0);
+    
+    if (!jwt) {
+      console.error("[slack-integration] No JWT in request body. Full body:", JSON.stringify(body));
+      return new Response(JSON.stringify({ error: "No JWT token provided in request body" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("[slack-integration] Verifying user token...");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      reqAuthHeader.replace("Bearer ", "")
-    );
+    const token = jwt;
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      console.log("[slack-integration] Auth failed:", authError?.message || "no user");
       return new Response(JSON.stringify({ error: "Unauthorized", details: authError?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -156,15 +198,18 @@ serve(async (req) => {
 
     console.log("[slack-integration] User verified:", user.id);
 
-    const body = await req.json();
-    const { action, ...params } = body;
-    console.log(`[slack-integration] Action: ${action}`, JSON.stringify(params));
-
     const SLACK_CLIENT_ID = Deno.env.get("SLACK_CLIENT_ID");
     const SLACK_CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
     const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN");
     
     console.log("[slack-integration] Secrets check - CLIENT_ID:", !!SLACK_CLIENT_ID, "CLIENT_SECRET:", !!SLACK_CLIENT_SECRET);
+
+    // Get user's company for org-level integrations
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
 
     switch (action) {
       case "get-oauth-url": {
@@ -177,12 +222,34 @@ serve(async (req) => {
           });
         }
         
+        // For org-level, check if user is admin
+        if (scope === 'organization') {
+          const { data: isAdminData } = await supabase.rpc('has_role', {
+            user_id: user.id,
+            role_to_check: 'admin'
+          });
+          
+          if (!isAdminData) {
+            return new Response(JSON.stringify({ 
+              error: "Only organization admins can setup organization integrations" 
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+        
         // Redirect URI should NOT include query params - Slack will add code & state
         const redirectUri = `${supabaseUrl}/functions/v1/slack-integration`;
         const scopes = "users:read,users:read.email,chat:write,channels:read,groups:read";
-        const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${user.id}`;
         
-        console.log("Generated OAuth URL with redirect:", redirectUri);
+        // Encode scope in state along with user ID
+        const stateData = JSON.stringify({ userId: user.id, scope });
+        const encodedState = encodeURIComponent(stateData);
+        
+        const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodedState}`;
+        
+        console.log("Generated OAuth URL with redirect:", redirectUri, "scope:", scope);
         
         return new Response(JSON.stringify({ url: oauthUrl }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -190,18 +257,37 @@ serve(async (req) => {
       }
 
       case "import-members": {
-        console.log("Starting import-members for user:", user.id);
+        console.log("Starting import-members for user:", user.id, "scope:", scope);
         
-        // Get user's Slack integration
-        const { data: integration, error: integrationError } = await supabase
-          .from("integrations")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("provider", "slack")
-          .single();
+        // Get user's Slack integration (check org-level first, then user-level)
+        let integration = null;
+        
+        if (scope === 'organization' && profile?.company_id) {
+          const { data: orgIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("company_id", profile.company_id)
+            .eq("provider", "slack")
+            .eq("scope", "organization")
+            .eq("is_active", true)
+            .maybeSingle();
+          
+          integration = orgIntegration;
+        }
+        
+        if (!integration) {
+          const { data: userIntegration, error: integrationError } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("provider", "slack")
+            .maybeSingle();
 
-        if (integrationError) {
-          console.error("Error fetching integration:", integrationError);
+          if (integrationError) {
+            console.error("Error fetching integration:", integrationError);
+          }
+          
+          integration = userIntegration;
         }
 
         if (!integration?.access_token) {
@@ -212,7 +298,7 @@ serve(async (req) => {
           });
         }
 
-        console.log("Found Slack integration:", integration.id, "Team:", integration.settings?.team_name);
+        console.log("Found Slack integration:", integration.id, "Team:", integration.settings?.team_name, "Scope:", integration.scope);
 
         // Fetch Slack workspace members
         const membersResponse = await fetch("https://slack.com/api/users.list", {
@@ -237,14 +323,8 @@ serve(async (req) => {
 
         console.log("Valid members after filtering:", validMembers.length);
 
-        // Get user's company_id
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("company_id")
-          .eq("id", user.id)
-          .single();
-
         // Build contacts to import
+        // For org-level imports, set company_id so contacts are shared
         const contactsToImport = validMembers.map((member) => ({
           name: member.real_name || member.name || "",
           email: member.profile?.email || null,
@@ -253,7 +333,8 @@ serve(async (req) => {
           avatar: member.profile?.image_192 || null,
           company: integration.settings?.team_name,
           owner_id: user.id,
-          company_id: profile?.company_id,
+          company_id: integration.scope === 'organization' ? integration.company_id : profile?.company_id,
+          is_shared: integration.scope === 'organization', // Share org-level imports
           tags: ["slack-import"],
         }));
 
@@ -483,15 +564,36 @@ serve(async (req) => {
       }
 
       case "get-status": {
-        const { data: integration } = await supabase
-          .from("integrations")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("provider", "slack")
-          .single();
+        // Check for org-level integration first, then user-level
+        let integration = null;
+        
+        if (scope === 'organization' && profile?.company_id) {
+          const { data: orgIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("company_id", profile.company_id)
+            .eq("provider", "slack")
+            .eq("scope", "organization")
+            .eq("is_active", true)
+            .maybeSingle();
+          
+          integration = orgIntegration;
+        }
+        
+        if (!integration) {
+          const { data: userIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("provider", "slack")
+            .maybeSingle();
+          
+          integration = userIntegration;
+        }
 
         return new Response(JSON.stringify({ 
           connected: !!integration?.is_active,
+          scope: integration?.scope || 'user',
           settings: integration?.settings,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -499,11 +601,37 @@ serve(async (req) => {
       }
 
       case "disconnect": {
-        await supabase
-          .from("integrations")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("provider", "slack");
+        // Delete based on scope
+        if (scope === 'organization' && profile?.company_id) {
+          // Verify user is admin before allowing org-level disconnect
+          const { data: isAdminData } = await supabase.rpc('has_role', {
+            user_id: user.id,
+            role_to_check: 'admin'
+          });
+          
+          if (!isAdminData) {
+            return new Response(JSON.stringify({ 
+              error: "Only organization admins can disconnect organization integrations" 
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          
+          await supabase
+            .from("integrations")
+            .delete()
+            .eq("company_id", profile.company_id)
+            .eq("provider", "slack")
+            .eq("scope", "organization");
+        } else {
+          await supabase
+            .from("integrations")
+            .delete()
+            .eq("user_id", user.id)
+            .eq("provider", "slack")
+            .eq("scope", "user");
+        }
 
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },

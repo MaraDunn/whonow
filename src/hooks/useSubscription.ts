@@ -8,6 +8,9 @@ import { toast } from "sonner";
 // Persistent cache key for subscription data
 const SUBSCRIPTION_CACHE_KEY = "whonow_subscription_cache";
 
+// Request deduplication: if a request is in flight, share the promise
+let pendingRequest: Promise<SubscriptionData> | null = null;
+
 // Load cached subscription from localStorage
 const loadCachedSubscription = (): SubscriptionData => {
   try {
@@ -82,71 +85,100 @@ export const useSubscription = () => {
       return;
     }
 
-    try {
-      // First, try reading directly from database (more reliable)
-      const { data: dbData, error: dbError } = await supabase
-        .from("subscriptions")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+    // If a request is already in flight, wait for it instead of making a new one
+    if (pendingRequest) {
+      try {
+        const result = await pendingRequest;
+        setSubscription(result);
+        setIsLoading(false);
+        return;
+      } catch {
+        // If the pending request failed, continue to make a new one
+        pendingRequest = null;
+      }
+    }
 
-      if (!dbError && dbData) {
-        // We have subscription data from database
-        const isSubscribed = dbData.status === "active" && dbData.tier !== "starter";
+    // Create a new request and store it
+    pendingRequest = (async (): Promise<SubscriptionData> => {
+      try {
+        // First, try reading directly from database (more reliable)
+        const { data: dbData, error: dbError } = await supabase
+          .from("subscriptions")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!dbError && dbData) {
+          // We have subscription data from database
+          const isSubscribed = dbData.status === "active" && dbData.tier !== "starter";
+          const subscriptionData: SubscriptionData = {
+            subscribed: isSubscribed,
+            tier: normalizeTier(dbData.tier, isSubscribed),
+            seatsLimit: dbData.employee_seats_limit ?? 1,
+            seatsUsed: dbData.employee_seats_used ?? 0,
+            subscriptionEnd: dbData.current_period_end ?? null,
+          };
+          setSubscription(subscriptionData);
+          cacheSubscription(subscriptionData);
+          setIsLoading(false);
+          return subscriptionData;
+        }
+
+        // Fallback: Try Edge Function if database doesn't have subscription
+        const { data, error } = await supabase.functions.invoke("check-subscription", {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (error) {
+          console.error("Error checking subscription:", error);
+          // Don't reset subscription on network errors - keep cached data
+          // This prevents flickering during navigation
+          setIsLoading(false);
+          throw error; // Re-throw so pending request is cleared
+        }
+
+        // Handle case where function returns error in response body
+        if (data?.error) {
+          console.error("Subscription check returned error:", data.error);
+          // Don't reset subscription on API errors - keep cached data
+          setIsLoading(false);
+          throw new Error(data.error); // Re-throw so pending request is cleared
+        }
+
         const subscriptionData: SubscriptionData = {
-          subscribed: isSubscribed,
-          tier: normalizeTier(dbData.tier, isSubscribed),
-          seatsLimit: dbData.employee_seats_limit ?? 1,
-          seatsUsed: dbData.employee_seats_used ?? 0,
-          subscriptionEnd: dbData.current_period_end ?? null,
+          subscribed: data?.subscribed ?? false,
+          tier: normalizeTier(data?.tier, data?.subscribed ?? false),
+          productId: data?.product_id,
+          seatsLimit: data?.seats_limit ?? 1,
+          seatsUsed: data?.seats_used ?? 0,
+          subscriptionEnd: data?.subscription_end ?? null,
         };
         setSubscription(subscriptionData);
         cacheSubscription(subscriptionData);
         setIsLoading(false);
-        return;
-      }
-
-      // Fallback: Try Edge Function if database doesn't have subscription
-      const { data, error } = await supabase.functions.invoke("check-subscription", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) {
-        console.error("Error checking subscription:", error);
-        // Don't reset subscription on network errors - keep cached data
-        // This prevents flickering during navigation
+        return subscriptionData;
+      } catch (error) {
+        console.error("Failed to check subscription:", error);
         setIsLoading(false);
-        return;
+        throw error; // Re-throw to clear pending request
+      } finally {
+        // Clear pending request after completion (success or failure)
+        pendingRequest = null;
       }
+    })();
 
-      // Handle case where function returns error in response body
-      if (data?.error) {
-        console.error("Subscription check returned error:", data.error);
-        // Don't reset subscription on API errors - keep cached data
-        setIsLoading(false);
-        return;
-      }
-
-      const subscriptionData: SubscriptionData = {
-        subscribed: data?.subscribed ?? false,
-        tier: normalizeTier(data?.tier, data?.subscribed ?? false),
-        productId: data?.product_id,
-        seatsLimit: data?.seats_limit ?? 1,
-        seatsUsed: data?.seats_used ?? 0,
-        subscriptionEnd: data?.subscription_end ?? null,
-      };
-      setSubscription(subscriptionData);
-      cacheSubscription(subscriptionData);
+    // Wait for the request (loading state is managed inside the promise)
+    try {
+      await pendingRequest;
     } catch (error) {
-      console.error("Failed to check subscription:", error);
+      // Error already logged in the promise, just keep cached data
       if (error instanceof FunctionsHttpError) {
         console.error("check-subscription details:", error.context);
       }
       // Don't reset subscription on errors - keep cached data to prevent flickering
-    } finally {
-      setIsLoading(false);
+      // Loading state already set to false in the promise
     }
   }, [session?.access_token, user]);
 
