@@ -1,6 +1,6 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, X, Edit, Trash2 } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, X, Edit, Trash2, Share2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
+import { useState, useEffect } from "react";
+import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 
 // Helper to format last contacted time
 function formatLastContacted(lastContactedAt?: string): string | null {
@@ -39,6 +42,17 @@ export function ContactDetailsDialog({
   onEdit,
   onDelete,
 }: ContactDetailsDialogProps) {
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const slack = useSlackIntegration();
+
+  // Check Slack connection status when dialog opens
+  useEffect(() => {
+    if (open) {
+      slack.getStatus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   if (!contact) return null;
 
   const initials = contact.name
@@ -60,6 +74,17 @@ export function ContactDetailsDialog({
             </h2>
           </div>
           <div className="flex items-center gap-2">
+            {slack.status?.connected && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShareDialogOpen(true)}
+                className="h-9 w-9"
+                title="Share to Slack"
+              >
+                <Share2 className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="outline"
               size="icon"
@@ -236,6 +261,11 @@ export function ContactDetailsDialog({
           )}
         </div>
       </DialogContent>
+      <ShareToSlackDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        contact={contact}
+      />
     </Dialog>
   );
 }
