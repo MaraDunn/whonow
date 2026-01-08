@@ -35,6 +35,7 @@ import { useFolders } from "@/hooks/useFolders";
 import { useCustomKeywords } from "@/hooks/useCustomKeywords";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useTeamDirectoryContacts } from "@/hooks/useTeamDirectoryContacts";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 
@@ -105,7 +106,8 @@ const Index = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, companyMembers, company, isAdmin } = useProfile(user?.id);
+  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, company, isAdmin } = useProfile(user?.id);
+  const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"quick" | "full">("full");
@@ -125,6 +127,13 @@ const Index = () => {
   const [clientSortOption, setClientSortOption] = useState<ClientSortOption>("oldest-contacted");
   const [selectedClientFolderId, setSelectedClientFolderId] = useState<string | null>(null);
   const [selectedTeamFolderId, setSelectedTeamFolderId] = useState<string | null>(null);
+
+  // Refetch team contacts when directory becomes visible or team folder is selected
+  useEffect(() => {
+    if (showDirectory || selectedTeamFolderId !== null) {
+      refetchTeamContacts();
+    }
+  }, [showDirectory, selectedTeamFolderId, refetchTeamContacts]);
   const { 
     contacts, 
     trashedContacts,
@@ -256,6 +265,9 @@ const Index = () => {
     setShowTrash(false);
     setShowClientDirectory(false);
     setSelectedFolderId(null);
+    setSelectedTeamFolderId(null);
+    // Refetch team contacts to ensure we have the latest data
+    refetchTeamContacts();
   };
 
   const handleSelectClientDirectory = () => {
@@ -456,7 +468,7 @@ const Index = () => {
             trashCount={trashedContacts.length}
             showTrash={showTrash}
             onSelectTrash={handleSelectTrash}
-            companyMembers={companyMembers}
+            companyMembers={teamContacts}
             showDirectory={showDirectory}
             onSelectDirectory={company ? handleSelectDirectory : undefined}
             hasCompany={!!company}
@@ -545,10 +557,10 @@ const Index = () => {
                   <div className="mb-6">
                     <h2 className="text-2xl font-display font-semibold">Team Directory</h2>
                     <p className="text-muted-foreground mt-1">
-                      {company?.name} • {companyMembers.length} member{companyMembers.length !== 1 ? "s" : ""}
+                      {company?.name} • {teamContacts.length} member{teamContacts.length !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <TeamDirectoryGrid members={companyMembers} />
+                  <TeamDirectoryGrid members={teamContacts} />
                 </>
               ) : showClientDirectory ? (
                 <>

@@ -155,6 +155,7 @@ export const useContacts = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
     },
     onError: (error) => {
       toast.error(error.message);
@@ -205,6 +206,7 @@ export const useContacts = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
     },
     onError: (error) => {
       toast.error("Failed to update contact: " + error.message);
@@ -291,6 +293,7 @@ export const useContacts = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
     },
     onError: (error) => {
       toast.error("Failed to update contact: " + error.message);

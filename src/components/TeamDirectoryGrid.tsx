@@ -2,10 +2,10 @@ import { Mail, Phone, Briefcase } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Profile } from "@/types/profile";
+import { Contact } from "@/types/contact";
 
 interface TeamDirectoryGridProps {
-  members: Profile[];
+  members: Contact[];
 }
 
 export function TeamDirectoryGrid({ members }: TeamDirectoryGridProps) {
@@ -30,9 +30,9 @@ export function TeamDirectoryGrid({ members }: TeamDirectoryGridProps) {
           <CardContent className="p-4">
             <div className="flex items-start gap-4">
               <Avatar className="h-12 w-12">
-                <AvatarImage src={member.avatarUrl} alt={member.fullName} />
+                <AvatarImage src={member.avatar} alt={member.name} />
                 <AvatarFallback className="text-lg">
-                  {member.fullName
+                  {member.name
                     ?.split(" ")
                     .map((n) => n[0])
                     .join("")
@@ -41,7 +41,7 @@ export function TeamDirectoryGrid({ members }: TeamDirectoryGridProps) {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <h3 className="font-medium truncate">{member.fullName || "No name"}</h3>
+                <h3 className="font-medium truncate">{member.name || "No name"}</h3>
                 {member.role && (
                   <Badge variant="secondary" className="mt-1 text-xs">
                     {member.role}

@@ -30,7 +30,7 @@ import { FolderFormDialog } from "@/components/FolderFormDialog";
 import { DroppableFolder } from "@/components/DroppableFolder";
 import { DroppableAllContacts } from "@/components/DroppableAllContacts";
 import { Folder as FolderType, DirectoryType } from "@/types/folder";
-import { Profile } from "@/types/profile";
+import { Contact } from "@/types/contact";
 import { ContactOwnershipFilter } from "@/types/contact";
 import { cn } from "@/lib/utils";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -48,7 +48,7 @@ interface FolderSidebarProps {
   trashCount?: number;
   showTrash?: boolean;
   onSelectTrash?: () => void;
-  companyMembers?: Profile[];
+  companyMembers?: Contact[];
   showDirectory?: boolean;
   onSelectDirectory?: () => void;
   // Ownership filtering
