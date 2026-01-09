@@ -361,6 +361,7 @@ export function SettingsDialog({
         items: [
           { id: "general", label: "Appearance", icon: Palette },
           { id: "keywords", label: "Keywords", icon: Tags },
+          { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
         ],
       },
       {
@@ -370,7 +371,6 @@ export function SettingsDialog({
         items: [
           { id: "account", label: "Profile", icon: User },
           { id: "security", label: "Security", icon: Lock },
-          { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
         ],
       },
     ];
