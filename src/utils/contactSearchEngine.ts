@@ -272,6 +272,58 @@ function scoreContact(
     const termLower = term.toLowerCase();
     let matched = false;
     
+    // Special handling for email addresses (contains @)
+    const isEmailSearch = termLower.includes("@");
+    if (isEmailSearch && fields.email) {
+      // Check for exact email match or partial email match
+      if (fields.email === termLower) {
+        // Exact email match - high score
+        result.score += 10;
+        matched = true;
+        if (!result.matchedFields.includes("email")) {
+          result.matchedFields.push("email");
+        }
+        result.matchedTerms.push(term);
+        continue; // Skip to next term
+      } else if (fields.email.includes(termLower)) {
+        // Partial email match (e.g., search "john@" matches "john@example.com")
+        result.score += 8;
+        matched = true;
+        if (!result.matchedFields.includes("email")) {
+          result.matchedFields.push("email");
+        }
+        result.matchedTerms.push(term);
+        continue; // Skip to next term
+      } else {
+        // Search term is email but contact email doesn't match exactly - check username part
+        const searchUsername = termLower.split("@")[0];
+        const contactUsername = fields.email.split("@")[0];
+        if (contactUsername && contactUsername.includes(searchUsername)) {
+          result.score += 6;
+          matched = true;
+          if (!result.matchedFields.includes("email")) {
+            result.matchedFields.push("email");
+          }
+          result.matchedTerms.push(term);
+          continue; // Skip to next term
+        }
+      }
+    }
+    
+    // Also check if non-email search term matches email field (e.g., "john" matches "john@example.com")
+    if (!isEmailSearch && fields.email && fields.email.includes(termLower)) {
+      // Check if term matches username part of email (before @)
+      const emailUsername = fields.email.split("@")[0];
+      if (emailUsername && emailUsername.includes(termLower)) {
+        // Bonus score for email username match
+        result.score += 5;
+        matched = true;
+        if (!result.matchedFields.includes("email")) {
+          result.matchedFields.push("email");
+        }
+      }
+    }
+    
     // Score by field with weights
     for (const [fieldName, fieldValue] of Object.entries(fields)) {
       if (!fieldValue) continue;

@@ -248,8 +248,16 @@ const Index = () => {
   // Count of clients for sidebar
   const clientCount = useMemo(() => contacts.filter(c => c.isClient).length, [contacts]);
 
+  // Filtered team contacts: filter by selectedTeamFolderId when a team folder is selected
+  const filteredTeamContacts = useMemo(() => {
+    if (selectedTeamFolderId !== null) {
+      return teamContacts.filter(c => c.folderId === selectedTeamFolderId);
+    }
+    return teamContacts;
+  }, [teamContacts, selectedTeamFolderId]);
+
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent, interpretation } = useSmartSearch(
-    showClientDirectory ? clientDirectoryContacts : folderFilteredContacts, 
+    showDirectory ? filteredTeamContacts : (showClientDirectory ? clientDirectoryContacts : folderFilteredContacts), 
     searchQuery
   );
 
@@ -715,10 +723,10 @@ const Index = () => {
                   <div className="mb-6">
                     <h2 className="text-2xl font-display font-semibold">Team Directory</h2>
                     <p className="text-muted-foreground mt-1">
-                      {company?.name} • {teamContacts.length} member{teamContacts.length !== 1 ? "s" : ""}
+                      {company?.name} • {searchQuery ? filteredContacts.length : filteredTeamContacts.length} member{(searchQuery ? filteredContacts.length : filteredTeamContacts.length) !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <TeamDirectoryGrid members={teamContacts} />
+                  <TeamDirectoryGrid members={searchQuery ? filteredContacts : filteredTeamContacts} />
                 </>
               ) : showClientDirectory ? (
                 <>
