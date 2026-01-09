@@ -471,12 +471,13 @@ const Index = () => {
   };
 
   const handleEditFromDetails = () => {
-    if (viewingContact) {
-      setDetailsDialogOpen(false);
-      setEditingContact(viewingContact);
-      setIsProfileMode(false);
-      setDialogOpen(true);
-    }
+    // Edit mode is now handled within ContactDetailsDialog
+    // No action needed here - the dialog manages its own edit state
+  };
+
+  const handleSaveContactFromDetails = (updatedContact: Contact) => {
+    updateContact(updatedContact);
+    toast.success(`Updated ${updatedContact.name}`);
   };
 
   const handleImportContacts = async (contacts: Omit<Contact, "id">[]) => {
@@ -801,6 +802,11 @@ const Index = () => {
                 open={dialogOpen}
                 onOpenChange={(open) => {
                   setDialogOpen(open);
+                  // Clear editingContact when dialog closes
+                  // handleSaveContact already clears it on save, so this handles cancel/close
+                  if (!open && editingContact) {
+                    setEditingContact(null);
+                  }
                 }}
                 onSave={handleSaveContact}
                 contact={editingContact}
@@ -820,12 +826,18 @@ const Index = () => {
                 open={detailsDialogOpen}
                 onOpenChange={(open) => {
                   setDetailsDialogOpen(open);
-                  if (!open) setViewingContact(null);
+                  if (!open) {
+                    setViewingContact(null);
+                  }
                 }}
                 contact={viewingContact}
                 folder={viewingContact?.folderId ? folders.find(f => f.id === viewingContact.folderId) : undefined}
+                folders={folders}
+                presetKeywords={keywords}
                 showOwnershipBadge={!!company}
+                hasCompany={!!company}
                 onEdit={handleEditFromDetails}
+                onSave={handleSaveContactFromDetails}
                 onDelete={handleDeleteFromDetails}
               />
 
