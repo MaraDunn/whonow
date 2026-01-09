@@ -145,14 +145,20 @@ export function ImportContactsDialog({
   const handleFileImport = () => {
     const contactsToImport: Omit<Contact, "id">[] = fileImport.contacts
       .filter((_, i) => selectedFileContacts.has(i))
+      .filter((c) => c.name && c.name.trim()) // Filter out contacts without names
       .map((c) => ({
-        name: c.name,
-        email: c.email,
-        phone: c.phone,
-        company: c.company,
-        role: c.role,
+        name: c.name.trim(),
+        email: c.email?.trim() || "",
+        phone: c.phone?.trim() || "",
+        company: c.company?.trim() || "",
+        role: c.role?.trim() || "",
         tags: ["imported-file"],
       }));
+    
+    if (contactsToImport.length === 0) {
+      alert("No valid contacts selected. Please select contacts with names to import.");
+      return;
+    }
     
     onImport(contactsToImport);
     fileImport.clearContacts();

@@ -30,6 +30,7 @@ import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
@@ -39,6 +40,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useTeamDirectoryContacts } from "@/hooks/useTeamDirectoryContacts";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 
@@ -128,6 +130,8 @@ const Index = () => {
   const [clientSortOption, setClientSortOption] = useState<ClientSortOption>("oldest-contacted");
   const [selectedClientFolderId, setSelectedClientFolderId] = useState<string | null>(null);
   const [selectedTeamFolderId, setSelectedTeamFolderId] = useState<string | null>(null);
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
 
   // Refetch team contacts when directory becomes visible or team folder is selected
   useEffect(() => {
@@ -147,6 +151,8 @@ const Index = () => {
     emptyTrash,
     updateLastContacted,
     toggleClientStatus,
+    totalCount,
+    bulkDeleteContacts,
   } = useContacts();
   const { 
     folders, 
@@ -276,6 +282,53 @@ const Index = () => {
     setShowDirectory(false);
     setShowTrash(false);
     setSelectedFolderId(null);
+  };
+
+  // Selection handlers (defined after filteredContacts)
+  const handleSelectContact = (id: string, selected: boolean) => {
+    setSelectedContactIds(prev => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      // Use filteredContacts which contains the currently visible contacts
+      setSelectedContactIds(new Set(filteredContacts.map(c => c.id)));
+    } else {
+      setSelectedContactIds(new Set());
+    }
+  };
+
+  const handleBulkDelete = (ids: string[]) => {
+    if (!ids || ids.length === 0) {
+      toast.error("No contacts selected");
+      return;
+    }
+    console.log("[handleBulkDelete] Deleting contacts:", ids.length, "contacts");
+    bulkDeleteContacts(ids, {
+      onSuccess: () => {
+        setSelectedContactIds(new Set());
+        setSelectionMode(false);
+      },
+      onError: (error) => {
+        console.error("[handleBulkDelete] Error:", error);
+        // Don't clear selection on error so user can retry
+      }
+    });
+  };
+
+  const handleToggleSelectionMode = () => {
+    setSelectionMode(prev => !prev);
+    if (selectionMode) {
+      setSelectedContactIds(new Set());
+    }
   };
 
   // Calculate contact count per folder
@@ -418,9 +471,117 @@ const Index = () => {
     }
   };
 
-  const handleImportContacts = (contacts: Omit<Contact, "id">[]) => {
-    contacts.forEach((contact) => addContact(contact));
-    toast.success(`Imported ${contacts.length} contacts`);
+  const handleImportContacts = async (contacts: Omit<Contact, "id">[]) => {
+    if (contacts.length === 0) {
+      return;
+    }
+
+    // Use bulk insert Edge Function for multiple contacts
+    if (contacts.length > 1) {
+      try {
+        // Normalize contact data - convert empty strings to null for optional fields
+        const normalizedContacts = contacts.map((c) => ({
+          ...c,
+          email: c.email?.trim() || null,
+          phone: c.phone?.trim() || null,
+          company: c.company?.trim() || null,
+          role: c.role?.trim() || null,
+        }));
+
+        // Chunk contacts into batches to avoid ERR_INSUFFICIENT_RESOURCES
+        const BATCH_SIZE = 50; // Smaller batches to prevent memory issues
+        const batches: typeof normalizedContacts[] = [];
+        for (let i = 0; i < normalizedContacts.length; i += BATCH_SIZE) {
+          batches.push(normalizedContacts.slice(i, i + BATCH_SIZE));
+        }
+
+        console.log(`Importing ${normalizedContacts.length} contacts in ${batches.length} batches`);
+
+        let totalInserted = 0;
+        const allErrors: string[] = [];
+
+        // Process batches sequentially to avoid overwhelming the browser
+        for (let i = 0; i < batches.length; i++) {
+          const batch = batches[i];
+          console.log(`Processing batch ${i + 1}/${batches.length} (${batch.length} contacts)`);
+          
+          try {
+            // Use direct fetch to get better error details
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+              throw new Error("Not authenticated");
+            }
+
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+            
+            const resp = await fetch(`${supabaseUrl}/functions/v1/bulk-insert-contacts`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({ 
+                contacts: batch,
+                isShared: false,
+              }),
+            });
+
+            const data = await resp.json().catch(() => ({}));
+            
+            if (!resp.ok) {
+              const errorMsg = data.error || data.message || `HTTP ${resp.status}`;
+              console.error(`Batch ${i + 1} error (${resp.status}):`, errorMsg, data);
+              allErrors.push(`Batch ${i + 1}: ${errorMsg}`);
+              continue;
+            }
+
+            if (!data.success) {
+              console.error(`Batch ${i + 1} failed:`, data.error);
+              allErrors.push(`Batch ${i + 1}: ${data.error || "Unknown error"}`);
+              if (data.errors) {
+                allErrors.push(...data.errors);
+              }
+              continue;
+            }
+
+            totalInserted += data.inserted || 0;
+            console.log(`Batch ${i + 1} completed: ${data.inserted}/${batch.length} contacts inserted`);
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : "Unknown error";
+            console.error(`Batch ${i + 1} exception:`, err);
+            allErrors.push(`Batch ${i + 1}: ${errorMsg}`);
+            continue;
+          }
+        }
+
+        // Invalidate queries to refresh the contact list
+        queryClient.invalidateQueries({ queryKey: ["contacts"] });
+        queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
+
+        if (totalInserted === 0) {
+          throw new Error(`Failed to import any contacts. ${allErrors.length > 0 ? `Errors: ${allErrors.join("; ")}` : ""}`);
+        }
+
+        const errorMsg = allErrors.length > 0 
+          ? ` (${allErrors.length} batch error${allErrors.length > 1 ? "s" : ""} occurred)` 
+          : "";
+        toast.success(`Imported ${totalInserted} of ${normalizedContacts.length} contacts${errorMsg}`);
+      } catch (error) {
+        console.error("Bulk import error:", error);
+        const message = error instanceof Error ? error.message : "Failed to import contacts";
+        console.error("Error details:", error);
+        toast.error(message);
+        // Fall back to individual inserts if bulk insert fails
+        console.log("Falling back to individual inserts...");
+        contacts.forEach((contact) => addContact(contact));
+      }
+    } else {
+      // Single contact - use regular add
+      addContact(contacts[0]);
+      toast.success("Contact imported");
+    }
   };
 
   const handleContactsImported = useCallback(() => {
@@ -449,7 +610,7 @@ const Index = () => {
             onUpdateFolder={updateFolder}
             onDeleteFolder={deleteFolder}
             contactCountByFolder={contactCountByFolder}
-            totalContacts={contacts.length}
+            totalContacts={totalCount}
             trashCount={trashedContacts.length}
             showTrash={showTrash}
             onSelectTrash={handleSelectTrash}
@@ -480,7 +641,7 @@ const Index = () => {
           <div className="flex-1">
             <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-12">
               <Header 
-                contactCount={filteredContacts.length} 
+                contactCount={totalCount} 
                 onOpenAddDialog={handleOpenAddDialog}
                 onOpenProfile={handleOpenProfile}
                 onOpenSettings={() => setSettingsOpen(true)}
@@ -491,13 +652,25 @@ const Index = () => {
                 onContactsImported={handleContactsImported}
               />
               
-              <div className="mb-4 sm:mb-10">
-                <SearchBar
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  placeholder="Try 'Who handles marketing?' or 'email sarah'..."
-                  isLoading={searchLoading}
-                />
+              <div className="mb-4 sm:mb-10 flex items-center gap-3">
+                <div className="flex-1">
+                  <SearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    placeholder="Try 'Who handles marketing?' or 'email sarah'..."
+                    isLoading={searchLoading}
+                  />
+                </div>
+                {!showTrash && !showDirectory && !showClientDirectory && (
+                  <Button
+                    variant={selectionMode ? "default" : "outline"}
+                    size="sm"
+                    onClick={handleToggleSelectionMode}
+                    className="shrink-0"
+                  >
+                    {selectionMode ? "Cancel" : "Select"}
+                  </Button>
+                )}
               </div>
 
               {searchQuery && interpretation && (
@@ -583,6 +756,12 @@ const Index = () => {
                     showOwnershipBadge={!!company}
                     onMarkContacted={updateLastContacted}
                     onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
+                    selectedContactIds={selectedContactIds}
+                    onSelectContact={handleSelectContact}
+                    onSelectAll={handleSelectAll}
+                    onBulkDelete={handleBulkDelete}
+                    selectionMode={selectionMode}
+                    onToggleSelectionMode={handleToggleSelectionMode}
                   />
                 </>
               ) : (
@@ -601,6 +780,12 @@ const Index = () => {
                   showOwnershipBadge={!!company}
                   onMarkContacted={updateLastContacted}
                   onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
+                  selectedContactIds={selectedContactIds}
+                  onSelectContact={handleSelectContact}
+                  onSelectAll={handleSelectAll}
+                  onBulkDelete={handleBulkDelete}
+                  selectionMode={selectionMode && !showTrash}
+                  onToggleSelectionMode={handleToggleSelectionMode}
                 />
               )}
 

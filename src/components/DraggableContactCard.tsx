@@ -23,6 +23,10 @@ export interface DraggableContactCardProps {
   compact?: boolean;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  // Selection props
+  isSelected?: boolean;
+  onSelect?: (selected: boolean) => void;
+  selectionMode?: boolean;
 }
 
 export function DraggableContactCard({ 
@@ -42,6 +46,9 @@ export function DraggableContactCard({
   compact = false,
   isExpanded = false,
   onToggleExpand,
+  isSelected = false,
+  onSelect,
+  selectionMode = false,
 }: DraggableContactCardProps) {
   // Disable dragging in compact mode (mobile/tablet) or trash view
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -74,6 +81,9 @@ export function DraggableContactCard({
           compact={compact}
           isExpanded={isExpanded}
           onToggleExpand={onToggleExpand}
+          isSelected={isSelected}
+          onSelect={onSelect}
+          selectionMode={selectionMode}
         />
       </div>
     );

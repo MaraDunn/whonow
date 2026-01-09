@@ -72,7 +72,7 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
         reader.readAsDataURL(file);
       });
 
-      // Call edge function
+      // Call edge function with base64
       const { data, error: fnError } = await supabase.functions.invoke('parse-contact-pdf', {
         body: { pdfBase64: base64, mimeType: file.type }
       });
@@ -195,6 +195,9 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
         <Label className="text-base font-medium">Bulk Contact Import</Label>
         <p className="text-sm text-muted-foreground">
           Upload a PDF or image containing contact information to import multiple contacts at once.
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          💡 <strong>Tip:</strong> For contact sheets with many contacts (50+), exporting as CSV and using the File import tab will give better results.
         </p>
       </div>
 

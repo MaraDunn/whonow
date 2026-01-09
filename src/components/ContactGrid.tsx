@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
 import { DraggableContactCard } from "./DraggableContactCard";
-import { Users, Trash2 } from "lucide-react";
+import { Users, Trash2, X } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useResponsiveView } from "@/hooks/use-mobile";
 
 interface ContactGridProps {
@@ -22,6 +23,13 @@ interface ContactGridProps {
   showOwnershipBadge?: boolean;
   onMarkContacted?: (id: string) => void;
   onToggleClient?: (id: string, isClient: boolean) => void;
+  // Selection props
+  selectedContactIds?: Set<string>;
+  onSelectContact?: (id: string, selected: boolean) => void;
+  onSelectAll?: (selected: boolean) => void;
+  onBulkDelete?: (ids: string[]) => void;
+  selectionMode?: boolean;
+  onToggleSelectionMode?: () => void;
 }
 
 export function ContactGrid({ 
@@ -39,6 +47,12 @@ export function ContactGrid({
   showOwnershipBadge = false,
   onMarkContacted,
   onToggleClient,
+  selectedContactIds = new Set(),
+  onSelectContact,
+  onSelectAll,
+  onBulkDelete,
+  selectionMode = false,
+  onToggleSelectionMode,
 }: ContactGridProps) {
   const responsiveView = useResponsiveView();
   const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
@@ -82,8 +96,57 @@ export function ContactGrid({
     ? "grid grid-cols-1 sm:grid-cols-2 gap-2"
     : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6";
 
+  const allSelected = contacts.length > 0 && contacts.every(c => selectedContactIds.has(c.id));
+  const someSelected = contacts.some(c => selectedContactIds.has(c.id));
+  const selectedCount = selectedContactIds.size;
+
   return (
     <div>
+      {/* Selection mode toolbar */}
+      {selectionMode && !isTrashView && (
+        <div className="mb-4 flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={(checked) => onSelectAll?.(checked === true)}
+                className="h-5 w-5"
+              />
+              <span className="text-sm font-medium">
+                {selectedCount > 0 
+                  ? `${selectedCount} contact${selectedCount !== 1 ? "s" : ""} selected`
+                  : "Select all"}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedCount > 0 && onBulkDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  const ids = Array.from(selectedContactIds);
+                  onBulkDelete(ids);
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete {selectedCount}
+              </Button>
+            )}
+            {onToggleSelectionMode && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleSelectionMode}
+              >
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {isTrashView && contacts.length > 0 && (
         <div className="mb-6 flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
@@ -119,6 +182,9 @@ export function ContactGrid({
             compact={isCompactMode}
             isExpanded={expandedContactId === contact.id}
             onToggleExpand={() => handleToggleExpand(contact.id)}
+            isSelected={selectedContactIds.has(contact.id)}
+            onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
+            selectionMode={selectionMode}
           />
         ))}
       </div>

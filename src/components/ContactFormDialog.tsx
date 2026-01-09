@@ -561,6 +561,31 @@ export function ContactFormDialog({
                   Smart parse will extract name, email, phone, company, role, and keywords automatically.
                 </p>
               </div>
+              
+              {/* Use Current Location Button */}
+              {navigator.geolocation && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isGettingLocation}
+                  className="w-full"
+                >
+                  {isGettingLocation ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Getting location...
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="h-4 w-4 mr-2" />
+                      Use Current Location
+                    </>
+                  )}
+                </Button>
+              )}
+              
               <Button
                 type="button"
                 onClick={handleQuickParse}

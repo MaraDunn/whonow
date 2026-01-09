@@ -4,6 +4,7 @@ import { Folder } from "@/types/folder";
 import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -37,6 +38,10 @@ interface ContactCardProps {
   compact?: boolean;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  // Selection props
+  isSelected?: boolean;
+  onSelect?: (selected: boolean) => void;
+  selectionMode?: boolean;
 }
 
 export function ContactCard({ 
@@ -56,6 +61,9 @@ export function ContactCard({
   compact = false,
   isExpanded = false,
   onToggleExpand,
+  isSelected = false,
+  onSelect,
+  selectionMode = false,
 }: ContactCardProps) {
   const { canAccessFeature } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
@@ -125,9 +133,26 @@ export function ContactCard({
     return (
       <div
         onClick={(e) => handleCardClick(e)}
-        className="group relative p-2 rounded-lg border border-border bg-card shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-200 cursor-pointer animate-slide-up"
+        className={cn(
+          "group relative p-2 rounded-lg border transition-all duration-200 cursor-pointer animate-slide-up",
+          selectionMode 
+            ? isSelected 
+              ? "border-primary bg-primary/5 shadow-md" 
+              : "border-border bg-card shadow-sm"
+            : "border-border bg-card shadow-sm hover:shadow-md hover:border-primary/30"
+        )}
         style={{ animationDelay: `${index * 20}ms` }}
       >
+        {/* Selection checkbox */}
+        {selectionMode && onSelect && (
+          <div className="absolute top-1.5 left-1.5 z-10" onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => onSelect(checked === true)}
+              className="h-3.5 w-3.5"
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {/* Avatar */}
           <div className="relative flex-shrink-0">
@@ -162,8 +187,25 @@ export function ContactCard({
   if (compact && isExpanded) {
     return (
       <div
-        className="group relative p-4 rounded-xl border border-primary/30 bg-card shadow-md transition-all duration-300 animate-scale-in"
+        className={cn(
+          "group relative p-4 rounded-xl border transition-all duration-300 animate-scale-in",
+          selectionMode 
+            ? isSelected 
+              ? "border-primary bg-primary/5 shadow-md" 
+              : "border-border bg-card shadow-sm"
+            : "border-primary/30 bg-card shadow-md"
+        )}
       >
+        {/* Selection checkbox */}
+        {selectionMode && onSelect && (
+          <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => onSelect(checked === true)}
+              className="h-4 w-4"
+            />
+          </div>
+        )}
         {/* Header with collapse */}
         <div className="flex items-center gap-3 mb-3" onClick={(e) => handleCardClick(e)}>
           <div className="relative flex-shrink-0">
@@ -312,9 +354,26 @@ export function ContactCard({
   return (
     <div
       onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
-      className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col"
+      className={cn(
+        "group relative p-6 rounded-2xl border transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col",
+        selectionMode 
+          ? isSelected 
+            ? "border-primary bg-primary/5 shadow-md" 
+            : "border-border bg-card"
+          : "border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30"
+      )}
       style={{ animationDelay: `${index * 50}ms` }}
     >
+      {/* Selection checkbox */}
+      {selectionMode && onSelect && (
+        <div className="absolute top-4 left-4 z-10" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(checked) => onSelect(checked === true)}
+            className="h-5 w-5"
+          />
+        </div>
+      )}
       {/* Folder indicator badge - always reserve space for consistent height */}
       <div className="h-7 mb-1">
         {folder && (

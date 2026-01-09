@@ -104,6 +104,23 @@ export const useContacts = () => {
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
 
+  // Fetch total count of active contacts (not limited by 1000 row default)
+  // Exclude "my-profile" contacts to match the contacts array filtering
+  const { data: totalCount = 0 } = useQuery({
+    queryKey: ["contacts", "count", user?.id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("contacts")
+        .select("*", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .not("tags", "cs", ["my-profile"]); // Exclude contacts with "my-profile" tag
+
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!user,
+  });
+
   // Fetch active contacts (not deleted)
   const { data: contacts = [], isLoading } = useQuery({
     queryKey: ["contacts", user?.id],
@@ -290,6 +307,68 @@ export const useContacts = () => {
     },
   });
 
+  // Bulk delete - move multiple contacts to trash
+  const bulkDeleteContacts = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!ids || ids.length === 0) {
+        throw new Error("No contacts selected");
+      }
+
+      // Filter out any invalid IDs
+      const validIds = ids.filter(id => id && typeof id === 'string' && id.length > 0);
+      if (validIds.length === 0) {
+        throw new Error("No valid contact IDs provided");
+      }
+
+      console.log("[bulkDeleteContacts] Attempting to delete", validIds.length, "contacts");
+
+      // Delete in batches to avoid potential issues with large arrays or RLS limits
+      const batchSize = 50;
+      let successCount = 0;
+      const errors: string[] = [];
+      
+      for (let i = 0; i < validIds.length; i += batchSize) {
+        const batch = validIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from("contacts")
+          .update({ deleted_at: new Date().toISOString() })
+          .in("id", batch)
+          .select("id"); // Select to get count of updated rows
+        
+        if (error) {
+          console.error(`[bulkDeleteContacts] Batch ${Math.floor(i / batchSize) + 1} error:`, error);
+          errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
+        } else {
+          successCount += data?.length || 0;
+          console.log(`[bulkDeleteContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts deleted`);
+        }
+      }
+
+      if (successCount === 0 && errors.length > 0) {
+        throw new Error(`Failed to delete contacts: ${errors.join("; ")}`);
+      }
+
+      if (errors.length > 0) {
+        // Some succeeded, some failed
+        console.warn(`[bulkDeleteContacts] Partial success: ${successCount} deleted, ${errors.length} batches failed`);
+      }
+
+      return { deleted: successCount, total: validIds.length };
+    },
+    onSuccess: (result, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      if (result.deleted === result.total) {
+        toast.success(`${result.deleted} contact${result.deleted !== 1 ? "s" : ""} moved to trash`);
+      } else {
+        toast.warning(`${result.deleted} of ${result.total} contact${result.total !== 1 ? "s" : ""} moved to trash`);
+      }
+    },
+    onError: (error) => {
+      console.error("[bulkDeleteContacts] Error:", error);
+      toast.error("Failed to delete contacts: " + (error instanceof Error ? error.message : "Unknown error"));
+    },
+  });
+
   // Restore from trash
   const restoreContact = useMutation({
     mutationFn: async (id: string) => {
@@ -432,12 +511,14 @@ export const useContacts = () => {
 
   return {
     contacts,
+    totalCount,
     trashedContacts,
     isLoading,
     trashLoading,
     addContact: addContact.mutate,
     updateContact: updateContact.mutate,
     deleteContact: deleteContact.mutate,
+    bulkDeleteContacts: bulkDeleteContacts.mutate,
     restoreContact: restoreContact.mutate,
     permanentlyDeleteContact: permanentlyDeleteContact.mutate,
     emptyTrash: emptyTrash.mutate,
