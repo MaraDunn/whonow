@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { AdminPdfImport } from "@/components/AdminPdfImport";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 import { BrandingSettings } from "@/components/BrandingSettings";
+import { DuplicateCleanupDialog } from "@/components/DuplicateCleanupDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TIER_CONFIGS } from "@/types/subscription";
 import {
@@ -104,6 +105,7 @@ export function SettingsDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("general");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["general", "account", "organization"]));
+  const [duplicateCleanupOpen, setDuplicateCleanupOpen] = useState(false);
 
   const handleAddKeyword = () => {
     if (newKeyword.trim()) {
@@ -368,6 +370,7 @@ export function SettingsDialog({
         items: [
           { id: "account", label: "Profile", icon: User },
           { id: "security", label: "Security", icon: Lock },
+          { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
         ],
       },
     ];
@@ -771,6 +774,35 @@ export function SettingsDialog({
                   Sign Out
                 </Button>
               </div>
+              </div>
+            )}
+
+            {/* Duplicate Cleanup Tab */}
+            {selectedCategory === "duplicates" && (
+              <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                <div>
+                  <h2 className="text-2xl font-semibold mb-2">Duplicate Contact Cleanup</h2>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Find and merge or delete duplicate contacts in your contact book.
+                  </p>
+                </div>
+                <Card>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        This tool will scan your personal contacts for duplicates based on email or phone number.
+                        You can then choose to merge duplicates (combining their data) or delete them.
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => setDuplicateCleanupOpen(true)}
+                      className="w-full"
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Open Duplicate Cleanup Tool
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
@@ -1437,6 +1469,11 @@ export function SettingsDialog({
           </Button>
         </div>
       </DialogContent>
+      
+      <DuplicateCleanupDialog
+        open={duplicateCleanupOpen}
+        onOpenChange={setDuplicateCleanupOpen}
+      />
     </Dialog>
   );
 }

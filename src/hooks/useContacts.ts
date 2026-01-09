@@ -4,6 +4,7 @@ import { Contact } from "@/types/contact";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { normalizeEmail, normalizePhone, findDuplicateContacts } from "@/utils/duplicateDetection";
 
 type DbContact = {
   id: string;
@@ -165,6 +166,61 @@ export const useContacts = () => {
     },
   });
 
+  // Merge contact - updates existing contact with new data
+  const mergeContact = useMutation({
+    mutationFn: async ({ 
+      primaryContact, 
+      newContactData 
+    }: { 
+      primaryContact: Contact; 
+      newContactData: Omit<Contact, "id"> 
+    }) => {
+      const { mergeContacts } = await import("@/utils/contactMerge");
+      const merged = mergeContacts(primaryContact, newContactData);
+      
+      // Update the primary contact with merged data
+      const updateData: Record<string, unknown> = {
+        name: merged.name,
+        email: merged.email || null,
+        phone: merged.phone || null,
+        company: merged.company || null,
+        role: merged.role || null,
+        description: merged.description || null,
+        tags: merged.tags || [],
+        avatar: merged.avatar || null,
+        folder_id: merged.folderId || null,
+        address: merged.address || null,
+        city: merged.city || null,
+        state: merged.state || null,
+        zip_code: merged.zipCode || null,
+        country: merged.country || null,
+        latitude: merged.latitude || null,
+        longitude: merged.longitude || null,
+        business_name: merged.businessName || null,
+        business_type: merged.businessType || null,
+      };
+
+      const { data, error } = await supabase
+        .from("contacts")
+        .update(updateData)
+        .eq("id", merged.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      return mapDbToContact(data as DbContact);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
+      toast.success("Contact merged successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to merge contact: " + error.message);
+    },
+  });
+
   const updateContact = useMutation({
     mutationFn: async ({ id, isShared, ...contact }: Contact & { isShared?: boolean }) => {
       // Business info is already set in the form (user verified it)
@@ -321,6 +377,59 @@ export const useContacts = () => {
     },
   });
 
+  /**
+   * Finds duplicate contacts for a given contact
+   * Only checks within user's personal contacts (owner_id = user.id)
+   * Excludes deleted contacts
+   */
+  const findDuplicatesForContact = async (contact: Omit<Contact, "id">): Promise<Contact[]> => {
+    if (!user?.id) return [];
+
+    // Get normalized email and phone for querying
+    const normalizedEmail = normalizeEmail(contact.email);
+    const normalizedPhone = normalizePhone(contact.phone);
+
+    // Build query to find potential duplicates
+    // We need to check both email and phone matches
+    let query = supabase
+      .from("contacts")
+      .select("*")
+      .eq("owner_id", user.id) // Only personal contacts
+      .is("deleted_at", null); // Exclude deleted
+
+    // If we have an email, check for email matches
+    // If we have a phone, check for phone matches
+    // We'll need to do this in memory since Supabase doesn't support normalized matching
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error finding duplicates:", error);
+      return [];
+    }
+
+    // Filter in memory using normalized comparison
+    const potentialDuplicates = (data as DbContact[])
+      .map(mapDbToContact)
+      .filter((existing) => {
+        const existingEmail = normalizeEmail(existing.email);
+        const existingPhone = normalizePhone(existing.phone);
+
+        // Email match (both must have emails)
+        if (normalizedEmail && existingEmail && normalizedEmail === existingEmail) {
+          return true;
+        }
+
+        // Phone match (both must have phones)
+        if (normalizedPhone && existingPhone && normalizedPhone === existingPhone) {
+          return true;
+        }
+
+        return false;
+      });
+
+    return potentialDuplicates;
+  };
+
   return {
     contacts,
     trashedContacts,
@@ -334,5 +443,8 @@ export const useContacts = () => {
     emptyTrash: emptyTrash.mutate,
     updateLastContacted: updateLastContacted.mutate,
     toggleClientStatus: toggleClientStatus.mutate,
+    findDuplicatesForContact,
+    mergeContact: mergeContact.mutate,
+    isMerging: mergeContact.isPending,
   };
 };

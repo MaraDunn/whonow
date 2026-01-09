@@ -33,6 +33,8 @@ import { toast } from "sonner";
 import { formatName, formatPhoneNumber } from "@/utils/formatContact";
 import { parseContactText } from "@/utils/contactTextParser";
 import { lookupBusinessAtAddress } from "@/utils/businessLookup";
+import { DuplicateContactDialog } from "@/components/DuplicateContactDialog";
+import { useContacts } from "@/hooks/useContacts";
 
 // Moved outside to prevent re-creation on every render (which causes input focus loss)
 interface CollapsibleSectionProps {
@@ -66,6 +68,7 @@ interface ContactFormDialogProps {
   defaultFolderId?: string | null;
   initialMode?: "quick" | "full";
   hasCompany?: boolean;
+  checkDuplicates?: boolean; // Whether to check for duplicates before saving
 }
 
 export function ContactFormDialog({ 
@@ -78,6 +81,7 @@ export function ContactFormDialog({
   defaultFolderId,
   initialMode = "full",
   hasCompany = false,
+  checkDuplicates = true,
 }: ContactFormDialogProps) {
   const [mode, setMode] = useState<"quick" | "full">(initialMode);
   const [quickInput, setQuickInput] = useState("");
@@ -94,6 +98,12 @@ export function ContactFormDialog({
   const [avatar, setAvatar] = useState<string | undefined>(undefined);
   const [folderId, setFolderId] = useState<string | undefined>(undefined);
   const [isShared, setIsShared] = useState(false);
+  
+  // Duplicate detection state
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [foundDuplicates, setFoundDuplicates] = useState<Contact[]>([]);
+  const [pendingContact, setPendingContact] = useState<Omit<Contact, "id"> & { isShared?: boolean } | null>(null);
+  const { findDuplicatesForContact, mergeContact, isMerging } = useContacts();
   
   // Address fields
   const [address, setAddress] = useState("");
@@ -416,7 +426,7 @@ export function ContactFormDialog({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!name.trim()) {
@@ -427,7 +437,7 @@ export function ContactFormDialog({
     // Generate auto-keywords from data
     const { allKeywords } = generateAutoKeywords(role, company, description, [...tags, ...autoTags]);
 
-    onSave({
+    const contactData: Omit<Contact, "id"> & { isShared?: boolean } = {
       name: name.trim(),
       email: email.trim(),
       phone: phone.trim(),
@@ -447,16 +457,61 @@ export function ContactFormDialog({
       longitude,
       businessName,
       businessType,
-    });
+    };
 
+    // Check for duplicates if enabled and not editing
+    if (checkDuplicates && !isEditing) {
+      try {
+        const duplicates = await findDuplicatesForContact(contactData);
+        if (duplicates.length > 0) {
+          setFoundDuplicates(duplicates);
+          setPendingContact(contactData);
+          setDuplicateDialogOpen(true);
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking for duplicates:", error);
+        // Continue with save if duplicate check fails
+      }
+    }
+
+    // No duplicates found, proceed with save
+    onSave(contactData);
     resetForm();
     onOpenChange(false);
   };
 
+  const handleMerge = async (primaryContact: Contact, newContactData: Omit<Contact, "id">) => {
+    mergeContact(
+      { primaryContact, newContactData },
+      {
+        onSuccess: () => {
+          setDuplicateDialogOpen(false);
+          setFoundDuplicates([]);
+          setPendingContact(null);
+          resetForm();
+          onOpenChange(false);
+        },
+      }
+    );
+  };
+
+  const handleSaveAnyway = () => {
+    if (pendingContact) {
+      onSave(pendingContact);
+      setDuplicateDialogOpen(false);
+      setFoundDuplicates([]);
+      setPendingContact(null);
+      resetForm();
+      onOpenChange(false);
+    }
+  };
+
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="font-display text-xl">
             {getDialogTitle()}
@@ -956,5 +1011,18 @@ export function ContactFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+    
+    {pendingContact && (
+      <DuplicateContactDialog
+        open={duplicateDialogOpen}
+        onOpenChange={setDuplicateDialogOpen}
+        newContact={pendingContact}
+        duplicateContacts={foundDuplicates}
+        onMerge={handleMerge}
+        onSaveAnyway={handleSaveAnyway}
+        isMerging={isMerging}
+      />
+    )}
+    </>
   );
 }
