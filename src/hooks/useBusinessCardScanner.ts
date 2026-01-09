@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import Tesseract from "tesseract.js";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ScannedContact {
@@ -82,14 +83,34 @@ export function useBusinessCardScanner() {
     return imageData;
   }, []);
 
+  const performOCR = useCallback(async (imageBase64: string): Promise<string> => {
+    try {
+      const worker = await Tesseract.createWorker("eng");
+      const { data: { text } } = await worker.recognize(imageBase64);
+      await worker.terminate();
+      return text;
+    } catch (err) {
+      console.error("OCR error:", err);
+      throw new Error("Failed to extract text from image. Please ensure the image is clear and readable.");
+    }
+  }, []);
+
   const scanImage = useCallback(async (imageBase64: string) => {
     setIsLoading(true);
     setError(null);
     setScannedContact(null);
 
     try {
+      // Perform OCR on the client side
+      const ocrText = await performOCR(imageBase64);
+
+      if (!ocrText || ocrText.trim().length === 0) {
+        throw new Error("Could not extract text from image. Please ensure the business card is clear and readable.");
+      }
+
+      // Send OCR text to backend for parsing
       const { data, error: fnError } = await supabase.functions.invoke("scan-business-card", {
-        body: { imageBase64 },
+        body: { ocrText },
       });
 
       if (fnError) {
@@ -109,7 +130,7 @@ export function useBusinessCardScanner() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [performOCR]);
 
   const captureAndScan = useCallback(async () => {
     const imageData = captureImage();
