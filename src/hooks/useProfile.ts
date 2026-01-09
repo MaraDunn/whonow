@@ -245,26 +245,6 @@ export const useProfile = (userId?: string) => {
     mutationFn: async (updates: Partial<Profile>) => {
       if (!userId) throw new Error("No user ID");
       
-      // Fetch current profile to merge updates
-      const { data: currentProfile, error: fetchError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      // Fetch company if needed
-      let companyName = "";
-      if (currentProfile.company_id) {
-        const { data: companyData } = await supabase
-          .from("companies")
-          .select("name")
-          .eq("id", currentProfile.company_id)
-          .single();
-        companyName = companyData?.name || "";
-      }
-      
       // Update profile
       const { error } = await supabase
         .from("profiles")
@@ -279,80 +259,11 @@ export const useProfile = (userId?: string) => {
         .eq("id", userId);
 
       if (error) throw error;
-
-      // Sync to contact card with "my-profile" tag
-      // First, check if contact card exists
-      const { data: existingContact, error: contactCheckError } = await supabase
-        .from("contacts")
-        .select("id")
-        .eq("owner_id", userId)
-        .contains("tags", ["my-profile"])
-        .is("deleted_at", null)
-        .maybeSingle();
-
-      if (contactCheckError && contactCheckError.code !== "PGRST116") {
-        // PGRST116 is "not found" which is fine
-        throw contactCheckError;
-      }
-
-      const contactData = {
-        name: updates.fullName || currentProfile.full_name || "",
-        email: currentProfile.email || "",
-        phone: updates.phone || currentProfile.phone || "",
-        company: companyName,
-        role: updates.role || currentProfile.role || "",
-        description: updates.description || currentProfile.description || "",
-        avatar: updates.avatarUrl || currentProfile.avatar_url || undefined,
-        tags: ["my-profile"],
-      };
-
-      if (existingContact) {
-        // Update existing contact card
-        // Set is_shared = true so other company members can see it
-        const { error: updateError } = await supabase
-          .from("contacts")
-          .update({
-            name: contactData.name,
-            email: contactData.email,
-            phone: contactData.phone || null,
-            company: contactData.company || null,
-            role: contactData.role || null,
-            description: contactData.description || null,
-            avatar: contactData.avatar || null,
-            tags: contactData.tags,
-            company_id: currentProfile.company_id || null, // Ensure company_id is set
-            is_shared: true, // Share with company so team directory can see it
-          })
-          .eq("id", existingContact.id);
-
-        if (updateError) throw updateError;
-      } else {
-        // Create new contact card if it doesn't exist
-        // Set is_shared = true so other company members can see it
-        const { error: insertError } = await supabase
-          .from("contacts")
-          .insert({
-            name: contactData.name,
-            email: contactData.email || null,
-            phone: contactData.phone || null,
-            company: contactData.company || null,
-            role: contactData.role || null,
-            description: contactData.description || null,
-            avatar: contactData.avatar || null,
-            tags: contactData.tags,
-            owner_id: userId,
-            company_id: currentProfile.company_id || null,
-            is_shared: true, // Share with company so team directory can see it
-          });
-
-        if (insertError) throw insertError;
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile", userId] });
       queryClient.invalidateQueries({ queryKey: ["company-members"] });
       queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
-      queryClient.invalidateQueries({ queryKey: ["contacts"] });
       toast.success("Profile updated");
     },
     onError: (error) => {

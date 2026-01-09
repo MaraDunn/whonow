@@ -114,7 +114,10 @@ export const useContacts = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return (data as DbContact[]).map(mapDbToContact);
+      // Filter out contacts with "my-profile" tag (profile contact cards)
+      return (data as DbContact[])
+        .map(mapDbToContact)
+        .filter((contact) => !contact.tags?.includes("my-profile"));
     },
     enabled: !!user,
   });

@@ -61,7 +61,6 @@ interface ContactFormDialogProps {
   onOpenChange: (open: boolean) => void;
   onSave: (contact: Omit<Contact, "id"> & { isShared?: boolean }) => void;
   contact?: Contact | null;
-  isProfileMode?: boolean;
   presetKeywords?: string[];
   folders?: Folder[];
   defaultFolderId?: string | null;
@@ -74,7 +73,6 @@ export function ContactFormDialog({
   onOpenChange, 
   onSave, 
   contact, 
-  isProfileMode, 
   presetKeywords = [], 
   folders = [], 
   defaultFolderId,
@@ -123,9 +121,6 @@ export function ContactFormDialog({
   const isEditing = !!contact;
   
   const getDialogTitle = () => {
-    if (isProfileMode) {
-      return isEditing ? "Edit My Contact Card" : "Create My Contact Card";
-    }
     return isEditing ? "Edit Contact" : "Add New Contact";
   };
 
@@ -470,7 +465,7 @@ export function ContactFormDialog({
 
         <div className="flex-1 overflow-y-auto pr-2">
           {/* Mode Toggle - only show for new contacts */}
-          {!isEditing && !isProfileMode && (
+          {!isEditing && (
             <div className="flex gap-2 mb-4">
               <Button
                 type="button"
@@ -581,7 +576,7 @@ export function ContactFormDialog({
               </div>
 
               {/* Share with company toggle - only for org users */}
-              {hasCompany && !isProfileMode && (
+              {hasCompany && (
                 <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border">
                   <div className="flex items-center gap-3">
                     {isShared ? (
@@ -652,7 +647,7 @@ export function ContactFormDialog({
                   />
                 </div>
                 {/* Folder Selector */}
-                {folders.length > 0 && !isProfileMode && (
+                {folders.length > 0 && (
                   <div className="space-y-2">
                     <Label htmlFor="folder">Folder</Label>
                     <Select value={folderId || "none"} onValueChange={(val) => setFolderId(val === "none" ? undefined : val)}>

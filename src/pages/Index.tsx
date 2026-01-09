@@ -21,6 +21,7 @@ import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
+import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
 import { DragPreview } from "@/components/DragPreview";
@@ -115,7 +116,7 @@ const Index = () => {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [isProfileMode, setIsProfileMode] = useState(false);
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -288,8 +289,6 @@ const Index = () => {
     return counts;
   }, [contacts]);
 
-  // Find the user's own contact card (marked with isProfile flag or stored separately)
-  const myProfile = contacts.find(c => c.tags?.includes("my-profile"));
 
   // Track which folder is being hovered during drag
   const [overId, setOverId] = useState<string | null>(null);
@@ -376,37 +375,23 @@ const Index = () => {
     if (editingContact) {
       updateContact({ ...contactData, id: editingContact.id });
     } else {
-      // If saving profile, add the my-profile tag
-      if (isProfileMode) {
-        addContact({ ...contactData, tags: [...(contactData.tags || []), "my-profile"] });
-      } else {
-        addContact(contactData);
-      }
+      addContact(contactData);
     }
     setEditingContact(null);
-    setIsProfileMode(false);
   };
 
   const handleOpenAddDialog = (mode: "quick" | "full" = "full") => {
     setEditingContact(null);
-    setIsProfileMode(false);
     setDialogMode(mode);
     setDialogOpen(true);
   };
 
   const handleOpenProfile = () => {
-    if (myProfile) {
-      setEditingContact(myProfile);
-    } else {
-      setEditingContact(null);
-    }
-    setIsProfileMode(true);
-    setDialogOpen(true);
+    setProfileEditorOpen(true);
   };
 
   const handleEditContact = (contact: Contact) => {
     setEditingContact(contact);
-    setIsProfileMode(false);
     setDialogOpen(true);
   };
 
@@ -504,7 +489,6 @@ const Index = () => {
                   setImportDialogOpen(true);
                 }}
                 onContactsImported={handleContactsImported}
-                myProfile={myProfile}
               />
               
               <div className="mb-4 sm:mb-10">
@@ -624,16 +608,19 @@ const Index = () => {
                 open={dialogOpen}
                 onOpenChange={(open) => {
                   setDialogOpen(open);
-                  if (!open) setIsProfileMode(false);
                 }}
                 onSave={handleSaveContact}
                 contact={editingContact}
-                isProfileMode={isProfileMode}
                 presetKeywords={keywords}
                 folders={folders}
                 defaultFolderId={selectedFolderId}
                 initialMode={dialogMode}
                 hasCompany={!!company}
+              />
+
+              <ProfileEditorDialog
+                open={profileEditorOpen}
+                onOpenChange={setProfileEditorOpen}
               />
 
               <ContactDetailsDialog

@@ -134,12 +134,6 @@ export function ContactDetailsDialog({
                     Client
                   </span>
                 )}
-                {contact.tags?.includes("my-profile") && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                    <User className="h-3.5 w-3.5" />
-                    You
-                  </span>
-                )}
                 {showOwnershipBadge && contact.isShared && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-sm font-medium">
                     <Users className="h-3.5 w-3.5" />

@@ -7,7 +7,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Contact } from "@/types/contact";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
@@ -29,7 +28,6 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onOpenImport: (tab?: string) => void;
   onContactsImported?: () => void;
-  myProfile?: Contact;
 }
 
 export function Header({ 
@@ -39,7 +37,6 @@ export function Header({
   onOpenSettings, 
   onOpenImport, 
   onContactsImported, 
-  myProfile,
 }: HeaderProps) {
   const { user, signOut } = useAuth();
   const { profile, company } = useProfile(user?.id);
@@ -172,7 +169,7 @@ export function Header({
           <DropdownMenuTrigger asChild>
             <button className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-muted hover:bg-muted/80 transition-colors">
               <Avatar className="h-7 w-7 sm:h-9 sm:w-9">
-                {myProfile?.avatar && <AvatarImage src={myProfile.avatar} alt={myProfile.name} />}
+                {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt={displayName} />}
                 <AvatarFallback className="bg-primary/10 text-primary font-medium">
                   {profileInitials}
                 </AvatarFallback>
@@ -203,7 +200,7 @@ export function Header({
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer" onClick={onOpenProfile}>
               <User className="mr-2 h-4 w-4" />
-              {myProfile ? "Edit My Card" : "Create My Card"}
+              Edit Profile
             </DropdownMenuItem>
             <DropdownMenuItem className="cursor-pointer" onClick={onOpenSettings}>
               <Settings className="mr-2 h-4 w-4" />

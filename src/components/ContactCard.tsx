@@ -350,12 +350,6 @@ export function ContactCard({
                 Client
               </span>
             )}
-            {contact.tags?.includes("my-profile") && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                <User className="h-3 w-3" />
-                You
-              </span>
-            )}
             {showOwnershipBadge && contact.isShared && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium">
                 <Users className="h-3 w-3" />
