@@ -313,21 +313,25 @@ export function OrganizationManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-sm text-muted-foreground">Current Plan</Label>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="font-semibold text-lg">{tierConfig.name}</p>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <Label className="text-sm text-muted-foreground mb-2 block">Current Plan</Label>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-xl">{tierConfig.name}</p>
                 <Badge variant={tier === "business" ? "default" : tier === "team" ? "secondary" : "outline"}>
                   {tier}
                 </Badge>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold">
-                ${tierConfig.price}
-                {tierConfig.price > 0 && <span className="text-sm text-muted-foreground">/{tierConfig.period}</span>}
-              </p>
+              {tierConfig.price > 0 ? (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold">${tierConfig.price}</span>
+                  <span className="text-sm text-muted-foreground">/{tierConfig.period}</span>
+                </div>
+              ) : (
+                <p className="text-2xl font-bold">Free</p>
+              )}
             </div>
           </div>
 
@@ -336,13 +340,13 @@ export function OrganizationManagement() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-sm text-muted-foreground">Team Members</Label>
-              <p className="font-medium">
+              <p className="font-semibold">
                 {companyMembers.length} / {tierConfig.seats}
               </p>
             </div>
-            <div className="w-full bg-muted rounded-full h-2">
+            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
               <div
-                className="bg-primary rounded-full h-2 transition-all"
+                className="bg-primary rounded-full h-full transition-all"
                 style={{ width: `${Math.min((companyMembers.length / tierConfig.seats) * 100, 100)}%` }}
               />
             </div>

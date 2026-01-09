@@ -1,9 +1,12 @@
-import { useState } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { AdminPdfImport } from "@/components/AdminPdfImport";
-import { OrganizationManagement } from "@/components/OrganizationManagement";
+import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
+import { BrandingSettings } from "@/components/BrandingSettings";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TIER_CONFIGS } from "@/types/subscription";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -58,8 +60,25 @@ export function SettingsDialog({
   const [newOrgName, setNewOrgName] = useState("");
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
-  const { profile, company, isAdmin, createCompany } = useProfile(user?.id);
-  const { canAccessFeature, createCheckout } = useSubscription();
+  const { 
+    profile, 
+    company, 
+    companyMembers,
+    isAdmin, 
+    isSuperAdmin: isSuperAdminFromHook,
+    createCompany,
+    joinCompany,
+    removeUserFromCompany,
+    grantAdminRole,
+    revokeAdminRole,
+    refreshInviteCode,
+    deleteCompany,
+  } = useProfile(user?.id);
+  const { tier, subscription, createCheckout, isLoading: subLoading, refreshSubscription, canAccessFeature } = useSubscription();
+  
+  // Fallback: if no owner is set and user is admin, treat as super admin (backwards compatibility)
+  const isSuperAdmin = isSuperAdminFromHook || (isAdmin && (!company?.ownerId || company?.ownerId === user?.id));
+  const tierConfig = TIER_CONFIGS[tier];
   
   // Feature access checks
   const hasIntegrationsAccess = canAccessFeature("integrations");
@@ -74,6 +93,17 @@ export function SettingsDialog({
   const [isChangingEmail, setIsChangingEmail] = useState(false);
   const [isSigningOutAll, setIsSigningOutAll] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
+  
+  // Organization management state
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [managingAdminUserId, setManagingAdminUserId] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  
+  // Navigation state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("general");
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["general", "account", "organization"]));
 
   const handleAddKeyword = () => {
     if (newKeyword.trim()) {
@@ -199,88 +229,323 @@ export function SettingsDialog({
     }
   };
 
+  // Organization management handlers
+  const handleManageSubscription = async () => {
+    try {
+      toast.info("Opening subscription management...");
+      await createCheckout(tier);
+    } catch (error) {
+      toast.error("Failed to open subscription management");
+    }
+  };
+
+  const handleRemoveUser = (memberId: string, memberName: string) => {
+    if (!confirm(`Are you sure you want to remove ${memberName || "this user"} from the organization?`)) {
+      return;
+    }
+    setRemovingUserId(memberId);
+    removeUserFromCompany(memberId, {
+      onSuccess: () => {
+        setRemovingUserId(null);
+      },
+      onError: () => {
+        setRemovingUserId(null);
+      },
+    });
+  };
+
+  const handleGrantAdmin = (memberId: string, memberName: string) => {
+    if (!confirm(`Grant admin permissions to ${memberName || "this user"}?`)) {
+      return;
+    }
+    setManagingAdminUserId(memberId);
+    grantAdminRole(memberId, {
+      onSuccess: () => {
+        setManagingAdminUserId(null);
+      },
+      onError: () => {
+        setManagingAdminUserId(null);
+      },
+    });
+  };
+
+  const handleRevokeAdmin = (memberId: string, memberName: string) => {
+    if (!confirm(`Revoke admin permissions from ${memberName || "this user"}?`)) {
+      return;
+    }
+    setManagingAdminUserId(memberId);
+    revokeAdminRole(memberId, {
+      onSuccess: () => {
+        setManagingAdminUserId(null);
+      },
+      onError: () => {
+        setManagingAdminUserId(null);
+      },
+    });
+  };
+
+  const handleRefreshInviteCode = () => {
+    if (!confirm("Are you sure you want to refresh the invite code? The old code will no longer work.")) {
+      return;
+    }
+    refreshInviteCode();
+  };
+
+  const handleDeleteOrganization = () => {
+    if (!confirm("Are you sure you want to delete this organization? This action cannot be undone. All data will be permanently deleted.")) {
+      return;
+    }
+    deleteCompany();
+  };
+
+  const handleJoinCompany = () => {
+    if (!inviteCode.trim()) {
+      toast.error("Please enter an invite code");
+      return;
+    }
+    setIsJoining(true);
+    joinCompany(inviteCode.trim(), {
+      onSuccess: () => {
+        setInviteCode("");
+        setIsJoining(false);
+        refreshSubscription();
+      },
+      onError: (error: any) => {
+        setIsJoining(false);
+        if (error?.message?.includes("invalid_invite_code")) {
+          toast.error("Invalid invite code. Please check and try again.");
+        } else if (error?.message?.includes("already_in_company")) {
+          toast.error("You are already a member of an organization.");
+        }
+      },
+    });
+  };
+
   // Determine number of tabs based on subscription and admin status
   const hasTeamFeatures = canAccessFeature("team_features");
   const canCreateOrg = canAccessFeature("organization_creation");
-  // Show org tab if user can create orgs OR if they don't have a company (so they can join one)
-  const showOrganizationTab = canCreateOrg || !company;
-  const showAdminTab = isAdmin && company && hasTeamFeatures;
-  
-  // Calculate tab count: base 4 (general, keywords, account, security) + org tab + admin tab
-  let tabCount = 4;
-  if (showOrganizationTab) tabCount++;
-  if (showAdminTab) tabCount++;
+  // Show org tab if user can create orgs OR if they don't have a company (so they can join one) OR if they're an admin
+  const showOrganizationTab = canCreateOrg || !company || (isAdmin && company && hasTeamFeatures);
+
+  // Navigation structure
+  type NavItem = {
+    id: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    category?: string;
+  };
+
+  const navigationItems: NavItem[] = useMemo(() => {
+    const items: NavItem[] = [
+      { id: "general", label: "General", icon: Palette, category: "general" },
+      { id: "keywords", label: "Keywords", icon: Tags, category: "general" },
+      { id: "account", label: "Account", icon: User, category: "account" },
+      { id: "security", label: "Security", icon: Lock, category: "account" },
+    ];
+
+    if (showOrganizationTab) {
+      items.push({ id: "organization", label: "Organization", icon: Building2, category: "organization" });
+    }
+
+    return items;
+  }, [showOrganizationTab]);
+
+  const categories = useMemo(() => {
+    const cats = [
+      {
+        id: "general",
+        label: "General",
+        icon: Palette,
+        items: [
+          { id: "general", label: "Appearance", icon: Palette },
+          { id: "keywords", label: "Keywords", icon: Tags },
+        ],
+      },
+      {
+        id: "account",
+        label: "Account",
+        icon: User,
+        items: [
+          { id: "account", label: "Profile", icon: User },
+          { id: "security", label: "Security", icon: Lock },
+        ],
+      },
+    ];
+
+    if (showOrganizationTab) {
+      const orgItems = [
+        { id: "org-details", label: "Organization Details", icon: Building2 },
+        { id: "subscription", label: "Subscription", icon: CreditCard },
+        { id: "team-members", label: "Team Members", icon: Users },
+        { id: "org-integrations", label: "Organization Integrations", icon: Settings },
+        { id: "custom-branding", label: "Custom Branding", icon: Palette },
+        { id: "admin-controls", label: "Admin Controls", icon: Shield },
+      ];
+      
+      // Add admin-only sections
+      if (isAdmin && company && hasTeamFeatures) {
+        orgItems.push(
+          { id: "company-keywords", label: "Company Keywords", icon: Tags },
+          { id: "bulk-import", label: "Bulk Contact Import", icon: FileText }
+        );
+      }
+      
+      cats.push({
+        id: "organization",
+        label: "Organization",
+        icon: Building2,
+        items: orgItems,
+      });
+    }
+
+    return cats;
+  }, [showOrganizationTab]);
+
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return categories;
+    
+    const query = searchQuery.toLowerCase();
+    return categories
+      .map(cat => ({
+        ...cat,
+        items: cat.items.filter(item => 
+          item.label.toLowerCase().includes(query) || 
+          cat.label.toLowerCase().includes(query)
+        ),
+      }))
+      .filter(cat => cat.items.length > 0);
+  }, [categories, searchQuery]);
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoryId)) {
+        newSet.delete(categoryId);
+      } else {
+        newSet.add(categoryId);
+      }
+      return newSet;
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[85vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
+      <DialogContent className="w-[95vw] sm:w-[95vw] md:w-[95vw] lg:w-[95vw] xl:w-[95vw] max-w-[2400px] h-[95vh] sm:h-[90vh] max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b flex-shrink-0">
           <DialogTitle className="font-display text-xl">Settings</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="general" className="flex-1 flex flex-col sm:flex-row overflow-hidden">
-          {/* Sidebar with tabs */}
-          <div className="w-full sm:w-48 border-b sm:border-b-0 sm:border-r bg-muted/30 flex-shrink-0">
-            <TabsList className="flex sm:flex-col h-auto sm:h-full w-full bg-transparent p-2 gap-1">
-              <TabsTrigger 
-                value="general" 
-                className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                <Palette className="h-4 w-4" />
-                <span className="hidden sm:inline">General</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="keywords" 
-                className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                <Tags className="h-4 w-4" />
-                <span className="hidden sm:inline">Keywords</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="account" 
-                className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                <User className="h-4 w-4" />
-                <span className="hidden sm:inline">Account</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="security" 
-                className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                <Lock className="h-4 w-4" />
-                <span className="hidden sm:inline">Security</span>
-              </TabsTrigger>
-              {showOrganizationTab && (
-                <TabsTrigger 
-                  value="organization" 
-                  className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                >
-                  <Building2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Organization</span>
-                </TabsTrigger>
-              )}
-              {showAdminTab && (
-                <TabsTrigger 
-                  value="admin" 
-                  className="flex-1 sm:w-full justify-center sm:justify-start gap-2 sm:gap-3 px-3 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                >
-                  <Shield className="h-4 w-4" />
-                  <span className="hidden sm:inline">Admin</span>
-                </TabsTrigger>
-              )}
-            </TabsList>
+        <div className="flex-1 flex flex-col sm:flex-row overflow-hidden min-h-0">
+          {/* Sidebar with hierarchical navigation */}
+          <div className="w-full sm:w-64 border-b sm:border-b-0 sm:border-r bg-muted/30 flex-shrink-0 flex flex-col">
+            {/* Search bar */}
+            <div className="p-3 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search settings..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 pr-8 h-9 text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-secondary"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Navigation list */}
+            <div className="flex-1 overflow-y-auto">
+              <nav className="p-2 space-y-1">
+                {filteredCategories.map((category) => {
+                  const isExpanded = expandedCategories.has(category.id);
+                  const hasActiveItem = category.items.some(item => item.id === selectedCategory);
+                  
+                  return (
+                    <div key={category.id}>
+                      {/* Category header */}
+                      <button
+                        onClick={() => {
+                          if (category.items.length === 1) {
+                            setSelectedCategory(category.items[0].id);
+                            if (!expandedCategories.has(category.id)) {
+                              setExpandedCategories(prev => new Set(prev).add(category.id));
+                            }
+                          } else {
+                            toggleCategory(category.id);
+                            // If expanding and no item is selected from this category, select the first one
+                            if (!expandedCategories.has(category.id) && !category.items.some(item => item.id === selectedCategory)) {
+                              setSelectedCategory(category.items[0].id);
+                            }
+                          }
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative ${
+                          hasActiveItem
+                            ? "bg-background text-foreground"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        {hasActiveItem && (
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+                        )}
+                        <category.icon className="h-4 w-4 flex-shrink-0" />
+                        <span className="flex-1 text-left">{category.label}</span>
+                        {category.items.length > 1 && (
+                          <ChevronRight
+                            className={`h-4 w-4 transition-transform flex-shrink-0 ${
+                              isExpanded ? "rotate-90" : ""
+                            }`}
+                          />
+                        )}
+                      </button>
+
+                      {/* Sub-items */}
+                      {isExpanded && category.items.length > 1 && (
+                        <div className="ml-7 mt-1 space-y-0.5">
+                          {category.items.map((item) => (
+                            <button
+                              key={item.id}
+                              onClick={() => setSelectedCategory(item.id)}
+                              className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors relative ${
+                                selectedCategory === item.id
+                                  ? "bg-primary/10 text-primary font-medium"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              }`}
+                            >
+                              {selectedCategory === item.id && (
+                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r-full" />
+                              )}
+                              <span className="flex-1 text-left">{item.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </nav>
+            </div>
           </div>
 
           {/* Content area */}
-          <div className="flex-1 overflow-y-auto">
-            {/* General Tab */}
-            <TabsContent value="general" className="space-y-6 p-6 m-0">
-              <div className="space-y-4">
-                <Label className="text-base font-medium">Appearance</Label>
-                <p className="text-sm text-muted-foreground">
-                  Choose your preferred theme for the app.
-                </p>
-                <div className="flex gap-2">
+          <div className="flex-1 overflow-y-auto min-w-0">
+            {/* General - Appearance */}
+            {selectedCategory === "general" && (
+              <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                <div>
+                  <h2 className="text-2xl font-semibold mb-2">Appearance</h2>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Choose your preferred theme for the app.
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex gap-2">
                   <Button
                     variant={theme === "light" ? "default" : "outline"}
                     size="sm"
@@ -308,13 +573,18 @@ export function SettingsDialog({
                     <Monitor className="h-4 w-4 mr-2" />
                     System
                   </Button>
+                  </div>
                 </div>
               </div>
-            </TabsContent>
+            )}
 
             {/* Keywords Tab - View only for company members */}
-            <TabsContent value="keywords" className="space-y-4 p-6 m-0">
-              <div className="flex items-center justify-between">
+            {selectedCategory === "keywords" && (
+              <div className="space-y-4 p-4 sm:p-6 md:p-8">
+                <div>
+                  <h2 className="text-2xl font-semibold mb-2">Keywords</h2>
+                </div>
+                <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Label className="text-base font-medium">Preset Keywords</Label>
                   {isCompanyKeywords && (
@@ -384,10 +654,15 @@ export function SettingsDialog({
                   Click on a keyword to remove it.
                 </p>
               )}
-            </TabsContent>
+              </div>
+            )}
 
             {/* Account Tab */}
-            <TabsContent value="account" className="space-y-6 p-6 m-0">
+            {selectedCategory === "account" && (
+              <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                <div>
+                  <h2 className="text-2xl font-semibold mb-2">Profile</h2>
+                </div>
               {/* User Info */}
               <div className="space-y-2">
                 <Label className="text-base font-medium">Profile</Label>
@@ -496,10 +771,15 @@ export function SettingsDialog({
                   Sign Out
                 </Button>
               </div>
-            </TabsContent>
+              </div>
+            )}
 
             {/* Security Tab */}
-            <TabsContent value="security" className="space-y-6 p-6 m-0">
+            {selectedCategory === "security" && (
+              <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                <div>
+                  <h2 className="text-2xl font-semibold mb-2">Security</h2>
+                </div>
               {/* Change Password */}
               <div className="space-y-4">
                 <Label className="text-base font-medium">Change Password</Label>
@@ -633,154 +913,525 @@ export function SettingsDialog({
                   {isSigningOutAll ? "Signing out..." : "Sign Out All Devices"}
                 </Button>
               </div>
-            </TabsContent>
-
-            {/* Organization Tab - Visible to Team/Business tier users */}
-            {showOrganizationTab && (
-              <TabsContent value="organization" className="space-y-6 p-6 m-0">
-                <OrganizationManagement />
-              </TabsContent>
+              </div>
             )}
 
-            {/* Admin Tab - Only visible to admins */}
-            {showAdminTab && (
-              <TabsContent value="admin" className="space-y-6 p-6 m-0">
-                {/* Invite Code */}
-                <div className="space-y-4">
-                  <Label className="text-base font-medium">Invite Members</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Share this code with people you want to invite to your company.
-                  </p>
-                  {company?.inviteCode && (
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 text-sm bg-muted px-3 py-2 rounded-lg font-mono">
-                        {company.inviteCode}
-                      </code>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={handleCopyInviteCode}
-                      >
-                        {copiedCode ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                <Separator />
-
-                {/* Company Keywords Management */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-medium">Company Keywords</Label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={onResetKeywords}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <RotateCcw className="h-4 w-4 mr-1" />
-                      Reset
-                    </Button>
-                  </div>
-                  
-                  <p className="text-sm text-muted-foreground">
-                    Manage preset keywords for everyone in your company.
-                  </p>
-
-                  <div className="flex gap-2">
-                    <Input
-                      value={newKeyword}
-                      onChange={(e) => setNewKeyword(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Add a new keyword..."
-                      className="flex-1"
-                    />
-                    <Button onClick={handleAddKeyword} size="icon" variant="outline">
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg min-h-[80px]">
-                    {keywords.length === 0 ? (
-                      <p className="text-sm text-muted-foreground w-full text-center py-4">
-                        No company keywords yet. Add some above!
+            {/* Organization Subsections */}
+            {showOrganizationTab && (
+              <>
+                {/* Organization Details */}
+                {selectedCategory === "org-details" && (
+                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">Organization Details</h2>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        Manage your organization settings and information
                       </p>
+                    </div>
+                    {!company ? (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Building2 className="h-5 w-5" />
+                            Organization
+                          </CardTitle>
+                          <CardDescription>
+                            Join an organization to collaborate with your team, share contacts, and manage members.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="join-invite-code">Invite Code</Label>
+                            <Input
+                              id="join-invite-code"
+                              placeholder="Enter organization invite code..."
+                              value={inviteCode}
+                              onChange={(e) => setInviteCode(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && inviteCode.trim()) {
+                                  handleJoinCompany();
+                                }
+                              }}
+                              className="bg-muted"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Ask your organization admin for the invite code to join.
+                            </p>
+                          </div>
+                          <Button 
+                            onClick={handleJoinCompany}
+                            disabled={!inviteCode.trim() || isJoining}
+                            className="w-full"
+                          >
+                            {isJoining ? (
+                              <span className="flex items-center gap-2">
+                                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                                Joining...
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-2">
+                                Join Organization
+                                <ArrowRight className="h-4 w-4" />
+                              </span>
+                            )}
+                          </Button>
+                          <Separator />
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+                            <p className="text-sm text-amber-900 dark:text-amber-100 mb-2">
+                              <strong>Want to create your own organization?</strong>
+                            </p>
+                            <p className="text-xs text-amber-800 dark:text-amber-200">
+                              Organization creation requires a Team or Business tier subscription. 
+                              Contact your organization admin to upgrade, or upgrade your personal account.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : !isAdmin ? (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Building2 className="h-5 w-5" />
+                            Organization
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div>
+                              <Label className="text-sm text-muted-foreground">Organization Name</Label>
+                              <p className="font-medium">{company.name}</p>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-muted-foreground">Your Role</Label>
+                              <Badge variant="outline">Member</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Contact your organization admin to manage settings.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
                     ) : (
-                      keywords.map((keyword) => (
-                        <Badge
-                          key={keyword}
-                          variant="secondary"
-                          className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                          onClick={() => onRemoveKeyword(keyword)}
-                        >
-                          {keyword}
-                          <X className="h-3 w-3 ml-1" />
-                        </Badge>
-                      ))
+                      <Card>
+                        <CardContent className="space-y-4 pt-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="org-name">Organization Name</Label>
+                            <Input
+                              id="org-name"
+                              value={company.name}
+                              disabled
+                              className="bg-muted"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Contact support to change your organization name
+                            </p>
+                          </div>
+                          <Separator />
+                          <div className="space-y-2">
+                            <Label>Invite Code</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                value={company.inviteCode || "No invite code"}
+                                readOnly
+                                className="bg-muted font-mono"
+                              />
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={handleCopyInviteCode}
+                                disabled={!company.inviteCode}
+                              >
+                                {copiedCode ? (
+                                  <Check className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <Copy className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Share this code with team members to invite them to your organization
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
                     )}
                   </div>
-                  
-                  <p className="text-xs text-muted-foreground">
-                    Click on a keyword to remove it.
-                  </p>
-                </div>
-
-                <Separator />
-
-                {/* Bulk Contact Import */}
-                {onBulkImport && (
-                  <AdminPdfImport onImport={onBulkImport} />
                 )}
 
-                <Separator />
 
-                {/* Integrations - only show for Team+ */}
-                {hasIntegrationsAccess ? (
-                  <div className="space-y-4">
-                    <Label className="text-base font-medium">Integrations</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Connect your company to Slack and Microsoft Teams.
-                    </p>
-                    <IntegrationsPanel />
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <Label className="text-base font-medium">Integrations</Label>
-                    <div className="p-4 bg-muted/50 rounded-lg border border-dashed border-muted-foreground/30">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                          <Lock className="h-5 w-5 text-primary" />
+                {/* Subscription */}
+                {selectedCategory === "subscription" && company && (
+                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">Subscription</h2>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        Manage your subscription and billing
+                      </p>
+                    </div>
+                    <Card>
+                      <CardContent className="space-y-4 pt-6">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <Label className="text-sm text-muted-foreground mb-2 block">Current Plan</Label>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-xl">{tierConfig.name}</p>
+                              <Badge variant={tier === "business" ? "default" : tier === "team" ? "secondary" : "outline"}>
+                                {tier}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {tierConfig.price > 0 ? (
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-3xl font-bold">${tierConfig.price}</span>
+                                <span className="text-sm text-muted-foreground">/{tierConfig.period}</span>
+                              </div>
+                            ) : (
+                              <p className="text-2xl font-bold">Free</p>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">Upgrade to Team</p>
-                          <p className="text-xs text-muted-foreground">
-                            Integrations are available on Team plans and above.
+                        <Separator />
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm text-muted-foreground">Team Members</Label>
+                            <p className="font-semibold">
+                              {companyMembers.length} / {tierConfig.seats}
+                            </p>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                            <div
+                              className="bg-primary rounded-full h-full transition-all"
+                              style={{ width: `${Math.min((companyMembers.length / tierConfig.seats) * 100, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <Separator />
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Plan Features</Label>
+                          <ul className="space-y-1">
+                            {tierConfig.features.map((feature, idx) => (
+                              <li key={idx} className="text-sm text-muted-foreground flex items-center gap-2">
+                                <Check className="h-3 w-3 text-green-600" />
+                                {feature}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        {tier !== "business" && (
+                          <>
+                            <Separator />
+                            <Button
+                              className="w-full"
+                              onClick={() => createCheckout("business")}
+                              disabled={subLoading}
+                            >
+                              Upgrade to Business
+                            </Button>
+                          </>
+                        )}
+                        {subscription?.subscribed && (
+                          <>
+                            <Separator />
+                            <Button
+                              variant="outline"
+                              className="w-full"
+                              onClick={handleManageSubscription}
+                            >
+                              <CreditCard className="h-4 w-4 mr-2" />
+                              Manage Billing
+                            </Button>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Team Members */}
+                {selectedCategory === "team-members" && company && (
+                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">Team Members</h2>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        {companyMembers.length} member{companyMembers.length !== 1 ? "s" : ""} in your organization
+                      </p>
+                    </div>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="space-y-3">
+                          {companyMembers.map((member) => {
+                            const memberRoles = (member as any).roles || [];
+                            const isMemberAdmin = memberRoles.includes("admin");
+                            const isMemberSuperAdmin = member.id === company?.ownerId;
+                            const isCurrentUser = member.id === user?.id;
+
+                            return (
+                              <div
+                                key={member.id}
+                                className="flex items-center justify-between p-3 rounded-lg border"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <span className="font-medium text-primary">
+                                      {member.fullName?.[0]?.toUpperCase() || member.email?.[0]?.toUpperCase() || "?"}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">{member.fullName || "Unnamed"}</p>
+                                    <p className="text-sm text-muted-foreground">{member.email}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {member.role && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {member.role}
+                                    </Badge>
+                                  )}
+                                  {isMemberSuperAdmin ? (
+                                    <Badge variant="default" className="text-xs">
+                                      <Shield className="h-3 w-3 mr-1" />
+                                      Owner
+                                    </Badge>
+                                  ) : isMemberAdmin ? (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <Shield className="h-3 w-3 mr-1" />
+                                      Admin
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-xs">
+                                      Member
+                                    </Badge>
+                                  )}
+                                  {isCurrentUser && (
+                                    <Badge variant="outline" className="text-xs">
+                                      You
+                                    </Badge>
+                                  )}
+                                  {isSuperAdmin && !isMemberSuperAdmin && member.id !== user?.id && (
+                                    <div className="flex items-center gap-1">
+                                      {isMemberAdmin ? (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 text-xs"
+                                          onClick={() => handleRevokeAdmin(member.id, member.fullName || member.email || "this user")}
+                                          disabled={managingAdminUserId === member.id}
+                                          title="Revoke admin permissions"
+                                        >
+                                          {managingAdminUserId === member.id ? (
+                                            <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+                                          ) : (
+                                            <>
+                                              <ShieldX className="h-3 w-3 mr-1" />
+                                              Revoke Admin
+                                            </>
+                                          )}
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 text-xs"
+                                          onClick={() => handleGrantAdmin(member.id, member.fullName || member.email || "this user")}
+                                          disabled={managingAdminUserId === member.id}
+                                          title="Grant admin permissions"
+                                        >
+                                          {managingAdminUserId === member.id ? (
+                                            <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+                                          ) : (
+                                            <>
+                                              <ShieldCheck className="h-3 w-3 mr-1" />
+                                              Make Admin
+                                            </>
+                                          )}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                  {isAdmin && member.id !== user?.id && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={() => handleRemoveUser(member.id, member.fullName || member.email || "this user")}
+                                      disabled={removingUserId === member.id}
+                                    >
+                                      {removingUserId === member.id ? (
+                                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                                      ) : (
+                                        <X className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {companyMembers.length === 0 && (
+                            <div className="text-center py-8 text-muted-foreground">
+                              <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p>No team members yet</p>
+                              <p className="text-sm">Share your invite code to add members</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Organization Integrations */}
+                {selectedCategory === "org-integrations" && company && (
+                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">Organization Integrations</h2>
+                    </div>
+                    <OrganizationIntegrationsPanel />
+                  </div>
+                )}
+
+                {/* Custom Branding */}
+                {selectedCategory === "custom-branding" && company && (
+                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">Custom Branding</h2>
+                    </div>
+                    <BrandingSettings />
+                  </div>
+                )}
+
+                {/* Admin Controls */}
+                {selectedCategory === "admin-controls" && company && (
+                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">Admin Controls</h2>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        Advanced organization management (use with caution)
+                      </p>
+                    </div>
+                    <Card className="border-amber-500/50">
+                      <CardContent className="space-y-4 pt-6">
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+                          <p className="text-sm text-amber-900 dark:text-amber-100">
+                            <strong>Note:</strong> These actions can affect your entire organization. 
+                            Contact support if you need help with organization management.
                           </p>
                         </div>
-                      </div>
-                      <Button
-                        onClick={() => createCheckout("team")}
-                        size="sm"
-                        className="w-full gradient-hero text-primary-foreground"
-                      >
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Upgrade to Team
-                      </Button>
-                    </div>
+                        {isSuperAdmin ? (
+                          <>
+                            <Button 
+                              variant="outline" 
+                              className="w-full" 
+                              onClick={handleRefreshInviteCode}
+                            >
+                              <Key className="h-4 w-4 mr-2" />
+                              Regenerate Invite Code
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              className="w-full text-destructive hover:text-destructive hover:bg-destructive/10" 
+                              onClick={handleDeleteOrganization}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Organization
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button variant="outline" className="w-full" disabled>
+                              <Key className="h-4 w-4 mr-2" />
+                              Regenerate Invite Code (Owner Only)
+                            </Button>
+                            <Button variant="outline" className="w-full text-destructive" disabled>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Organization (Owner Only)
+                            </Button>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
                 )}
-              </TabsContent>
+
+                {/* Company Keywords - Admin only */}
+                {selectedCategory === "company-keywords" && isAdmin && company && hasTeamFeatures && (
+                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">Company Keywords</h2>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        Manage preset keywords for everyone in your company.
+                      </p>
+                    </div>
+                    <Card>
+                      <CardContent className="space-y-4 pt-6">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-base font-medium">Company Keywords</Label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onResetKeywords}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <RotateCcw className="h-4 w-4 mr-1" />
+                            Reset
+                          </Button>
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            value={newKeyword}
+                            onChange={(e) => setNewKeyword(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Add a new keyword..."
+                            className="flex-1"
+                          />
+                          <Button onClick={handleAddKeyword} size="icon" variant="outline">
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg min-h-[80px]">
+                          {keywords.length === 0 ? (
+                            <p className="text-sm text-muted-foreground w-full text-center py-4">
+                              No company keywords yet. Add some above!
+                            </p>
+                          ) : (
+                            keywords.map((keyword) => (
+                              <Badge
+                                key={keyword}
+                                variant="secondary"
+                                className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                                onClick={() => onRemoveKeyword(keyword)}
+                              >
+                                {keyword}
+                                <X className="h-3 w-3 ml-1" />
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Click on a keyword to remove it.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Bulk Contact Import - Admin only */}
+                {selectedCategory === "bulk-import" && isAdmin && company && hasTeamFeatures && onBulkImport && (
+                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">Bulk Contact Import</h2>
+                    </div>
+                    <AdminPdfImport onImport={onBulkImport} />
+                  </div>
+                )}
+              </>
             )}
           </div>
-        </Tabs>
+        </div>
 
         {/* Footer with Done button */}
-        <div className="flex justify-end px-6 py-4 border-t border-border">
+        <div className="flex justify-end px-4 sm:px-6 md:px-8 py-3 sm:py-4 border-t border-border flex-shrink-0">
           <Button onClick={() => onOpenChange(false)}>
             Done
           </Button>
