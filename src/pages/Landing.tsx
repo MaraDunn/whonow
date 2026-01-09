@@ -5,6 +5,7 @@ import { ValueProps } from "@/components/landing/ValueProps";
 import { ProductDemo } from "@/components/landing/ProductDemo";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { TrustSection } from "@/components/landing/TrustSection";
+import { FAQSection } from "@/components/landing/FAQSection";
 import { CTASection } from "@/components/landing/CTASection";
 import { Footer } from "@/components/landing/Footer";
 import { AuthModal } from "@/components/landing/AuthModal";
@@ -33,6 +34,7 @@ const Landing = () => {
         <ProductDemo />
         <PricingSection onGetStarted={openSignUp} />
         <TrustSection />
+        <FAQSection />
         <CTASection onGetStarted={openSignUp} />
       </main>
 
