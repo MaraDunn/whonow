@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
@@ -376,21 +376,28 @@ export function SettingsDialog({
     ];
 
     if (showOrganizationTab) {
-      const orgItems = [
+      // Organization Details is always visible if org tab is shown
+      const orgItems: Array<{ id: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
         { id: "org-details", label: "Organization Details", icon: Building2 },
-        { id: "subscription", label: "Subscription", icon: CreditCard },
-        { id: "team-members", label: "Team Members", icon: Users },
-        { id: "org-integrations", label: "Organization Integrations", icon: Settings },
-        { id: "custom-branding", label: "Custom Branding", icon: Palette },
-        { id: "admin-controls", label: "Admin Controls", icon: Shield },
       ];
       
-      // Add admin-only sections
-      if (isAdmin && company && hasTeamFeatures) {
+      // Only show admin tabs if user is an admin and in an organization
+      if (isAdmin && company) {
         orgItems.push(
-          { id: "company-keywords", label: "Company Keywords", icon: Tags },
-          { id: "bulk-import", label: "Bulk Contact Import", icon: FileText }
+          { id: "subscription", label: "Subscription", icon: CreditCard },
+          { id: "team-members", label: "Team Members", icon: Users },
+          { id: "org-integrations", label: "Organization Integrations", icon: Settings },
+          { id: "custom-branding", label: "Custom Branding", icon: Palette },
+          { id: "admin-controls", label: "Admin Controls", icon: Shield }
         );
+        
+        // Add additional admin-only sections if they have team features
+        if (hasTeamFeatures) {
+          orgItems.push(
+            { id: "company-keywords", label: "Company Keywords", icon: Tags },
+            { id: "bulk-import", label: "Bulk Contact Import", icon: FileText }
+          );
+        }
       }
       
       cats.push({
@@ -402,7 +409,26 @@ export function SettingsDialog({
     }
 
     return cats;
-  }, [showOrganizationTab]);
+  }, [showOrganizationTab, isAdmin, company, hasTeamFeatures]);
+
+  // Safety check: redirect non-admin users away from admin-only categories
+  useEffect(() => {
+    const adminOnlyCategories = ["subscription", "team-members", "org-integrations", "custom-branding", "admin-controls", "company-keywords", "bulk-import"];
+    
+    if (adminOnlyCategories.includes(selectedCategory)) {
+      // If user is not an admin or not in a company, redirect to org-details
+      if (!isAdmin || !company) {
+        // Check if org-details exists in categories (should always exist if org tab is shown)
+        const orgCategory = categories.find(cat => cat.id === "organization");
+        if (orgCategory && orgCategory.items.length > 0) {
+          setSelectedCategory("org-details");
+        } else {
+          // If no org tab, redirect to general
+          setSelectedCategory("general");
+        }
+      }
+    }
+  }, [selectedCategory, isAdmin, company, categories]);
 
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) return categories;
@@ -1092,7 +1118,7 @@ export function SettingsDialog({
 
 
                 {/* Subscription */}
-                {selectedCategory === "subscription" && company && (
+                {selectedCategory === "subscription" && company && isAdmin && (
                   <div className="space-y-6 p-4 sm:p-6 md:p-8">
                     <div>
                       <h2 className="text-2xl font-semibold mb-2">Subscription</h2>
@@ -1181,7 +1207,7 @@ export function SettingsDialog({
                 )}
 
                 {/* Team Members */}
-                {selectedCategory === "team-members" && company && (
+                {selectedCategory === "team-members" && company && isAdmin && (
                   <div className="space-y-6 p-4 sm:p-6 md:p-8">
                     <div>
                       <h2 className="text-2xl font-semibold mb-2">Team Members</h2>
@@ -1314,7 +1340,7 @@ export function SettingsDialog({
                 )}
 
                 {/* Organization Integrations */}
-                {selectedCategory === "org-integrations" && company && (
+                {selectedCategory === "org-integrations" && company && isAdmin && (
                   <div className="space-y-6 p-4 sm:p-6 md:p-8">
                     <div>
                       <h2 className="text-2xl font-semibold mb-2">Organization Integrations</h2>
@@ -1324,7 +1350,7 @@ export function SettingsDialog({
                 )}
 
                 {/* Custom Branding */}
-                {selectedCategory === "custom-branding" && company && (
+                {selectedCategory === "custom-branding" && company && isAdmin && (
                   <div className="space-y-6 p-4 sm:p-6 md:p-8">
                     <div>
                       <h2 className="text-2xl font-semibold mb-2">Custom Branding</h2>
@@ -1334,7 +1360,7 @@ export function SettingsDialog({
                 )}
 
                 {/* Admin Controls */}
-                {selectedCategory === "admin-controls" && company && (
+                {selectedCategory === "admin-controls" && company && isAdmin && (
                   <div className="space-y-6 p-4 sm:p-6 md:p-8">
                     <div>
                       <h2 className="text-2xl font-semibold mb-2">Admin Controls</h2>
