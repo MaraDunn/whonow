@@ -32,27 +32,29 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AppRoutes = () => (
-  <Routes>
-    <Route path="/" element={<Landing />} />
-    <Route
-      path="/app"
-      element={
-        <ProtectedRoute>
-          <Index />
-        </ProtectedRoute>
-      }
-    />
-    {/* Redirect old /auth route to landing */}
-    <Route path="/auth" element={<Navigate to="/" replace />} />
-    <Route path="*" element={<NotFound />} />
-  </Routes>
+  <>
+    <BrandingTheme />
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route
+        path="/app"
+        element={
+          <ProtectedRoute>
+            <Index />
+          </ProtectedRoute>
+        }
+      />
+      {/* Redirect old /auth route to landing */}
+      <Route path="/auth" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  </>
 );
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <BrandingTheme />
         <Toaster />
         <Sonner />
         <BrowserRouter>

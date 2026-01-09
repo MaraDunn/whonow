@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Profile, Company, AppRole, CompanyMember } from "@/types/profile";
@@ -59,8 +60,48 @@ const mapDbToCompany = (db: DbCompany): Company => ({
   updatedAt: db.updated_at,
 });
 
+// Cache key for company_id to enable parallel fetching
+const COMPANY_ID_CACHE_KEY = "whonow_company_id_cache";
+
+// Get cached company_id for faster parallel fetching
+const getCachedCompanyId = (userId?: string): string | null => {
+  if (!userId) return null;
+  try {
+    const cached = localStorage.getItem(`${COMPANY_ID_CACHE_KEY}_${userId}`);
+    if (cached) {
+      // Cache is valid for 1 hour
+      const cacheTime = localStorage.getItem(`${COMPANY_ID_CACHE_KEY}_${userId}_time`);
+      if (cacheTime && Date.now() - parseInt(cacheTime) < 60 * 60 * 1000) {
+        return cached;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to load cached company_id:", error);
+  }
+  return null;
+};
+
+// Cache company_id for faster parallel fetching
+const cacheCompanyId = (userId?: string, companyId?: string | null) => {
+  if (!userId) return;
+  try {
+    if (companyId) {
+      localStorage.setItem(`${COMPANY_ID_CACHE_KEY}_${userId}`, companyId);
+      localStorage.setItem(`${COMPANY_ID_CACHE_KEY}_${userId}_time`, Date.now().toString());
+    } else {
+      localStorage.removeItem(`${COMPANY_ID_CACHE_KEY}_${userId}`);
+      localStorage.removeItem(`${COMPANY_ID_CACHE_KEY}_${userId}_time`);
+    }
+  } catch (error) {
+    console.error("Failed to cache company_id:", error);
+  }
+};
+
 export const useProfile = (userId?: string) => {
   const queryClient = useQueryClient();
+  
+  // Get cached company_id for parallel fetching
+  const cachedCompanyId = getCachedCompanyId(userId);
 
   // Fetch current user's profile
   const { data: profile, isLoading: profileLoading } = useQuery({
@@ -74,27 +115,49 @@ export const useProfile = (userId?: string) => {
         .maybeSingle();
 
       if (error) throw error;
-      return data ? mapDbToProfile(data as DbProfile) : null;
+      const mapped = data ? mapDbToProfile(data as DbProfile) : null;
+      
+      // Cache company_id for faster parallel fetching on next load
+      if (mapped?.companyId) {
+        cacheCompanyId(userId, mapped.companyId);
+      } else {
+        cacheCompanyId(userId, null);
+      }
+      
+      return mapped;
     },
     enabled: !!userId,
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
 
-  // Fetch user's company
+  // Fetch user's company - can start immediately if we have cached company_id
   const { data: company, isLoading: companyLoading } = useQuery({
-    queryKey: ["company", profile?.companyId],
+    queryKey: ["company", profile?.companyId || cachedCompanyId],
     queryFn: async () => {
-      if (!profile?.companyId) return null;
+      const companyId = profile?.companyId || cachedCompanyId;
+      if (!companyId) return null;
       const { data, error } = await supabase
         .from("companies")
         .select("*")
-        .eq("id", profile.companyId)
+        .eq("id", companyId)
         .maybeSingle();
 
       if (error) throw error;
       return data ? mapDbToCompany(data as DbCompany) : null;
     },
-    enabled: !!profile?.companyId,
+    enabled: !!(userId && (profile?.companyId || cachedCompanyId)),
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
+  
+  // Update cache if company_id changed
+  useEffect(() => {
+    if (profile?.companyId) {
+      const currentCache = getCachedCompanyId(userId);
+      if (currentCache !== profile.companyId) {
+        cacheCompanyId(userId, profile.companyId);
+      }
+    }
+  }, [profile?.companyId, userId]);
 
   // Fetch user's roles
   const { data: roles = [] } = useQuery({

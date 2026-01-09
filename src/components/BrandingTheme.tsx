@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { useBranding } from "@/hooks/useBranding";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -7,8 +8,10 @@ import { hexToHsl, getContrastingForeground, ensureReadableColor, getContrastRat
 /**
  * Component that applies custom brand colors to CSS variables
  * This should be placed at the root of the app to apply branding globally
+ * IMPORTANT: Branding only applies to the app routes, not the landing page
  */
 export function BrandingTheme() {
+  const location = useLocation();
   const branding = useBranding();
   const { user } = useAuth();
   const { company, profile } = useProfile(user?.id);
@@ -16,16 +19,33 @@ export function BrandingTheme() {
   useEffect(() => {
     const root = document.documentElement;
     
+    // CRITICAL: Branding should NOT apply to the landing page
+    // Only apply branding on app routes (e.g., /app or any route that's not the root landing page)
+    const isLandingPage = location.pathname === "/";
+    
     // CRITICAL: Verify user belongs to company before applying branding
     // This prevents branding from leaking to users outside the organization
     const userBelongsToCompany = user && profile && company && profile.companyId === company.id;
-    const shouldApplyBranding = userBelongsToCompany && (branding.primaryColor || branding.secondaryColor);
+    const shouldApplyBranding = !isLandingPage && userBelongsToCompany && (branding.primaryColor || branding.secondaryColor);
     
     const updateTheme = () => {
       const isDark = root.classList.contains("dark");
       
       // Get card background color for contrast calculations
       const cardBg = isDark ? "220 25% 11%" : "0 0% 100%";
+      
+      // Always reset branding on landing page
+      if (isLandingPage) {
+        root.style.removeProperty("--primary");
+        root.style.removeProperty("--primary-foreground");
+        root.style.removeProperty("--ring");
+        root.style.removeProperty("--gradient-hero");
+        root.style.removeProperty("--shadow-card-hover");
+        root.style.removeProperty("--shadow-search");
+        root.style.removeProperty("--secondary");
+        root.style.removeProperty("--secondary-foreground");
+        return;
+      }
       
       // Only apply branding if user belongs to the company
       if (shouldApplyBranding && branding.primaryColor) {
@@ -134,7 +154,7 @@ export function BrandingTheme() {
       root.style.removeProperty("--secondary");
       root.style.removeProperty("--secondary-foreground");
     };
-  }, [branding.primaryColor, branding.secondaryColor, user?.id, profile?.companyId, company?.id]);
+  }, [branding.primaryColor, branding.secondaryColor, user?.id, profile?.companyId, company?.id, location.pathname]);
 
   // This component doesn't render anything
   return null;
