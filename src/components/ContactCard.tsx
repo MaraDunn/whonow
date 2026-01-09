@@ -291,7 +291,7 @@ export function ContactCard({
                   }}
                 >
                   <Star className={cn("h-3 w-3 mr-1.5 flex-shrink-0", contact.isClient && "fill-current")} />
-                  <span className="truncate text-center">{contact.isClient ? "Client" : "Mark Client"}</span>
+                  <span className="truncate text-center">Client</span>
                 </Button>
               ) : (
                 <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
@@ -301,7 +301,7 @@ export function ContactCard({
                     className="w-full text-xs h-8 px-2 opacity-70 justify-center"
                   >
                     <Star className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                    <span className="truncate text-center">Mark Client</span>
+                    <span className="truncate text-center">Client</span>
                   </Button>
                 </LockedFeatureButton>
               )
@@ -311,24 +311,24 @@ export function ContactCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 text-xs h-8 px-2 min-w-0 justify-center"
+                  className="flex-1 text-xs h-8 px-3 min-w-0 justify-center"
                   onClick={(e) => {
                     e.stopPropagation();
                     onMarkContacted();
                   }}
                 >
                   <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                  <span className="truncate text-center">Contacted</span>
+                  <span className="whitespace-nowrap">Contacted</span>
                 </Button>
               ) : (
                 <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full text-xs h-8 px-2 opacity-70 justify-center"
+                    className="w-full text-xs h-8 px-3 opacity-70 justify-center"
                   >
                     <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                    <span className="truncate text-center">Contacted</span>
+                    <span className="whitespace-nowrap">Contacted</span>
                   </Button>
                 </LockedFeatureButton>
               )
@@ -422,12 +422,14 @@ export function ContactCard({
               </span>
             )}
           </div>
-          <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
-            <Briefcase className="h-3.5 w-3.5" />
-            {contact.role}
-          </p>
+          {contact.role && (
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1.5">
+              <Briefcase className="h-3.5 w-3.5" />
+              {contact.role}
+            </p>
+          )}
           {/* Last contacted indicator */}
-          <div className="flex items-center gap-1.5 mt-1">
+          <div className="flex items-center gap-1.5 mt-1.5">
             <Clock className="h-3 w-3 text-muted-foreground" />
             <span className={`text-xs ${lastContactedText ? 'text-muted-foreground' : 'text-orange-600 dark:text-orange-400 font-medium'}`}>
               {lastContactedText || "Never contacted"}
@@ -451,40 +453,45 @@ export function ContactCard({
         )}
       </div>
 
-      <div className="mt-4 space-y-2.5">
-        {contact.email && (
-          <a
-            href={`mailto:${contact.email}`}
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/email"
-          >
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/email:bg-primary/10 transition-colors">
-              <Mail className="h-4 w-4 text-secondary-foreground group-hover/email:text-primary" />
-            </div>
-            <span className="truncate hover:underline">{contact.email}</span>
-          </a>
-        )}
+      {/* Contact details - hide in trash view for cleaner layout */}
+      {!isTrashView && (
+        <div className="mt-4 space-y-2.5">
+          {contact.email && (
+            <a
+              href={`mailto:${contact.email}`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/email"
+            >
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/email:bg-primary/10 transition-colors">
+                <Mail className="h-4 w-4 text-secondary-foreground group-hover/email:text-primary" />
+              </div>
+              <span className="truncate hover:underline">{contact.email}</span>
+            </a>
+          )}
 
-        {contact.phone && (
-          <a
-            href={`tel:${contact.phone}`}
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/phone"
-          >
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/phone:bg-primary/10 transition-colors">
-              <Phone className="h-4 w-4 text-secondary-foreground group-hover/phone:text-primary" />
-            </div>
-            <span className="hover:underline">{contact.phone}</span>
-          </a>
-        )}
+          {contact.phone && (
+            <a
+              href={`tel:${contact.phone}`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/phone"
+            >
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/phone:bg-primary/10 transition-colors">
+                <Phone className="h-4 w-4 text-secondary-foreground group-hover/phone:text-primary" />
+              </div>
+              <span className="hover:underline">{contact.phone}</span>
+            </a>
+          )}
 
-        <div className="flex items-center gap-3 text-sm text-foreground">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary">
-            <Building2 className="h-4 w-4 text-secondary-foreground" />
-          </div>
-          <span className="truncate">{contact.company}</span>
+          {contact.company && (
+            <div className="flex items-center gap-3 text-sm text-foreground">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary">
+                <Building2 className="h-4 w-4 text-secondary-foreground" />
+              </div>
+              <span className="truncate">{contact.company}</span>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Action buttons row - show for non-trash view */}
       {!isTrashView && (onMarkContacted || onToggleClient) && (
@@ -504,7 +511,7 @@ export function ContactCard({
                 }}
               >
                 <Star className={cn("h-3 w-3 mr-1.5 flex-shrink-0", contact.isClient && "fill-current")} />
-                <span className="truncate text-center">{contact.isClient ? "Client" : "Mark as Client"}</span>
+                <span className="truncate text-center">Client</span>
               </Button>
             ) : (
               <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
@@ -514,7 +521,7 @@ export function ContactCard({
                   className="w-full text-xs px-2 py-1.5 opacity-70 justify-center"
                 >
                   <Star className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                  <span className="truncate text-center">Mark as Client</span>
+                  <span className="truncate text-center">Client</span>
                 </Button>
               </LockedFeatureButton>
             )
@@ -524,24 +531,24 @@ export function ContactCard({
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 text-xs px-2 py-1.5 min-w-0 justify-center"
+                className="flex-1 text-xs px-3 py-1.5 min-w-0 justify-center"
                 onClick={(e) => {
                   e.stopPropagation();
                   onMarkContacted();
                 }}
               >
                 <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                <span className="truncate text-center">Contacted</span>
+                <span className="whitespace-nowrap">Contacted</span>
               </Button>
             ) : (
               <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full text-xs px-2 py-1.5 opacity-70 justify-center"
+                  className="w-full text-xs px-3 py-1.5 opacity-70 justify-center"
                 >
                   <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                  <span className="truncate text-center">Contacted</span>
+                  <span className="whitespace-nowrap">Contacted</span>
                 </Button>
               </LockedFeatureButton>
             )
@@ -551,31 +558,35 @@ export function ContactCard({
 
       {/* Trash view actions */}
       {isTrashView && (
-        <div className="mt-4 pt-4 border-t border-border flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRestore?.();
-            }}
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Restore
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="flex-1"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPermanentlyDelete?.();
-            }}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Forever
-          </Button>
+        <div className="mt-6 pt-4 border-t border-border flex gap-2.5">
+          {onRestore && (
+            <Button
+              variant="outline"
+              size="default"
+              className="flex-1 min-w-0 h-10 px-4"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRestore();
+              }}
+            >
+              <RotateCcw className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="whitespace-nowrap">Restore</span>
+            </Button>
+          )}
+          {onPermanentlyDelete && (
+            <Button
+              variant="destructive"
+              size="default"
+              className="flex-1 min-w-0 h-10 px-4"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPermanentlyDelete();
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="whitespace-nowrap">Delete</span>
+            </Button>
+          )}
         </div>
       )}
 
