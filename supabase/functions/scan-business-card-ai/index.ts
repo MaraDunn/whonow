@@ -185,8 +185,12 @@ serve(async (req) => {
     const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (2 minutes)
 
     let ocrResponse;
+    const requestStartTime = Date.now();
     try {
       console.log("Sending request to OCR service...");
+      console.log("Request timeout set to: 120 seconds");
+      console.log("Image size in request:", JSON.stringify({ image: image }).length, "bytes");
+      
       ocrResponse = await fetch(`${OCR_SERVICE_URL}/ocr`, {
         method: "POST",
         headers: {
@@ -198,12 +202,23 @@ serve(async (req) => {
         }),
         signal: controller.signal,
       });
+      
+      const requestDuration = Date.now() - requestStartTime;
       clearTimeout(timeoutId);
+      console.log(`OCR service responded after ${(requestDuration / 1000).toFixed(1)} seconds`);
       console.log("OCR service responded with status:", ocrResponse.status);
+      console.log("Response headers:", Object.fromEntries(ocrResponse.headers.entries()));
     } catch (fetchError) {
       clearTimeout(timeoutId);
-      console.error("OCR service fetch error:", fetchError);
+      const requestDuration = Date.now() - requestStartTime;
+      console.error("=== OCR SERVICE FETCH ERROR ===");
+      console.error("Error after", (requestDuration / 1000).toFixed(1), "seconds");
+      console.error("Error type:", fetchError?.constructor?.name);
+      console.error("Error name:", fetchError.name);
+      console.error("Error message:", fetchError instanceof Error ? fetchError.message : String(fetchError));
+      
       if (fetchError.name === "AbortError") {
+        console.error("Request timed out after 120 seconds");
         return new Response(
           JSON.stringify({
             error: "OCR service timeout",
