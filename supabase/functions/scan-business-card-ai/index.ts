@@ -179,14 +179,44 @@ serve(async (req) => {
       );
     }
 
+    // Read response as text first (can only read once)
+    let responseText = "";
+    try {
+      responseText = await ocrResponse.text();
+      console.log("OCR response text length:", responseText.length);
+      console.log("OCR response preview:", responseText.substring(0, 200));
+    } catch (readError) {
+      console.error("Failed to read OCR response:", readError);
+      return new Response(
+        JSON.stringify({
+          error: "Failed to read OCR response",
+          details: "Could not read response from OCR service. The service may have crashed or returned an invalid response.",
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Check if response is empty
+    if (!responseText || responseText.trim().length === 0) {
+      console.error("OCR service returned empty response");
+      return new Response(
+        JSON.stringify({
+          error: "Empty OCR response",
+          details: `OCR service returned empty response with status ${ocrResponse.status}. The service may not be properly configured or may be experiencing issues.`,
+        }),
+        {
+          status: ocrResponse.ok ? 502 : ocrResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Handle non-OK responses
     if (!ocrResponse.ok) {
-      let errorText = "";
-      try {
-        errorText = await ocrResponse.text();
-      } catch (e) {
-        errorText = "Could not read error response";
-      }
-      console.error("OCR service error:", ocrResponse.status, errorText);
+      console.error("OCR service error:", ocrResponse.status, responseText);
       
       if (ocrResponse.status === 503 || ocrResponse.status === 502) {
         return new Response(
@@ -204,7 +234,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           error: "OCR service error",
-          details: `OCR service returned error ${ocrResponse.status}: ${errorText.substring(0, 300)}`,
+          details: `OCR service returned error ${ocrResponse.status}: ${responseText.substring(0, 300)}`,
         }),
         {
           status: ocrResponse.status,
@@ -213,15 +243,39 @@ serve(async (req) => {
       );
     }
 
-    let ocrResult;
-    try {
-      ocrResult = await ocrResponse.json();
-    } catch (parseError) {
-      console.error("Failed to parse OCR response as JSON:", parseError);
+    // Check if response is HTML (error page) instead of JSON
+    if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
+      console.error("OCR service returned HTML instead of JSON (likely error page)");
       return new Response(
         JSON.stringify({
-          error: "Invalid OCR response",
-          details: "OCR service returned invalid JSON. The service may be experiencing issues.",
+          error: "OCR service returned error page",
+          details: "The OCR service appears to be down or not properly deployed. It returned an HTML error page instead of JSON. Please check that the service is deployed and running.",
+          help: "Verify your OCR service is running by visiting the /health endpoint in your browser.",
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Parse JSON from text
+    let ocrResult;
+    try {
+      ocrResult = JSON.parse(responseText);
+      console.log("Successfully parsed OCR result");
+    } catch (parseError) {
+      console.error("Failed to parse OCR response as JSON:", parseError);
+      console.error("Response text that failed to parse:", responseText.substring(0, 500));
+      
+      // Check if it looks like an error message
+      const isLikelyError = responseText.includes("error") || responseText.includes("Error") || responseText.includes("exception");
+      
+      return new Response(
+        JSON.stringify({
+          error: "Invalid OCR response format",
+          details: `OCR service returned invalid JSON. ${isLikelyError ? "Response appears to be an error message." : ""} Response preview: ${responseText.substring(0, 300)}. The service may not be properly deployed or may be experiencing issues.`,
+          help: "Check your OCR service logs and verify the service is running correctly.",
         }),
         {
           status: 502,
