@@ -1,0 +1,11 @@
+# Environment Variables for OCR Service
+
+# Port for the OCR service (optional, defaults to 8000)
+PORT=8000
+
+# Python settings
+PYTHONUNBUFFERED=1
+
+# Optional: Enable GPU acceleration if available (requires CUDA)
+# USE_GPU=false
+

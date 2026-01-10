@@ -26,7 +26,7 @@ import {
 
 import { useGoogleContacts } from "@/hooks/useGoogleContacts";
 import { useFileContacts } from "@/hooks/useFileContacts";
-import { useBusinessCardScanner } from "@/hooks/useBusinessCardScanner";
+import { useBusinessCardScannerAI as useBusinessCardScanner } from "@/hooks/useBusinessCardScannerAI";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
@@ -84,13 +84,17 @@ export function ImportContactsDialog({
   // Update edited contact when scanned contact changes
   useEffect(() => {
     if (scanner.scannedContact) {
-      setEditedContact({ 
+      console.log("=== ImportContactsDialog: Updating editedContact from scannedContact ===");
+      console.log("scanner.scannedContact:", JSON.stringify(scanner.scannedContact, null, 2));
+      const newEditedContact = { 
         ...scanner.scannedContact,
         description: "",
         tags: [],
         avatar: undefined,
         folderId: defaultFolderId || undefined,
-      });
+      };
+      console.log("New editedContact:", JSON.stringify(newEditedContact, null, 2));
+      setEditedContact(newEditedContact);
     }
   }, [scanner.scannedContact, defaultFolderId]);
 
