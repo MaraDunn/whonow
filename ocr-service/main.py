@@ -11,6 +11,8 @@ from PIL import Image
 import numpy as np
 from paddleocr import PaddleOCR
 import logging
+import threading
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,20 +34,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize PaddleOCR (runs once at startup)
-# use_angle_cls=True helps with rotated text
-# lang='en' for English (can be changed or support multiple languages)
-logger.info("Initializing PaddleOCR...")
-ocr = PaddleOCR(
-    use_angle_cls=True,
-    lang='en',
-    use_gpu=False,  # Set to True if GPU is available
-    show_log=False,
-    det_db_thresh=0.3,  # Detection threshold (lower = more sensitive)
-    det_db_box_thresh=0.5,  # Box threshold
-    rec_batch_num=6,  # Recognition batch size
-)
-logger.info("PaddleOCR initialized successfully!")
+# Lazy initialization of PaddleOCR (initializes on first request, not at startup)
+# This prevents startup timeouts and crashes on Render free tier
+ocr = None
+ocr_lock = threading.Lock()
+ocr_initializing = False
+ocr_init_error = None
+
+
+def get_ocr_instance():
+    """Get or initialize PaddleOCR instance (thread-safe lazy initialization)"""
+    global ocr, ocr_initializing, ocr_init_error
+    
+    if ocr is not None:
+        return ocr
+    
+    with ocr_lock:
+        # Double-check pattern
+        if ocr is not None:
+            return ocr
+        
+        if ocr_initializing:
+            # Another thread is initializing, wait and retry
+            wait_time = 0
+            max_wait = 180  # Wait up to 3 minutes
+            while ocr_initializing and wait_time < max_wait:
+                time.sleep(2)
+                wait_time += 2
+                if ocr is not None:
+                    return ocr
+                if ocr_init_error:
+                    raise Exception(f"PaddleOCR initialization failed: {ocr_init_error}")
+            if ocr is None:
+                raise Exception("PaddleOCR initialization timeout")
+        
+        try:
+            ocr_initializing = True
+            logger.info("Initializing PaddleOCR (lazy initialization)...")
+            logger.info("This may take 30-60 seconds on first request while models download...")
+            
+            ocr = PaddleOCR(
+                use_angle_cls=True,
+                lang='en',
+                use_gpu=False,  # Set to True if GPU is available
+                show_log=True,  # Enable logging to see model downloads
+                det_db_thresh=0.3,  # Detection threshold (lower = more sensitive)
+                det_db_box_thresh=0.5,  # Box threshold
+                rec_batch_num=6,  # Recognition batch size
+            )
+            
+            logger.info("PaddleOCR initialized successfully!")
+            ocr_initializing = False
+            return ocr
+        except Exception as e:
+            ocr_init_error = str(e)
+            ocr_initializing = False
+            logger.error(f"Failed to initialize PaddleOCR: {e}", exc_info=True)
+            raise Exception(f"PaddleOCR initialization failed: {e}")
 
 
 class OCRRequest(BaseModel):
@@ -132,6 +177,8 @@ async def health():
     return {
         "status": "healthy",
         "ocr_initialized": ocr is not None,
+        "ocr_initializing": ocr_initializing,
+        "ocr_init_error": ocr_init_error,
         "gpu_available": False  # Update if using GPU
     }
 
@@ -150,6 +197,11 @@ async def perform_ocr(request: OCRRequest):
     try:
         logger.info("Received OCR request")
         
+        # Get or initialize OCR instance (this may take time on first call)
+        logger.info("Getting PaddleOCR instance...")
+        ocr_instance = get_ocr_instance()
+        logger.info("PaddleOCR instance ready")
+        
         # Convert base64 to image
         image = base64_to_image(request.image)
         logger.info(f"Image shape: {image.shape}")
@@ -161,7 +213,7 @@ async def perform_ocr(request: OCRRequest):
         
         # Perform OCR
         logger.info("Running PaddleOCR...")
-        result = ocr.ocr(image, cls=True)
+        result = ocr_instance.ocr(image, cls=True)
         
         if not result or not result[0]:
             logger.warning("No text detected in image")
