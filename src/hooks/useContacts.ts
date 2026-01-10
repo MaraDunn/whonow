@@ -109,14 +109,17 @@ export const useContacts = () => {
   const { data: totalCount = 0 } = useQuery({
     queryKey: ["contacts", "count", user?.id],
     queryFn: async () => {
-      const { count, error } = await supabase
+      // Fetch data and filter in JavaScript to avoid PostgREST syntax issues
+      const { data, error } = await supabase
         .from("contacts")
-        .select("*", { count: "exact", head: true })
-        .is("deleted_at", null)
-        .not("tags", "cs", ["my-profile"]); // Exclude contacts with "my-profile" tag
+        .select("*")
+        .is("deleted_at", null);
 
       if (error) throw error;
-      return count || 0;
+      // Filter out contacts with "my-profile" tag and count
+      return (data as DbContact[])
+        .filter((contact) => !contact.tags?.includes("my-profile"))
+        .length;
     },
     enabled: !!user,
   });
