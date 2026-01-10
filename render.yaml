@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: paddleocr-service
+    env: docker
+    dockerfilePath: ./ocr-service/Dockerfile
+    dockerContext: .
+    plan: free  # Start with free tier (750 hours/month)
+    # Upgrade to 'starter' ($7/month) for always-on service
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PYTHONUNBUFFERED
+        value: 1
+
