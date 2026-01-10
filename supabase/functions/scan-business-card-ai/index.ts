@@ -457,26 +457,41 @@ serve(async (req) => {
         }
       });
 
-      const parseResponse = await fetch(parseUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders,
-        },
-        body: JSON.stringify({
-          ocrText: ocrResult.text,
-          structure: structure,
-        }),
+      console.log("Sending parsing request with:", {
+        ocrTextLength: ocrResult.text.length,
+        structureLines: structure.lines?.length || 0,
+        authHeaders: Object.keys(authHeaders),
       });
+
+      let parseResponse: Response;
+      try {
+        parseResponse = await fetch(parseUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders,
+          },
+          body: JSON.stringify({
+            ocrText: ocrResult.text,
+            structure: structure,
+          }),
+        });
+        console.log("Parse function responded with status:", parseResponse.status);
+      } catch (fetchError) {
+        console.error("Failed to call parse function:", fetchError);
+        throw new Error(`Could not reach parsing function: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+      }
 
       if (!parseResponse.ok) {
         let errorText = "";
         try {
           errorText = await parseResponse.text();
+          console.error("Parsing error response:", errorText);
         } catch (e) {
           errorText = "Could not read error response";
+          console.error("Could not read error response:", e);
         }
-        console.error("Parsing error:", parseResponse.status, errorText);
+        console.error("Parsing function failed with status:", parseResponse.status);
         
         // Fallback: return basic parsed data with error
         return new Response(
@@ -493,7 +508,7 @@ serve(async (req) => {
               company: 0,
               role: 0,
             },
-            error: `Parsing function failed with status ${parseResponse.status}. OCR text extracted: ${ocrResult.text.substring(0, 200)}`,
+            error: `Parsing function failed with status ${parseResponse.status}: ${errorText.substring(0, 300)}. OCR text extracted: ${ocrResult.text.substring(0, 200)}`,
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -501,15 +516,22 @@ serve(async (req) => {
         );
       }
 
-      let parsedContact;
+      let parseResponseData;
       try {
-        parsedContact = await parseResponse.json();
+        parseResponseData = await parseResponse.json();
       } catch (parseError) {
         console.error("Failed to parse parsing function response:", parseError);
         throw new Error("Parsing function returned invalid JSON");
       }
 
       console.log("=== OCR + Parsing Complete ===");
+      console.log("Parse response data:", parseResponseData);
+
+      // Extract contact from response (scan-business-card returns { success: true, contact: {...} })
+      const parsedContact = parseResponseData.success && parseResponseData.contact 
+        ? parseResponseData.contact 
+        : parseResponseData; // Fallback to entire response if structure is different
+
       console.log("Parsed contact:", parsedContact);
 
       return new Response(JSON.stringify(parsedContact), {
