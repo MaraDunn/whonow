@@ -112,12 +112,16 @@ serve(async (req) => {
 
     // Get OCR service URL from environment
     const OCR_SERVICE_URL = Deno.env.get("OCR_SERVICE_URL");
+    console.log("OCR_SERVICE_URL configured:", OCR_SERVICE_URL ? "YES" : "NO");
+    
     if (!OCR_SERVICE_URL) {
       console.error("OCR_SERVICE_URL environment variable not set");
+      console.error("Available environment variables:", Object.keys(Deno.env.toObject()).filter(k => k.includes("OCR") || k.includes("URL")));
       return new Response(
         JSON.stringify({
           error: "OCR service not configured",
-          details: "OCR_SERVICE_URL environment variable is not set. Please configure it in Supabase Edge Functions settings.",
+          details: "OCR_SERVICE_URL environment variable is not set. Please configure it in Supabase Edge Functions settings (Dashboard → Edge Functions → Settings → Manage secrets).",
+          help: "Add a secret named 'OCR_SERVICE_URL' with the value of your deployed OCR service URL (e.g., https://paddleocr-service.onrender.com)",
         }),
         {
           status: 500,
@@ -134,6 +138,7 @@ serve(async (req) => {
 
     let ocrResponse;
     try {
+      console.log("Sending request to OCR service...");
       ocrResponse = await fetch(`${OCR_SERVICE_URL}/ocr`, {
         method: "POST",
         headers: {
@@ -146,26 +151,84 @@ serve(async (req) => {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
+      console.log("OCR service responded with status:", ocrResponse.status);
     } catch (fetchError) {
       clearTimeout(timeoutId);
+      console.error("OCR service fetch error:", fetchError);
       if (fetchError.name === "AbortError") {
-        throw new Error("OCR service request timed out after 60 seconds");
+        return new Response(
+          JSON.stringify({
+            error: "OCR service timeout",
+            details: "The OCR service did not respond within 60 seconds. The service may be starting up or overloaded.",
+          }),
+          {
+            status: 504,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
       }
-      throw new Error(`Failed to reach OCR service: ${fetchError.message}`);
+      return new Response(
+        JSON.stringify({
+          error: "Failed to reach OCR service",
+          details: `Could not connect to OCR service at ${OCR_SERVICE_URL}. Error: ${fetchError.message}. Please verify the service is running and the URL is correct.`,
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     if (!ocrResponse.ok) {
-      const errorText = await ocrResponse.text();
+      let errorText = "";
+      try {
+        errorText = await ocrResponse.text();
+      } catch (e) {
+        errorText = "Could not read error response";
+      }
       console.error("OCR service error:", ocrResponse.status, errorText);
       
       if (ocrResponse.status === 503 || ocrResponse.status === 502) {
-        throw new Error("OCR service is temporarily unavailable. Please try again in a moment.");
+        return new Response(
+          JSON.stringify({
+            error: "OCR service unavailable",
+            details: "The OCR service is temporarily unavailable. This may happen if the service is starting up (Render free tier) or is overloaded. Please try again in 30 seconds.",
+          }),
+          {
+            status: 503,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
       }
       
-      throw new Error(`OCR service failed with status ${ocrResponse.status}: ${errorText.substring(0, 200)}`);
+      return new Response(
+        JSON.stringify({
+          error: "OCR service error",
+          details: `OCR service returned error ${ocrResponse.status}: ${errorText.substring(0, 300)}`,
+        }),
+        {
+          status: ocrResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const ocrResult = await ocrResponse.json();
+    let ocrResult;
+    try {
+      ocrResult = await ocrResponse.json();
+    } catch (parseError) {
+      console.error("Failed to parse OCR response as JSON:", parseError);
+      return new Response(
+        JSON.stringify({
+          error: "Invalid OCR response",
+          details: "OCR service returned invalid JSON. The service may be experiencing issues.",
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     console.log("OCR Result:", {
       success: ocrResult.success,
@@ -263,65 +326,91 @@ serve(async (req) => {
     // Now call the existing parsing function via internal request
     console.log("=== Calling Parsing Function ===");
     
-    // Get the base URL from the request
-    const baseUrl = new URL(req.url).origin;
-    const parseUrl = `${baseUrl}/functions/v1/scan-business-card`;
-    
-    // Get authorization headers from original request
-    const authHeaders: Record<string, string> = {};
-    req.headers.forEach((value, key) => {
-      if (key.toLowerCase() === "authorization" || key.toLowerCase() === "apikey") {
-        authHeaders[key] = value;
-      }
-    });
-
-    const parseResponse = await fetch(parseUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-      },
-      body: JSON.stringify({
-        ocrText: ocrResult.text,
-        structure: structure,
-      }),
-    });
-
-    if (!parseResponse.ok) {
-      const errorText = await parseResponse.text();
-      console.error("Parsing error:", parseResponse.status, errorText);
+    try {
+      // Get the base URL from the request
+      const baseUrl = new URL(req.url).origin;
+      const parseUrl = `${baseUrl}/functions/v1/scan-business-card`;
+      console.log("Calling parsing function at:", parseUrl);
       
-      // Fallback: return basic parsed data
+      // Get authorization headers from original request
+      const authHeaders: Record<string, string> = {};
+      req.headers.forEach((value, key) => {
+        if (key.toLowerCase() === "authorization" || key.toLowerCase() === "apikey") {
+          authHeaders[key] = value;
+        }
+      });
+
+      const parseResponse = await fetch(parseUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          ocrText: ocrResult.text,
+          structure: structure,
+        }),
+      });
+
+      if (!parseResponse.ok) {
+        let errorText = "";
+        try {
+          errorText = await parseResponse.text();
+        } catch (e) {
+          errorText = "Could not read error response";
+        }
+        console.error("Parsing error:", parseResponse.status, errorText);
+        
+        // Fallback: return basic parsed data with error
+        return new Response(
+          JSON.stringify({
+            name: "",
+            email: "",
+            phone: "",
+            company: "",
+            role: "",
+            confidence: {
+              name: 0,
+              email: 0,
+              phone: 0,
+              company: 0,
+              role: 0,
+            },
+            error: `Parsing function failed with status ${parseResponse.status}. OCR text extracted: ${ocrResult.text.substring(0, 200)}`,
+          }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      let parsedContact;
+      try {
+        parsedContact = await parseResponse.json();
+      } catch (parseError) {
+        console.error("Failed to parse parsing function response:", parseError);
+        throw new Error("Parsing function returned invalid JSON");
+      }
+
+      console.log("=== OCR + Parsing Complete ===");
+      console.log("Parsed contact:", parsedContact);
+
+      return new Response(JSON.stringify(parsedContact), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (parseFunctionError) {
+      console.error("Error calling parsing function:", parseFunctionError);
       return new Response(
         JSON.stringify({
-          name: "",
-          email: "",
-          phone: "",
-          company: "",
-          role: "",
-          confidence: {
-            name: 0,
-            email: 0,
-            phone: 0,
-            company: 0,
-            role: 0,
-          },
-          error: `Parsing failed: ${parseResponse.status}. OCR text: ${ocrResult.text.substring(0, 200)}`,
+          error: "Parsing function error",
+          details: `Failed to call parsing function: ${parseFunctionError instanceof Error ? parseFunctionError.message : String(parseFunctionError)}. OCR was successful, but contact extraction failed.`,
         }),
         {
+          status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
-
-    const parsedContact = await parseResponse.json();
-
-    console.log("=== OCR + Parsing Complete ===");
-    console.log("Parsed contact:", parsedContact);
-
-    return new Response(JSON.stringify(parsedContact), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   } catch (error) {
     console.error("Error in scan-business-card-ai:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
