@@ -25,6 +25,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY main.py .
 
+# Pre-download PaddleOCR models during build (speeds up first request)
+# This downloads the models so they're ready when the service starts
+RUN python -c "from paddleocr import PaddleOCR; print('Initializing PaddleOCR...'); ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False, show_log=True); print('PaddleOCR models downloaded successfully!')" || echo "Model download may have had issues, but continuing..."
+
 # Expose port
 EXPOSE 8000
 

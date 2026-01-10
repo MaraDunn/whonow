@@ -180,8 +180,9 @@ serve(async (req) => {
     console.log(`Calling OCR service at: ${OCR_SERVICE_URL}/ocr`);
 
     // Call PaddleOCR service with timeout
+    // Increased timeout to 120 seconds to handle first-time model downloads
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (2 minutes)
 
     let ocrResponse;
     try {
@@ -206,7 +207,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             error: "OCR service timeout",
-            details: "The OCR service did not respond within 60 seconds. The service may be starting up or overloaded.",
+            details: "The OCR service did not respond within 120 seconds. If this is the first request, the service may be downloading PaddleOCR models (this only happens once and can take 30-60 seconds). Please wait a moment and try again. Subsequent requests will be much faster.",
           }),
           {
             status: 504,
@@ -268,8 +269,8 @@ serve(async (req) => {
       if (ocrResponse.status === 503 || ocrResponse.status === 502) {
         return new Response(
           JSON.stringify({
-            error: "OCR service unavailable",
-            details: "The OCR service is temporarily unavailable. This may happen if the service is starting up (Render free tier) or is overloaded. Please try again in 30 seconds.",
+            error: "OCR service temporarily unavailable",
+            details: `The OCR service returned error ${ocrResponse.status}. This may happen if: 1) This is the first request and PaddleOCR is downloading models (takes 30-60 seconds), 2) The service is starting up (Render free tier), or 3) The service is overloaded. Please wait 30-60 seconds and try again. Subsequent requests will be much faster once models are downloaded.`,
           }),
           {
             status: 503,
