@@ -1,9 +1,8 @@
 services:
   - type: web
     name: paddleocr-service
+    rootDir: ocr-service
     env: docker
-    dockerfilePath: ./ocr-service/Dockerfile
-    dockerContext: .
     plan: free  # Start with free tier (750 hours/month)
     # Upgrade to 'starter' ($7/month) for always-on service
     healthCheckPath: /health
