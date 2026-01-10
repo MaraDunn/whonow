@@ -16,19 +16,66 @@ serve(async (req) => {
   try {
     // Log request method and headers for debugging
     console.log("Request method:", req.method);
-    console.log("Content-Type header:", req.headers.get("content-type"));
+    const contentType = req.headers.get("content-type");
+    console.log("Content-Type header:", contentType);
+    console.log("Content-Length header:", req.headers.get("content-length"));
+    
+    // Verify Content-Type is JSON (but be lenient)
+    if (contentType && !contentType.includes("json") && !contentType.includes("text")) {
+      console.warn("Unexpected Content-Type:", contentType);
+    }
+    
+    // Check if body exists before trying to read
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength) === 0) {
+      console.error("Request has Content-Length: 0 (empty body)");
+      return new Response(
+        JSON.stringify({
+          error: "Empty request body",
+          details: "Request body is empty (Content-Length: 0). Please provide a JSON object with an 'image' field containing base64 encoded image data.",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
     
     // Read body as text first (can only read once)
-    let bodyText: string;
+    let bodyText: string = "";
     try {
       bodyText = await req.text();
       console.log("Request body length:", bodyText?.length || 0);
+      if (bodyText.length > 0) {
+        console.log("Request body preview:", bodyText.substring(0, 100));
+      } else {
+        console.log("Request body is empty");
+      }
     } catch (readError) {
-      console.error("Failed to read request body:", readError);
+      console.error("=== ERROR READING REQUEST BODY ===");
+      console.error("Error type:", readError?.constructor?.name);
+      console.error("Error message:", readError instanceof Error ? readError.message : String(readError));
+      console.error("Error stack:", readError instanceof Error ? readError.stack : "No stack");
+      
+      // If it's a JSON parse error from Supabase runtime, handle it
+      if (readError instanceof Error && readError.message.includes("JSON")) {
+        return new Response(
+          JSON.stringify({
+            error: "Invalid or empty request body",
+            details: "The request body could not be parsed as JSON. This usually means the body is empty or malformed. Please ensure you're sending a valid JSON object with an 'image' field.",
+            help: "Check that your frontend is sending the request body correctly. The body should be: { image: 'data:image/...' }",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
       return new Response(
         JSON.stringify({
           error: "Failed to read request body",
-          details: `Could not read request body: ${readError instanceof Error ? readError.message : String(readError)}`,
+          details: `Could not read request body: ${readError instanceof Error ? readError.message : String(readError)}. This may indicate the request was sent without a body or the body was malformed.`,
         }),
         {
           status: 400,
