@@ -90,6 +90,14 @@ export function useBusinessCardScannerAI() {
     try {
       console.log("=== Starting AI OCR (PaddleOCR) ===");
       
+      // Validate image before sending
+      if (!imageBase64 || typeof imageBase64 !== 'string' || imageBase64.trim().length === 0) {
+        throw new Error("Invalid image data. Please capture or upload a valid image.");
+      }
+      
+      console.log("Image data length:", imageBase64.length);
+      console.log("Image preview:", imageBase64.substring(0, 50) + "...");
+      
       // Call the new AI-powered edge function
       const { data, error: functionError } = await supabase.functions.invoke(
         "scan-business-card-ai",
