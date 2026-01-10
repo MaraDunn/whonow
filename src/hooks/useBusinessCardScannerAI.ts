@@ -108,11 +108,38 @@ export function useBusinessCardScannerAI() {
 
       if (functionError) {
         console.error("Edge function error:", functionError);
-        throw new Error(functionError.message || "Failed to process business card");
+        
+        // Try to extract detailed error message from response
+        let errorMessage = functionError.message || "Failed to process business card";
+        if (functionError.context && functionError.context.body) {
+          try {
+            const errorBody = typeof functionError.context.body === 'string' 
+              ? JSON.parse(functionError.context.body)
+              : functionError.context.body;
+            if (errorBody.error) {
+              errorMessage = errorBody.error;
+              if (errorBody.details) {
+                errorMessage += `: ${errorBody.details}`;
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors, use default message
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
       if (!data) {
         throw new Error("No data returned from OCR service");
+      }
+
+      // Check if data contains an error field (edge function returned error as data)
+      if (data.error) {
+        const errorMessage = data.details 
+          ? `${data.error}: ${data.details}`
+          : data.error;
+        throw new Error(errorMessage);
       }
 
       console.log("=== AI OCR Complete ===");

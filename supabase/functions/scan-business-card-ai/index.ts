@@ -466,13 +466,20 @@ serve(async (req) => {
       );
     }
   } catch (error) {
-    console.error("Error in scan-business-card-ai:", error);
+    console.error("=== UNHANDLED ERROR in scan-business-card-ai ===");
+    console.error("Error type:", error?.constructor?.name);
+    console.error("Error message:", error instanceof Error ? error.message : String(error));
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+    
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorDetails = error instanceof Error && error.stack 
+      ? `${errorMessage}\n\nStack: ${error.stack.substring(0, 500)}`
+      : errorMessage;
     
     return new Response(
       JSON.stringify({
         error: errorMessage,
-        details: "Failed to process business card with AI OCR. Please check that OCR_SERVICE_URL is configured and the OCR service is running.",
+        details: `Failed to process business card with AI OCR. ${errorDetails}. Please check that OCR_SERVICE_URL is configured and the OCR service is running. Check Supabase edge function logs for more details.`,
       }),
       {
         status: 500,
