@@ -353,6 +353,12 @@ serve(async (req) => {
       textLength: ocrResult.text?.length || 0,
       wordCount: ocrResult.words?.length || 0,
     });
+    
+    // Log OCR text for debugging (first 500 chars)
+    if (ocrResult.text) {
+      console.log("OCR Text (first 500 chars):", ocrResult.text.substring(0, 500));
+      console.log("OCR Text (full length):", ocrResult.text.length);
+    }
 
     if (!ocrResult.success) {
       throw new Error(ocrResult.error || "OCR processing failed");
@@ -422,59 +428,70 @@ serve(async (req) => {
       });
     }
 
+    // Create structure object - only include lines (not full words array to avoid size issues)
+    // The parsing function primarily uses lines, so we don't need the full words array
     const structure = {
-      words: words.map((word: any) => ({
-        text: word.text,
-        confidence: word.confidence,
-        x: word.x,
-        y: word.y,
-        width: word.width,
-        height: word.height,
-        blockNum: 0,
-        parNum: 0,
-        lineNum: 0,
-        wordNum: 0,
-      })),
       lines: lines,
       blocks: [],
-      rawText: ocrResult.text,
+      // Note: Not including words array or rawText to reduce payload size
+      // The parsing function can work with just the lines array
     };
 
     // Now call the existing parsing function via internal request
     console.log("=== Calling Parsing Function ===");
     
     try {
-      // Get the base URL from the request
-      const baseUrl = new URL(req.url).origin;
-      const parseUrl = `${baseUrl}/functions/v1/scan-business-card`;
+      // Get the base URL from environment variable (required for internal edge function calls)
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      if (!supabaseUrl) {
+        throw new Error("SUPABASE_URL environment variable is not set");
+      }
+      const parseUrl = `${supabaseUrl}/functions/v1/scan-business-card`;
       console.log("Calling parsing function at:", parseUrl);
       
-      // Get authorization headers from original request
+      // Get authorization headers from original request, or use service role key for internal calls
       const authHeaders: Record<string, string> = {};
-      req.headers.forEach((value, key) => {
-        if (key.toLowerCase() === "authorization" || key.toLowerCase() === "apikey") {
-          authHeaders[key] = value;
+      const authHeader = req.headers.get("Authorization");
+      const apikeyHeader = req.headers.get("apikey");
+      
+      if (authHeader) {
+        authHeaders["Authorization"] = authHeader;
+      }
+      if (apikeyHeader) {
+        authHeaders["apikey"] = apikeyHeader;
+      }
+      
+      // If no auth headers, use service role key for internal calls
+      if (!authHeader && !apikeyHeader) {
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (serviceKey) {
+          authHeaders["apikey"] = serviceKey;
+          authHeaders["Authorization"] = `Bearer ${serviceKey}`;
         }
-      });
+      }
 
+      const requestBody = {
+        ocrText: ocrResult.text,
+        structure: structure,
+      };
+      
       console.log("Sending parsing request with:", {
         ocrTextLength: ocrResult.text.length,
         structureLines: structure.lines?.length || 0,
+        requestBodySize: JSON.stringify(requestBody).length,
         authHeaders: Object.keys(authHeaders),
       });
 
       let parseResponse: Response;
       try {
+        const bodyString = JSON.stringify(requestBody);
         parseResponse = await fetch(parseUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...authHeaders,
           },
-          body: JSON.stringify({
-            ocrText: ocrResult.text,
-            structure: structure,
-          }),
+          body: bodyString,
         });
         console.log("Parse function responded with status:", parseResponse.status);
       } catch (fetchError) {

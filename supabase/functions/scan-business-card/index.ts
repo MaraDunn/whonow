@@ -211,6 +211,29 @@ const ROLE_TITLES = [
 
 const COMPANY_SUFFIXES = /\b(Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Corporation|Company|Co\.?|Group|Holdings|Partners|Solutions|Technologies|Tech|Systems|Enterprises|Industries|Services|Consulting|Agency|Associates|International|Worldwide|Global)\b/i;
 
+// Common tagline phrases that should NOT be extracted as company names
+const TAGLINE_PHRASES = [
+  /^CREATIVE\s+SOLUTIONS$/i,
+  /^QUALITY\s+SERVICE$/i,
+  /^EXCELLENCE\s+IN\s+SERVICE$/i,
+  /^YOUR\s+TRUSTED\s+PARTNER$/i,
+  /^INNOVATION\s+AND\s+EXCELLENCE$/i,
+  /^DEDICATED\s+TO\s+QUALITY$/i,
+  /^LEADING\s+THE\s+WAY$/i,
+  /^PREMIER\s+SERVICE$/i,
+  /^SERVING\s+YOUR\s+NEEDS$/i,
+  /^COMMITTED\s+TO\s+EXCELLENCE$/i,
+  /^CREATIVE\s+SOLUTIONS?$/i, // Matches "CREATIVE SOLUTIONS" or "CREATIVE SOLUTION"
+  /^SOLUTIONS?\s+(?:AND\s+)?SERVICES?$/i,
+  /^SERVICES?\s+(?:AND\s+)?SOLUTIONS?$/i,
+];
+
+// Function to check if a line is a tagline
+function isTagline(text: string): boolean {
+  const cleaned = text.trim().toUpperCase();
+  return TAGLINE_PHRASES.some(pattern => pattern.test(cleaned));
+}
+
 const URL_REGEX = /(?:https?:\/\/)?(?:www\.)?[\w.-]+\.[a-z]{2,}(?:\/\S*)?/gi;
 
 /**
@@ -447,6 +470,261 @@ function findProximityMatches(
  */
 
 /**
+ * Calculate similarity between two strings (0-1)
+ */
+function calculateSimilarity(str1: string, str2: string): number {
+  if (str1 === str2) return 1.0;
+  if (str1.length === 0 || str2.length === 0) return 0;
+  
+  let matches = 0;
+  const maxLen = Math.max(str1.length, str2.length);
+  const minLen = Math.min(str1.length, str2.length);
+  
+  for (let i = 0; i < minLen; i++) {
+    if (str1[i] === str2[i]) matches++;
+  }
+  
+  return matches / maxLen;
+}
+
+/**
+ * Correct name based on email local part
+ * Uses common OCR error patterns to fix misread names
+ */
+function correctNameFromEmail(ocrName: string, email: string | null): string | null {
+  if (!email || !ocrName) return null;
+  
+  const emailLocal = email.split("@")[0].toLowerCase().replace(/[._-]/g, "");
+  const ocrNameLower = ocrName.toLowerCase();
+  const ocrNameParts = ocrName.split(/\s+/).filter(p => p.length >= 2);
+  
+  // If name already matches email, no correction needed
+  const ocrNameLowerNoSpaces = ocrNameLower.replace(/\s+/g, "");
+  if (emailLocal === ocrNameLowerNoSpaces || emailLocal.includes(ocrNameLowerNoSpaces) || ocrNameLowerNoSpaces.includes(emailLocal)) {
+    return null; // Already matches
+  }
+  
+  // Common OCR error mappings
+  const ocrErrors: Record<string, string[]> = {
+    'a': ['w'], // A misread as W (especially at start)
+    'w': ['a'], // W misread as A
+    'n': ['m', 'rn'], // N misread as M or RN
+    'm': ['n', 'rn'], // M misread as N
+    'i': ['l', '1'], // I misread as L or 1
+    'l': ['i', '1'], // L misread as I or 1
+    'o': ['0'], // O misread as 0
+    '0': ['o'], // 0 misread as O
+    'r': ['p'], // R misread as P
+    'p': ['r'], // P misread as R
+    'e': ['c'], // E misread as C
+    'c': ['e'], // C misread as E
+  };
+  
+  // Try to split email local part into name parts
+  // Common patterns: "williamlorem", "william.lorem", "william_lorem", "wlorem"
+  // Try splitting by common separators first
+  let emailParts: string[] = [];
+  if (emailLocal.includes('.') || emailLocal.includes('_') || emailLocal.includes('-')) {
+    emailParts = emailLocal.split(/[._-]/).filter(p => p.length >= 2);
+  } else {
+    // Try to split concatenated name (e.g., "williamlorem" → ["william", "lorem"])
+    // Heuristic: split where lowercase transitions to lowercase (common name boundaries)
+    // For "williamlorem", look for common first name endings
+    const commonFirstNames = ['william', 'john', 'michael', 'david', 'james', 'robert', 'richard', 'thomas', 'daniel', 'matthew', 'chris', 'mark', 'paul', 'steven', 'andrew', 'brian', 'kevin', 'george', 'edward', 'ronald', 'anthony', 'kenneth', 'joshua', 'ryan', 'nicholas', 'eric', 'stephen', 'jacob', 'gary', 'jonathan', 'jason', 'frank', 'scott', 'justin', 'brandon', 'raymond', 'gregory', 'benjamin', 'samuel', 'patrick', 'alexander', 'jack', 'dennis', 'jerry', 'tyler', 'aaron', 'jose', 'henry', 'adam', 'douglas', 'nathan', 'zachary', 'peter', 'kyle', 'noah', 'ethan', 'wayne', 'alan', 'juan', 'roy', 'ralph', 'eugene', 'carol', 'louis', 'philip', 'lawrence', 'bobby', 'johnny', 'russell'];
+    
+    // Try matching common first names
+    for (const firstName of commonFirstNames) {
+      if (emailLocal.startsWith(firstName) && emailLocal.length > firstName.length) {
+        const lastName = emailLocal.slice(firstName.length);
+        if (lastName.length >= 2) {
+          emailParts = [firstName, lastName];
+          break;
+        }
+      }
+    }
+    
+    // If no match, try splitting at common boundaries (vowel-consonant transitions)
+    // For "williamlorem", try splitting at "m" (end of william)
+    if (emailParts.length === 0 && emailLocal.length > 6) {
+      // Try to find a split point (look for patterns like "am", "om", "el", etc.)
+      for (let i = 3; i < emailLocal.length - 2; i++) {
+        const first = emailLocal.slice(0, i);
+        const second = emailLocal.slice(i);
+        if (first.length >= 3 && second.length >= 2) {
+          emailParts = [first, second];
+          break;
+        }
+      }
+    }
+    
+    // If still no parts, use whole email local as single part
+    if (emailParts.length === 0) {
+      emailParts = [emailLocal];
+    }
+  }
+  
+  // Try to match email parts with OCR name parts using OCR error corrections
+  if (emailParts.length >= 2 && ocrNameParts.length >= 2) {
+    // Try correcting each OCR name part
+    const correctedParts: string[] = [];
+    for (let i = 0; i < Math.min(emailParts.length, ocrNameParts.length); i++) {
+      const emailPart = emailParts[i];
+      const ocrPart = ocrNameParts[i].toLowerCase();
+      
+      // Skip if already matches
+      if (emailPart === ocrPart) {
+        correctedParts.push(ocrNameParts[i]); // Keep original capitalization
+        continue;
+      }
+      
+      let correctedPart = ocrPart;
+      
+      // First, try simple direct corrections for common OCR errors
+      // 1. A → W at start (e.g., "alliam" → "william")
+      // Check if first char differs (A vs W) and parts are similar in length
+      if (ocrPart[0] === 'a' && emailPart[0] === 'w') {
+        // If same length, check if rest matches (allowing for minor differences)
+        if (ocrPart.length === emailPart.length) {
+          const ocrRest = ocrPart.slice(1);
+          const emailRest = emailPart.slice(1);
+          // If rest matches exactly, or is very similar (most chars match)
+          if (ocrRest === emailRest || calculateSimilarity(ocrRest, emailRest) > 0.85) {
+            correctedPart = 'w' + ocrPart.slice(1);
+          }
+        }
+        // If OCR is shorter (missing a character), check if rest is contained in email
+        // e.g., "alliam" (missing 'i') vs "william"
+        else if (ocrPart.length === emailPart.length - 1) {
+          const ocrRest = ocrPart.slice(1);
+          const emailRest = emailPart.slice(1);
+          // Check if OCR rest appears in email rest (allowing for one missing char)
+          // "lliam" should be in "illiam" - check if it's a substring
+          if (emailRest.includes(ocrRest)) {
+            correctedPart = emailPart; // Use email part directly
+          }
+        }
+      }
+      // 2. N → M at end (e.g., "loren" → "lorem")
+      else if (ocrPart.length === emailPart.length &&
+               ocrPart.slice(0, -1) === emailPart.slice(0, -1) && 
+               ocrPart[ocrPart.length - 1] === 'n' && 
+               emailPart[emailPart.length - 1] === 'm') {
+        correctedPart = ocrPart.slice(0, -1) + 'm';
+      }
+      // 3. M → N at end (less common)
+      else if (ocrPart.length === emailPart.length &&
+               ocrPart.slice(0, -1) === emailPart.slice(0, -1) && 
+               ocrPart[ocrPart.length - 1] === 'm' && 
+               emailPart[emailPart.length - 1] === 'n') {
+        correctedPart = ocrPart.slice(0, -1) + 'n';
+      }
+      // 4. If simple corrections didn't work, try recursive approach
+      else {
+        // Calculate similarity with OCR error corrections
+        let bestMatch = ocrPart;
+        let bestSimilarity = 0;
+        
+        // Try common OCR error corrections
+        const tryCorrections = (word: string, depth: number = 0): void => {
+          if (depth > 2) return; // Limit recursion
+          if (word === emailPart) {
+            bestMatch = word;
+            bestSimilarity = 1.0;
+            return;
+          }
+          
+          // Calculate similarity
+          let similarity = 0;
+          for (let j = 0; j < Math.min(word.length, emailPart.length); j++) {
+            if (word[j] === emailPart[j]) similarity += 1;
+          }
+          similarity /= Math.max(word.length, emailPart.length);
+          
+          if (similarity > bestSimilarity && similarity > 0.6) {
+            bestMatch = word;
+            bestSimilarity = similarity;
+          }
+          
+          // Try correcting common OCR errors
+          for (let k = 0; k < word.length; k++) {
+            const char = word[k];
+            const corrections = ocrErrors[char] || [];
+            for (const correction of corrections) {
+              const corrected = word.slice(0, k) + correction + word.slice(k + 1);
+              tryCorrections(corrected, depth + 1);
+            }
+          }
+        };
+        
+        tryCorrections(ocrPart);
+        
+        // If we found a good match, use corrected version
+        if (bestSimilarity > 0.7 && bestMatch !== ocrPart) {
+          correctedPart = bestMatch;
+        }
+      }
+      
+      // Capitalize first letter and add to corrected parts
+      correctedParts.push(correctedPart.charAt(0).toUpperCase() + correctedPart.slice(1));
+    }
+    
+    // If we have corrected parts, return corrected name
+    if (correctedParts.length === emailParts.length && correctedParts.some((p, i) => p.toLowerCase() !== ocrNameParts[i].toLowerCase())) {
+      return correctedParts.join(" ");
+    }
+  }
+  
+  // Fallback: if email local is close to OCR name (after removing spaces), try direct correction
+  // This handles cases like "alliam" → "william" (A → W at start)
+  if (ocrNameParts.length === 1 || (ocrNameParts.length === 2 && emailParts.length >= 1)) {
+    const firstEmailPart = emailParts[0];
+    const firstOcrPart = ocrNameParts[0].toLowerCase();
+    
+    // If first characters match but rest is similar, try correcting first char
+    if (firstOcrPart.length === firstEmailPart.length) {
+      let differences = 0;
+      let correctedFirst = firstOcrPart;
+      
+      // Try common first-character corrections (especially A → W at start)
+      if (firstOcrPart[0] === 'a' && firstEmailPart[0] === 'w' && firstOcrPart.slice(1) === firstEmailPart.slice(1)) {
+        correctedFirst = 'w' + firstOcrPart.slice(1);
+        differences = 1;
+      }
+      // Try last-character corrections (especially N → M at end)
+      else if (firstOcrPart.slice(0, -1) === firstEmailPart.slice(0, -1) && 
+               firstOcrPart[firstOcrPart.length - 1] === 'n' && 
+               firstEmailPart[firstEmailPart.length - 1] === 'm') {
+        correctedFirst = firstOcrPart.slice(0, -1) + 'm';
+        differences = 1;
+      }
+      
+      if (differences === 1) {
+        const correctedName = [correctedFirst.charAt(0).toUpperCase() + correctedFirst.slice(1)];
+        if (ocrNameParts.length === 2) {
+          // Try correcting second part too
+          if (emailParts.length >= 2) {
+            const secondEmailPart = emailParts[1];
+            const secondOcrPart = ocrNameParts[1].toLowerCase();
+            if (secondOcrPart.slice(0, -1) === secondEmailPart.slice(0, -1) && 
+                secondOcrPart[secondOcrPart.length - 1] === 'n' && 
+                secondEmailPart[secondEmailPart.length - 1] === 'm') {
+              correctedName.push(secondOcrPart.slice(0, -1) + 'm');
+            } else {
+              correctedName.push(ocrNameParts[1]);
+            }
+          } else {
+            correctedName.push(ocrNameParts[1]);
+          }
+        }
+        return correctedName.join(" ");
+      }
+    }
+  }
+  
+  return null; // No correction found
+}
+
+/**
  * Check if name matches email local part
  */
 function crossValidateNameWithEmail(name: string, email: string | null): { valid: boolean; score: number } {
@@ -660,24 +938,31 @@ function extractEmail(text: string, lineIndex?: number): { email: string | null;
   
   const preferredEmail = (businessEmails.length > 0 ? businessEmails[0] : allMatches[0]).toLowerCase();
   
-  // Clean common OCR artifacts from email
+  // Check if email is already valid - if so, return it as-is without any cleaning
+  const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (emailPattern.test(preferredEmail)) {
+    // Email is already valid, return it immediately without any cleaning
+    console.log("Email already valid, using as-is:", preferredEmail);
+    return { email: preferredEmail, confidence: 90, position: lineIndex };
+  }
+  
+  // Email is corrupted, apply aggressive cleaning
   let cleaned = preferredEmail
     .replace(/\s+at\s+/gi, "@") // "at" -> @
     .replace(/\s*[@aA]\s*/g, "@") // Space around @ -> @
     .replace(/[|]/g, "@") // Pipe -> @ (common OCR error)
-    .replace(/([a-z])[lI]([a-z])/g, "$1@$2") // l or I between letters -> @
+    .replace(/([a-z])[lI]([a-z])/g, "$1@$2") // l or I between letters -> @ (ONLY if no @ present)
     .replace(/rn([@])/g, "m$1") // rn before @ -> m
     .replace(/vv([@a-z])/g, "w$1") // vv -> w
     .replace(/cl([@a-z])/g, "d$1"); // cl -> d
   
-  // Validate email format
-  const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  // Validate cleaned email
   if (!emailPattern.test(cleaned)) {
     console.log("Email validation failed for:", cleaned, "original:", preferredEmail);
-    // Try with original if cleaned failed
-    const originalCleaned = preferredEmail.replace(/\s+at\s+/gi, "@").replace(/\s*[@aA|]\s*/g, "@");
-    if (emailPattern.test(originalCleaned)) {
-      cleaned = originalCleaned;
+    // Try with minimal cleaning (spaces around @ only)
+    const minimalCleaned = preferredEmail.replace(/\s+at\s+/gi, "@").replace(/\s*[@aA|]\s*/g, "@");
+    if (emailPattern.test(minimalCleaned)) {
+      cleaned = minimalCleaned;
     } else {
       return { email: null, confidence: 0, position: lineIndex };
     }
@@ -870,12 +1155,22 @@ function extractCompany(
     const cleaned = line.text.replace(EMAIL_REGEX, "").replace(URL_REGEX, "").trim();
     if (cleaned.length < 2) continue;
     
-    if (COMPANY_SUFFIXES.test(cleaned)) {
+    // Skip if it's a tagline (like "CREATIVE SOLUTIONS")
+    if (isTagline(cleaned)) {
+      console.log("Skipping tagline in Priority 2:", cleaned);
+      continue;
+    }
+    
+    // Check if it contains a company suffix (but not if it's just the suffix alone)
+    // "CREATIVE SOLUTIONS" contains "Solutions" but should be filtered as tagline
+    // Only accept if it's not a tagline
+    if (COMPANY_SUFFIXES.test(cleaned) && !isTagline(cleaned)) {
       let confidence = 85;
       // Boost if near email
       if (emailPosition !== undefined && Math.abs(i - emailPosition) <= 3) {
         confidence = 95;
       }
+      console.log("Priority 2 candidate:", cleaned, "confidence:", confidence);
       candidates.push({ text: cleaned, confidence, position: i });
     }
   }
@@ -919,6 +1214,12 @@ function extractCompany(
         !EMAIL_REGEX.test(cleaned) &&
         !PHONE_PATTERNS.some(p => p.test(cleaned))) {
       
+      // Skip if it's a tagline (like "CREATIVE SOLUTIONS")
+      if (isTagline(cleaned)) {
+        console.log("Skipping tagline:", cleaned);
+        continue;
+      }
+      
       // Boost confidence if it contains company indicators (Design, Solutions, etc.)
       const companyIndicators = /\b(design|solutions|technologies|tech|systems|group|consulting|services|agency|corp|inc|llc|ltd)\b/i;
       const hasCompanyIndicator = companyIndicators.test(cleaned);
@@ -944,7 +1245,74 @@ function extractCompany(
     }
   }
   
-  // Priority 4: Multi-word company names (2-5 words) - try combining adjacent lines
+  // Priority 4: Mixed-case company names (camelCase or TitleCase) - like "LoremDesign"
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i];
+    let cleaned = line.text.replace(EMAIL_REGEX, "").replace(URL_REGEX, "").trim();
+    
+    // Skip if it contains phone numbers or starts with digits
+    if (PHONE_PATTERNS.some(p => p.test(cleaned))) continue;
+    if (/^\d+/.test(cleaned)) continue; // Starts with digits
+    if (cleaned.length < 3) continue;
+    
+    // Skip if it's a tagline
+    if (isTagline(cleaned)) {
+      console.log("Skipping tagline in Priority 4:", cleaned);
+      continue;
+    }
+    
+    // Check for camelCase or TitleCase patterns (like "LoremDesign", "Lorem Design")
+    // Pattern: Starts with capital, followed by lowercase, then capital again (camelCase)
+    // OR: Multiple words with capital letters (TitleCase)
+    const isCamelCase = /^[A-Z][a-z]+[A-Z]/.test(cleaned); // camelCase: "LoremDesign"
+    const isTitleCase = /^[A-Z][a-z]+\s+[A-Z][a-z]+/.test(cleaned); // TitleCase: "Lorem Design"
+    const isMixedCase = isCamelCase || isTitleCase;
+    
+    if (isMixedCase) {
+      console.log(`Priority 4: Found mixed-case candidate "${cleaned}" (camelCase: ${isCamelCase}, TitleCase: ${isTitleCase})`);
+    }
+    
+    if (isMixedCase && 
+        cleaned.length >= 3 && 
+        cleaned.length < 50 &&
+        !EMAIL_REGEX.test(cleaned) &&
+        !URL_REGEX.test(cleaned) &&
+        !PHONE_PATTERNS.some(p => p.test(cleaned)) &&
+        !/\d{3,}/.test(cleaned)) {
+      
+      // Check if it looks like a name (2 words that could be first/last name)
+      const words = cleaned.split(/\s+/);
+      if (words.length === 2 && words[0].length >= 3 && words[1].length >= 3) {
+        // Could be a name, but if it has company-like words, it's probably a company
+        const companyWords = /\b(design|tech|consulting|group|solutions|services|studio|works|lab|agency)\b/i;
+        if (!companyWords.test(cleaned)) {
+          // Might be a name, skip it
+          continue;
+        }
+      }
+      
+      // For single-word camelCase companies (like "LoremDesign"), boost confidence
+      // These are very likely to be company names
+      const isSingleWordCamelCase = words.length === 1 && /^[A-Z][a-z]+[A-Z]/.test(cleaned);
+      let confidence = isSingleWordCamelCase ? 85 : 70; // Single-word camelCase gets higher confidence (85 > 75 for "Manager")
+      if (email) {
+        const validation = crossValidateCompanyWithEmail(cleaned, email);
+        if (validation.valid) {
+          confidence = Math.max(confidence, validation.score);
+        }
+      }
+      
+      // Boost if in top or middle region
+      if (i < allLines.length * 0.7) {
+        confidence += 10;
+      }
+      
+      console.log(`Priority 4: Adding candidate "${cleaned}" with confidence ${confidence}`);
+      candidates.push({ text: cleaned, confidence, position: i });
+    }
+  }
+  
+  // Priority 5: Multi-word company names (2-5 words) - try combining adjacent lines
   // Companies like "EVERGREEN SENIOR SUITES" might be split across lines
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
@@ -953,6 +1321,11 @@ function extractCompany(
     // Skip if it contains phone numbers or starts with digits
     if (PHONE_PATTERNS.some(p => p.test(cleaned))) continue;
     if (/^\d+/.test(cleaned)) continue; // Starts with digits
+    
+    // Skip if it's a tagline
+    if (isTagline(cleaned)) {
+      continue;
+    }
     
     // Try current line
     const words = cleaned.split(/\s+/);
@@ -1020,6 +1393,9 @@ function extractCompany(
   
   // Select best candidate
   if (candidates.length > 0) {
+    // Log all candidates for debugging
+    console.log("Company extraction candidates:", candidates.map(c => ({ text: c.text, confidence: c.confidence, position: c.position })));
+    
     // Sort by confidence, then by position (prefer earlier in document)
     candidates.sort((a, b) => {
       if (Math.abs(b.confidence - a.confidence) > 5) {
@@ -1029,7 +1405,7 @@ function extractCompany(
     });
     
     const best = candidates[0];
-    console.log("Extracted company:", best.text, "confidence:", best.confidence, "position:", best.position);
+    console.log("Extracted company:", best.text, "confidence:", best.confidence, "position:", best.position, "total candidates:", candidates.length);
     return { company: best.text, confidence: best.confidence, position: best.position };
   }
   
@@ -1722,6 +2098,14 @@ function parseBusinessCard(
   let finalName = nameResult.name || "";
   let finalNameConfidence = nameResult.confidence || 0;
   if (emailResult.email && finalName) {
+    // Try to correct name based on email (fix OCR errors)
+    const correctedName = correctNameFromEmail(finalName, emailResult.email);
+    if (correctedName) {
+      console.log(`Name corrected from "${finalName}" to "${correctedName}" based on email`);
+      finalName = correctedName;
+      finalNameConfidence = Math.max(finalNameConfidence, 85); // Boost confidence for corrected name
+    }
+    
     const validation = crossValidateNameWithEmail(finalName, emailResult.email);
     if (validation.valid) {
       // Boost confidence if validated
@@ -1807,7 +2191,43 @@ serve(async (req) => {
   }
 
   try {
-    const body = await req.json();
+    // Parse request body - use req.json() directly but handle errors
+    let body;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      console.error("Failed to parse request body as JSON:", parseError);
+      const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+      
+      // Check if it's an empty body error
+      if (errorMessage.includes("Unexpected end of JSON input") || errorMessage.includes("empty")) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "Request body is empty or incomplete",
+            details: "The request body was empty or truncated. This may be due to request size limits or network issues."
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "Invalid JSON in request body",
+          details: errorMessage
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Check if body is null or undefined
+    if (!body) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Request body is empty" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Support both OCR text and legacy image input
     // For backwards compatibility, if imageBase64 is provided without ocrText,
@@ -1834,6 +2254,9 @@ serve(async (req) => {
     }
 
     console.log("Parsing business card OCR text (length:", ocrText.length, ")", ocrText.substring(0, 200));
+    console.log("=== FULL OCR TEXT FOR DEBUGGING ===");
+    console.log(ocrText);
+    console.log("=== END OCR TEXT ===");
     if (structure) {
       console.log("Using structured layout data with", structure.lines?.length || 0, "lines");
     }
