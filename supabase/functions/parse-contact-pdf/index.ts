@@ -88,7 +88,36 @@ interface DocumentContact {
 }
 
 function cleanDocumentText(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/[ \t]+/g, " ").split("\n").map(line => line.trim()).join("\n").trim();
+  let cleaned = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+  
+  // Remove PDF operators and formatting commands that get mixed into text extraction
+  // Common PDF operators: Tf (text font), Td (text position), TJ/Tj (text show), etc.
+  // Also remove font commands like "/Helvetica 12 Tf"
+  // IMPORTANT: Preserve newlines - only clean multiple spaces within lines, not across lines
+  cleaned = cleaned
+    // Remove PDF font commands: /FontName size Tf
+    .replace(/\/[A-Za-z0-9]+\s+\d+\s+Tf\s+\d+\s+g/g, ' ')
+    .replace(/\/[A-Za-z0-9]+\s+\d+\s+Tf/g, ' ')
+    // Remove PDF operators: Tf, Td, TJ, Tj, etc.
+    .replace(/\b(BT|ET|Tf|Td|TD|Tm|T\*|Tj|TJ|'|"|Tc|Tw|Tz|TL|Ts|Tr|Tg|TK)\s*\d*\s*/g, ' ')
+    // Remove standalone PDF numbers that are likely coordinates
+    .replace(/\b\d+\s+\d+\s+[TMLRBSWcmhre]+\s*\d*\b/g, ' ')
+    // Remove PDF stream operators
+    .replace(/stream\s*[\s\S]*?endstream/gi, ' ')
+    // Remove common PDF object references
+    .replace(/\b\d+\s+\d+\s+R\b/g, ' ')
+    // Clean up multiple spaces within lines (but preserve newlines)
+    .replace(/[ \t]+/g, ' ')
+    // Remove spaces at start/end of lines (but keep the lines)
+    .replace(/^[ \t]+/gm, '')
+    .replace(/[ \t]+$/gm, '')
+    // Remove excessive empty lines (more than 2 in a row)
+    .replace(/\n\s*\n\s*\n+/g, '\n\n')
+    .trim();
+  
+  return cleaned;
 }
 
 function detectTableFormat(text: string): { isTable: boolean; delimiter: string; headers: string[] } {
@@ -239,6 +268,12 @@ function parseTableFormat(text: string, delimiter: string, headers: string[]): D
     // Require at least name or email/phone
     if (!name && !email && !phone) continue;
     
+    // Reject names that are PDF operators
+    const pdfOperators = new Set(['Tf', 'Td', 'TJ', 'Tj', 'BT', 'ET', 'Tm', 'T*', 'Tc', 'Tw', 'Tz', 'TL', 'Ts', 'Tr', 'Tg', 'TK']);
+    if (name && pdfOperators.has(name.trim())) {
+      name = ""; // Reset name if it's a PDF operator
+    }
+    
     // Fallback name
     if (!name) {
       if (email) {
@@ -296,84 +331,49 @@ function parseVCards(text: string): DocumentContact[] {
 
 function detectContactBlocks(text: string): string[] {
   const blocks: string[] = [];
+  const lines = text.split("\n").filter(l => l.trim());
   
-  // First, try splitting by double newlines or separator lines
-  const parts = text.split(BLOCK_SEPARATORS);
+  // Pattern to detect name+phone on same line
+  // Handles: "Raynard Howard :+1(202)436-6981", "David Clayton :+1(202)600-5050"
+  // Also handles when it's in the middle of a line: "text before David Clayton :+1(202)600-5050"
+  // Pattern: Capitalized name (one or two words) + optional colon + phone number
+  const namePhonePattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*:?\s*\+?1?\s*\(?\d{3}\)?\s*-?\s*\d{3}\s*-?\s*\d{4}/;
   
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const hasEmail = EMAIL_REGEX.test(trimmed);
-    const hasPhone = PHONE_REGEX.test(trimmed);
-    if (hasEmail || hasPhone) {
-      // If this part has multiple emails/phones, split it further
-      const emails = trimmed.match(EMAIL_REGEX);
-      const phones = trimmed.match(PHONE_REGEX);
-      const totalContacts = Math.max(emails?.length || 0, phones?.length || 0);
-      
-      if (totalContacts > 1) {
-        // Multiple contacts in one block - split by email/phone occurrences
-        const lines = trimmed.split("\n");
-        let currentBlock: string[] = [];
-        
-        for (const line of lines) {
-          const lineHasEmail = EMAIL_REGEX.test(line);
-          const lineHasPhone = PHONE_REGEX.test(line);
-          
-          if (lineHasEmail || lineHasPhone) {
-            // New contact starts here
-            if (currentBlock.length > 0) {
-              blocks.push(currentBlock.join("\n"));
-            }
-            currentBlock = [line];
-          } else if (currentBlock.length > 0) {
-            // Continue current contact (limit to 8 lines per contact)
-            if (currentBlock.length < 8) {
-              currentBlock.push(line);
-            } else {
-              // Contact block is getting too long, save it and start new
-              blocks.push(currentBlock.join("\n"));
-              currentBlock = [];
-            }
-          }
-        }
-        
-        if (currentBlock.length > 0) {
-          blocks.push(currentBlock.join("\n"));
-        }
-      } else {
-        // Single contact in this block
-        blocks.push(trimmed);
+  console.log(`[parse-contact-pdf] detectContactBlocks: checking ${lines.length} lines for name+phone patterns`);
+  
+  // Find all lines that contain name+phone patterns
+  const contactStartLines: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (namePhonePattern.test(line)) {
+      contactStartLines.push(i);
+      if (contactStartLines.length <= 5) {
+        const match = line.match(namePhonePattern);
+        console.log(`[parse-contact-pdf] Found name+phone pattern on line ${i + 1}: "${match ? match[0] : line.substring(0, 60)}"`);
       }
     }
   }
   
-  // If no blocks found from separator splitting, try line-by-line
-  if (blocks.length === 0) {
-    const lines = text.split("\n").filter(l => l.trim());
-    let currentBlock: string[] = [];
+  console.log(`[parse-contact-pdf] Total name+phone patterns found: ${contactStartLines.length}`);
+  
+  // Create blocks starting at each name+phone line
+  for (let idx = 0; idx < contactStartLines.length; idx++) {
+    const startLineIdx = contactStartLines[idx];
+    const nextStartLineIdx = contactStartLines[idx + 1];
     
-    for (const line of lines) {
-      const hasEmail = EMAIL_REGEX.test(line);
-      const hasPhone = PHONE_REGEX.test(line);
-      
-      if (hasEmail || hasPhone) {
-        // New contact - save previous if exists
-        if (currentBlock.length > 0) {
-          blocks.push(currentBlock.join("\n"));
-        }
-        currentBlock = [line];
-      } else if (currentBlock.length > 0) {
-        // Continue building current contact
-        // Limit to 6 lines per contact to avoid combining multiple contacts
-        if (currentBlock.length < 6) {
-          currentBlock.push(line);
-        } else {
-          // Block is getting long, save it and look for next contact
-          blocks.push(currentBlock.join("\n"));
-          currentBlock = [];
-        }
-      }
+    const currentBlock: string[] = [];
+    
+    // Add the line with the name+phone pattern
+    currentBlock.push(lines[startLineIdx]);
+    
+    // Add following lines up to (but not including) the next name+phone line
+    // Or up to 10 lines, whichever comes first
+    const endLineIdx = nextStartLineIdx !== undefined 
+      ? Math.min(nextStartLineIdx, startLineIdx + 11)
+      : Math.min(startLineIdx + 11, lines.length);
+    
+    for (let j = startLineIdx + 1; j < endLineIdx; j++) {
+      currentBlock.push(lines[j]);
     }
     
     if (currentBlock.length > 0) {
@@ -381,9 +381,17 @@ function detectContactBlocks(text: string): string[] {
     }
   }
   
-  // If still no blocks, try pattern-based detection
+  console.log(`[parse-contact-pdf] Line-by-line detection: found ${contactStartLines.length} name+phone patterns, created ${blocks.length} contact blocks`);
+  
+  // If we found blocks, log first few for debugging
+  if (blocks.length > 0) {
+    console.log(`[parse-contact-pdf] First 3 blocks preview:`, blocks.slice(0, 3).map(b => b.substring(0, 100)));
+  } else if (contactStartLines.length > 0) {
+    console.log(`[parse-contact-pdf] WARNING: Found ${contactStartLines.length} name+phone patterns but created 0 blocks!`);
+  }
+  
+  // If no blocks found, try pattern-based detection as fallback
   if (blocks.length === 0) {
-    const lines = text.split("\n").filter(l => l.trim());
     
     // Look for name patterns followed by contact info
     const namePattern = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/;
@@ -419,10 +427,28 @@ function detectContactBlocks(text: string): string[] {
  * This reuses the quick add parsing logic for consistency
  */
 function parseContactBlock(block: string): DocumentContact | null {
-  const emails = block.match(EMAIL_REGEX);
-  const phones = block.match(PHONE_REGEX);
-  const email = emails?.[0] || null;
-  const phone = phones?.[0] || null;
+  // Extract all emails and phones (there might be multiple per block)
+  // Handle concatenated emails (e.g., "cguerrette@insomniacookies.comkdiaz@insomniacookies.com")
+  let blockText = block;
+  
+  // Split concatenated emails (email.com followed by lowercase letters is likely concatenated)
+  blockText = blockText.replace(/([a-z0-9]+@[a-z0-9.-]+\.[a-z]{2,})([a-z])/gi, '$1 $2');
+  
+  const allEmails = blockText.match(EMAIL_REGEX) || [];
+  const allPhones = blockText.match(PHONE_REGEX) || [];
+  
+  // For now, take the first email and phone (we'll handle multiple contacts per block separately)
+  const email = allEmails[0] || null;
+  const phone = allPhones[0] || null;
+  
+  // If multiple emails/phones in one block, this might be multiple contacts
+  // We'll handle that by splitting the block
+  if (allEmails.length > 1 || allPhones.length > 1) {
+    console.log(`[parse-contact-pdf] Block has multiple contacts: ${allEmails.length} emails, ${allPhones.length} phones`);
+  }
+  
+  // Use blockText for further parsing (with fixed concatenated emails)
+  block = blockText;
   
   // Use a simplified version of parseContactText logic
   // Extract role first (has clear patterns)
@@ -453,7 +479,7 @@ function parseContactBlock(block: string): DocumentContact | null {
     }
   }
   
-  // Extract company (look for "works for", "at", "@" patterns)
+  // Extract company (look for "works for", "at", "@" patterns, or extract from email domain)
   let company: string | null = null;
   const worksForMatch = block.match(/\bworks?\s+for\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Corporation|Company|Co\.?|Group|Technologies|Tech|Solutions|Systems)?)/i);
   if (worksForMatch) {
@@ -463,53 +489,125 @@ function parseContactBlock(block: string): DocumentContact | null {
     if (atMatch) {
       company = atMatch[1].trim();
     } else if (email) {
-      // Try domain extraction
+      // Try domain extraction - extract company name from email domain
       const domain = email.split("@")[1];
       if (domain && !domain.includes("gmail") && !domain.includes("yahoo") && 
-          !domain.includes("hotmail") && !domain.includes("outlook")) {
-        const name = domain.split(".")[0];
-        company = name.charAt(0).toUpperCase() + name.slice(1);
+          !domain.includes("hotmail") && !domain.includes("outlook") &&
+          !domain.includes("icloud") && !domain.includes("protonmail")) {
+        // Extract company name from domain (e.g., "insomniacookies.com" -> "Insomniacookies")
+        const domainParts = domain.split(".");
+        if (domainParts.length > 0) {
+          const domainName = domainParts[0];
+          // Capitalize properly
+          company = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+          // Handle camelCase domains
+          company = company.replace(/([a-z])([A-Z])/g, '$1 $2');
+        }
       }
     }
   }
   
-  // Extract name - remove email, phone, role, company first
-  let cleanText = block;
-  if (email) cleanText = cleanText.replace(email, "");
-  if (phone) cleanText = cleanText.replace(PHONE_REGEX, "");
-  if (role) {
-    const escapedRole = role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    cleanText = cleanText.replace(new RegExp(escapedRole, "gi"), "");
-  }
-  if (company) {
-    const escapedCompany = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    cleanText = cleanText.replace(new RegExp(escapedCompany, "gi"), "");
-  }
+  // Extract name - FIRST try to extract from the name+phone pattern that was used to detect this block
+  // Pattern: "FirstNameLastName:phone" or "FirstName LastName:phone" or "Raynard Howard :+1(202)436-6981"
+  // Handles concatenated names like "RaynardHoward" and spaced names like "Raynard Howard"
+  // Also handles space before colon: "Name :+1(202)436-6981"
+  // IMPORTANT: Don't require ^ anchor - name+phone might be in the middle of a line with address text before it
+  const namePhonePattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*:?\s*\+?1?\s*\(?\d{3}\)?\s*-?\s*\d{3}\s*-?\s*\d{4}/;
+  const namePhoneMatch = block.match(namePhonePattern);
   
-  // Remove role titles
-  cleanText = cleanText.replace(/\b(VP|V\.?P\.?|CEO|CTO|CFO|President|Director|Manager|Engineer|Designer|Developer|Analyst|Coordinator|Specialist|Consultant|Advisor|Lead|Officer|Executive)\b/gi, "");
-  
-  // Clean up separators
-  cleanText = cleanText.replace(/[-–—|•,;]/g, " ").trim();
-  
-  // Extract name from remaining text (first 2-4 words that look like a name)
-  const words = cleanText.split(/\s+/).filter(Boolean);
-  const nameWords: string[] = [];
-  const stopKeywords = new Set(["at", "from", "works", "handles", "manages", "leads", "and", "or", "but", "for", "with", "on"]);
-  
-  for (let i = 0; i < Math.min(words.length, 4); i++) {
-    const word = words[i];
-    const wordLower = word.toLowerCase();
+  let name = "";
+  if (namePhoneMatch && namePhoneMatch[1]) {
+    // Found name from name+phone pattern - this is the most reliable source
+    name = namePhoneMatch[1].trim();
+    // Fix concatenated names (e.g., "RaynardHoward" -> "Raynard Howard")
+    name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+  } else {
+    // Try to find name in first line or lines before email/phone
+    const lines = block.split("\n").filter(l => l.trim());
     
-    if (stopKeywords.has(wordLower)) break;
-    if (/^[A-Z]/.test(word) || (i < 2 && /^[a-z]{2,}$/i.test(word))) {
-      nameWords.push(word);
-    } else if (nameWords.length > 0) {
-      break;
+    // Look for name in first few lines (before email/phone lines)
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const line = lines[i];
+      
+      // Skip lines that are clearly not names (emails, phones, addresses starting with numbers)
+      if (EMAIL_REGEX.test(line) || PHONE_REGEX.test(line) || 
+          /^\d+\s/.test(line) || // Address starting with number
+          /^\(/.test(line) || // Lines starting with parenthesis (role)
+          (line.toLowerCase().includes('manager') && !/^[A-Z]/.test(line))) {
+        continue;
+      }
+      
+      // Look for name pattern: "FirstName LastName" or "FirstNameLastName"
+      // Also handle "FirstNameLastName:" format
+      const namePattern = /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/;
+      const nameMatch = line.match(namePattern);
+      if (nameMatch && nameMatch[1]) {
+        name = nameMatch[1].trim();
+        // Fix concatenated names
+        name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+        break;
+      }
+      
+      // Try "FirstNameLastName:" format (common in contact sheets)
+      const concatenatedNamePattern = /^([A-Z][a-z]+[A-Z][a-zA-Z]+):/;
+      const concatMatch = line.match(concatenatedNamePattern);
+      if (concatMatch && concatMatch[1]) {
+        name = concatMatch[1].trim();
+        // Fix concatenated names
+        name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+        break;
+      }
+      
+      // Try single capitalized word followed by colon (might be name)
+      const singleNamePattern = /^([A-Z][a-z]{2,}):/;
+      const singleMatch = line.match(singleNamePattern);
+      if (singleMatch && singleMatch[1] && singleMatch[1].length > 2 && 
+          !['Store', 'Address', 'Contact', 'Email', 'Phone', 'Manager', 'Director'].includes(singleMatch[1])) {
+        name = singleMatch[1].trim();
+        break;
+      }
     }
   }
   
-  let name = nameWords.join(" ");
+  // If still no name, try extracting from remaining text after removing email/phone
+  if (!name) {
+    let cleanText = block;
+    if (email) cleanText = cleanText.replace(email, "");
+    if (phone) cleanText = cleanText.replace(PHONE_REGEX, "");
+    if (role) {
+      const escapedRole = role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      cleanText = cleanText.replace(new RegExp(escapedRole, "gi"), "");
+    }
+    if (company) {
+      const escapedCompany = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      cleanText = cleanText.replace(new RegExp(escapedCompany, "gi"), "");
+    }
+    
+    // Remove role titles
+    cleanText = cleanText.replace(/\b(VP|V\.?P\.?|CEO|CTO|CFO|President|Director|Manager|Engineer|Designer|Developer|Analyst|Coordinator|Specialist|Consultant|Advisor|Lead|Officer|Executive)\b/gi, "");
+    
+    // Clean up separators
+    cleanText = cleanText.replace(/[-–—|•,;]/g, " ").trim();
+    
+    // Extract name from remaining text (first 2-4 words that look like a name)
+    const words = cleanText.split(/\s+/).filter(Boolean);
+    const nameWords: string[] = [];
+    const stopKeywords = new Set(["at", "from", "works", "handles", "manages", "leads", "and", "or", "but", "for", "with", "on"]);
+    
+    for (let i = 0; i < Math.min(words.length, 4); i++) {
+      const word = words[i];
+      const wordLower = word.toLowerCase();
+      
+      if (stopKeywords.has(wordLower)) break;
+      if (/^[A-Z]/.test(word) || (i < 2 && /^[a-z]{2,}$/i.test(word))) {
+        nameWords.push(word);
+      } else if (nameWords.length > 0) {
+        break;
+      }
+    }
+    
+    name = nameWords.join(" ");
+  }
   
   // Fallback to email prefix if no name found
   if (!name && email) {
@@ -563,6 +661,18 @@ function parseContactBlock(block: string): DocumentContact | null {
     return null;
   }
   
+  // Reject names that are PDF operators (common false positives from PDF extraction)
+  const pdfOperators = new Set(['Tf', 'Td', 'TJ', 'Tj', 'BT', 'ET', 'Tm', 'T*', 'Tc', 'Tw', 'Tz', 'TL', 'Ts', 'Tr', 'Tg', 'TK']);
+  if (name && pdfOperators.has(name.trim())) {
+    console.warn(`[parse-contact-pdf] Rejected contact with PDF operator name: "${name}"`);
+    // If name is a PDF operator, try to extract from email instead
+    if (email) {
+      name = email.split("@")[0].replace(/[._-]/g, " ");
+    } else {
+      return null;
+    }
+  }
+  
   return {
     name: formatName(name),
     email,
@@ -594,6 +704,33 @@ function parseDocumentContacts(text: string): DocumentContact[] {
     console.log(`[parse-contact-pdf] Detected table format with delimiter: ${tableInfo.delimiter}, headers: ${tableInfo.headers.length}`);
     const tableContacts = parseTableFormat(cleanedText, tableInfo.delimiter, tableInfo.headers);
     console.log(`[parse-contact-pdf] Parsed ${tableContacts.length} contacts from table`);
+    
+    // If table parsing found few contacts but we have many emails/phones, try freeform as well
+    const emailCount = (cleanedText.match(EMAIL_REGEX) || []).length;
+    const phoneCount = (cleanedText.match(PHONE_REGEX) || []).length;
+    if (tableContacts.length < emailCount / 2 && emailCount > 5) {
+      console.log(`[parse-contact-pdf] Table parsing found ${tableContacts.length} contacts but ${emailCount} emails found. Trying freeform extraction as well...`);
+      const freeformBlocks = detectContactBlocks(cleanedText);
+      const freeformContacts: DocumentContact[] = [];
+      for (const block of freeformBlocks) {
+        const contact = parseContactBlock(block);
+        if (contact) {
+          freeformContacts.push(contact);
+        }
+      }
+      console.log(`[parse-contact-pdf] Freeform extraction found ${freeformContacts.length} additional contacts`);
+      // Combine and deduplicate (prefer table contacts)
+      const allContacts = [...tableContacts, ...freeformContacts];
+      // Simple deduplication by email
+      const seen = new Set<string>();
+      const uniqueContacts = allContacts.filter(c => {
+        if (c.email && seen.has(c.email.toLowerCase())) return false;
+        if (c.email) seen.add(c.email.toLowerCase());
+        return true;
+      });
+      return uniqueContacts;
+    }
+    
     return tableContacts;
   }
   
@@ -607,12 +744,91 @@ function parseDocumentContacts(text: string): DocumentContact[] {
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
     console.log(`[parse-contact-pdf] Parsing block ${i + 1}/${blocks.length}, length: ${block.length}, preview: ${block.substring(0, 100)}`);
-    const contact = parseContactBlock(block);
-    if (contact) {
-      console.log(`[parse-contact-pdf] Extracted contact: ${contact.name} (${contact.email || contact.phone || 'no contact info'})`);
-      contacts.push(contact);
+    
+    // Check if block has multiple contacts (multiple name+phone patterns or multiple emails)
+    // Pattern to match: "RaynardHoward:+1(202)436-6981" or "Raynard Howard :+1(202)436-6981"
+    const namePhonePattern = /[A-Z][a-z]+(?:[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)*\s*:?\s*\+?1?\s*\(?\d{3}\)?\s*-?\s*\d{3}\s*-?\s*\d{4}/g;
+    const namePhoneMatches = block.match(namePhonePattern) || [];
+    const emails = block.match(EMAIL_REGEX) || [];
+    
+    console.log(`[parse-contact-pdf] Block ${i + 1} analysis: ${namePhoneMatches.length} name+phone patterns, ${emails.length} emails`);
+    
+    // If multiple name+phone patterns or multiple emails, split into separate contacts
+    if (namePhoneMatches.length > 1 || (emails.length > 1 && namePhoneMatches.length >= 1)) {
+      console.log(`[parse-contact-pdf] Block ${i + 1} has multiple contacts - splitting...`);
+      
+      // Split block by name+phone patterns - each pattern starts a new contact
+      const lines = block.split("\n");
+      let currentContactLines: string[] = [];
+      const extractedContacts: DocumentContact[] = [];
+      
+      for (let j = 0; j < lines.length; j++) {
+        const line = lines[j];
+        // Check if line has name+phone pattern (use non-global match for single line)
+        // Handle space before colon: "Raynard Howard :+1(202)436-6981"
+        const lineNamePhonePattern = /^[A-Z][a-z]+(?:[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)*\s*:?\s*\+?1?\s*\(?\d{3}\)?\s*-?\s*\d{3}\s*-?\s*\d{4}/;
+        const hasNamePhone = lineNamePhonePattern.test(line);
+        const hasEmail = EMAIL_REGEX.test(line);
+        
+        if (hasNamePhone) {
+          // New contact starting - save previous if exists
+          if (currentContactLines.length > 0) {
+            const contact = parseContactBlock(currentContactLines.join("\n"));
+            if (contact) {
+              console.log(`[parse-contact-pdf] Extracted contact from block ${i + 1}: ${contact.name}`);
+              extractedContacts.push(contact);
+            }
+          }
+          currentContactLines = [line];
+        } else if (hasEmail && currentContactLines.length > 0) {
+          // Email line - add to current contact
+          currentContactLines.push(line);
+          // Check if next line starts a new contact, if so finish this one
+          const nextLine = j + 1 < lines.length ? lines[j + 1] : '';
+          if (lineNamePhonePattern.test(nextLine)) {
+            const contact = parseContactBlock(currentContactLines.join("\n"));
+            if (contact) {
+              console.log(`[parse-contact-pdf] Extracted contact from block ${i + 1}: ${contact.name}`);
+              extractedContacts.push(contact);
+            }
+            currentContactLines = [];
+          }
+        } else if (currentContactLines.length > 0) {
+          // Continue current contact (limit to 8 lines per contact for multi-line entries)
+          if (currentContactLines.length < 8) {
+            currentContactLines.push(line);
+          } else {
+            // Contact block getting long, finish it
+            const contact = parseContactBlock(currentContactLines.join("\n"));
+            if (contact) {
+              console.log(`[parse-contact-pdf] Extracted contact from block ${i + 1}: ${contact.name}`);
+              extractedContacts.push(contact);
+            }
+            currentContactLines = [];
+          }
+        }
+      }
+      
+      // Handle last contact
+      if (currentContactLines.length > 0) {
+        const contact = parseContactBlock(currentContactLines.join("\n"));
+        if (contact) {
+          console.log(`[parse-contact-pdf] Extracted contact from block ${i + 1}: ${contact.name}`);
+          extractedContacts.push(contact);
+        }
+      }
+      
+      contacts.push(...extractedContacts);
+      console.log(`[parse-contact-pdf] Extracted ${extractedContacts.length} contacts from block ${i + 1}`);
     } else {
-      console.warn(`[parse-contact-pdf] Block ${i + 1} did not yield a contact`);
+      // Single contact in block
+      const contact = parseContactBlock(block);
+      if (contact) {
+        console.log(`[parse-contact-pdf] Extracted contact: ${contact.name} (${contact.email || contact.phone || 'no contact info'})`);
+        contacts.push(contact);
+      } else {
+        console.warn(`[parse-contact-pdf] Block ${i + 1} did not yield a contact`);
+      }
     }
   }
   
@@ -678,8 +894,19 @@ serve(async (req) => {
       pdfBase64Length: pdfBase64?.length || 0,
     });
     
-    // If base64 is provided, extract text from it (for PDFs)
-    if (!extractedText && pdfBase64 && mimeType === 'application/pdf') {
+    // If text is already extracted (client-side), use it directly
+    if (extractedText && typeof extractedText === 'string' && extractedText.trim().length > 0) {
+      console.log('[parse-contact-pdf] Using pre-extracted text from client (pdfjs-dist)');
+      console.log('[parse-contact-pdf] Extracted text length:', extractedText.length);
+      console.log('[parse-contact-pdf] Text preview (first 500 chars):', extractedText.substring(0, 500));
+      
+      // Count potential contacts
+      const emailCount = (extractedText.match(EMAIL_REGEX) || []).length;
+      const phoneCount = (extractedText.match(PHONE_REGEX) || []).length;
+      console.log(`[parse-contact-pdf] Found ${emailCount} emails and ${phoneCount} phones in extracted text`);
+    }
+    // If base64 is provided and no text extracted yet, extract text from it (for PDFs)
+    else if (!extractedText && pdfBase64 && mimeType === 'application/pdf') {
       try {
         console.log('[parse-contact-pdf] Attempting to extract text from PDF base64...');
         
@@ -725,12 +952,19 @@ serve(async (req) => {
         for (const match of parenMatches) {
           const text = match.slice(1, -1); // Remove parentheses
           // Decode PDF string escapes
-          const decodedText = text
+          let decodedText = text
             .replace(/\\n/g, '\n')  // Preserve newlines for structure
             .replace(/\\r/g, '\n')
             .replace(/\\t/g, '\t')
             .replace(/\\([0-7]{1,3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)))
             .replace(/\\/g, '');
+          
+          // Filter out PDF operators and formatting that gets mixed into text
+          // Skip text that's clearly PDF formatting
+          if (/^\/[A-Za-z]+\s+\d+\s+Tf/.test(decodedText)) continue; // Font commands
+          if (/^\d+\s+\d+\s+T[fdm\*]/i.test(decodedText)) continue; // Text positioning
+          if (/^[BTET]\s*$/.test(decodedText)) continue; // Text block operators
+          if (/^\d+\s+\d+\s+R$/.test(decodedText)) continue; // Object references
           
           // Filter out metadata and very short/garbled text
           if (decodedText.length > 1 && 
@@ -857,8 +1091,23 @@ serve(async (req) => {
       console.warn('[parse-contact-pdf] No contacts found. Text sample:', extractedText.substring(0, 1000));
     }
 
+    // Include debug information in response (extracted text) to help diagnose parsing issues
+    const includeDebug = body.debug === true;
+    const response: any = { success: true, contacts };
+    
+    if (includeDebug || contacts.length === 0) {
+      // Always include debug info if no contacts found, or if explicitly requested
+      response.debug = {
+        extractedTextLength: extractedText.length,
+        extractedTextPreview: extractedText.substring(0, 2000), // First 2000 chars
+        extractedTextFull: extractedText, // Full text for debugging
+        emailCount: (extractedText.match(EMAIL_REGEX) || []).length,
+        phoneCount: (extractedText.match(PHONE_REGEX) || []).length,
+      };
+    }
+
     return new Response(
-      JSON.stringify({ success: true, contacts }),
+      JSON.stringify(response),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
