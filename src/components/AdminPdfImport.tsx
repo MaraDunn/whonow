@@ -219,6 +219,62 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
             
             console.log(`[AdminPdfImport] Page ${pageNum} sorted items:`, sortedItems.length);
             
+            // Detect column boundaries for multi-column layouts
+            // Group items by Y position first to analyze column structure
+            const itemsByLine = new Map<number, Array<{text: string; x: number; width?: number}>>();
+            for (const item of sortedItems) {
+              const yTolerance = 3;
+              let lineY: number | null = null;
+              
+              // Find existing line within tolerance
+              for (const y of itemsByLine.keys()) {
+                if (Math.abs(item.y - y) <= yTolerance) {
+                  lineY = y;
+                  break;
+                }
+              }
+              
+              if (lineY === null) {
+                lineY = item.y;
+              }
+              
+              if (!itemsByLine.has(lineY)) {
+                itemsByLine.set(lineY, []);
+              }
+              itemsByLine.get(lineY)!.push({text: item.text, x: item.x, width: item.width});
+            }
+            
+            // Analyze column boundaries across multiple lines
+            const columnBoundaries: number[] = [];
+            const sampleLines = Array.from(itemsByLine.values()).slice(0, 20);
+            const columnStarts = new Map<number, number>();
+            
+            for (const lineItems of sampleLines) {
+              lineItems.sort((a, b) => a.x - b.x);
+              for (let i = 0; i < lineItems.length; i++) {
+                const item = lineItems[i];
+                const prevItem = lineItems[i - 1];
+                
+                if (prevItem) {
+                  const gap = item.x - (prevItem.x + (prevItem.width || prevItem.text.length * 5));
+                  // Large gaps indicate column boundaries (more than 2 average character widths)
+                  if (gap > 20) {
+                    const boundary = Math.round((prevItem.x + (prevItem.width || prevItem.text.length * 5) + item.x) / 2);
+                    columnStarts.set(boundary, (columnStarts.get(boundary) || 0) + 1);
+                  }
+                }
+              }
+            }
+            
+            // Find boundaries that appear in at least 30% of lines
+            const threshold = Math.ceil(sampleLines.length * 0.3);
+            for (const [boundary, count] of columnStarts.entries()) {
+              if (count >= threshold) {
+                columnBoundaries.push(boundary);
+              }
+            }
+            columnBoundaries.sort((a, b) => a - b);
+            
             // Build text lines, grouping items on the same Y level
             // Handle case where each character is extracted separately
             const lines: string[] = [];
@@ -234,11 +290,27 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
                   // Sort current line by X position
                   currentLine.sort((a, b) => a.x - b.x);
                   
-                  // Join items intelligently - only add space if items are far apart
+                  // For multi-column layouts, preserve column separation
                   let lineText = '';
+                  let lastColumnEnd = 0;
+                  
                   for (let i = 0; i < currentLine.length; i++) {
                     const currentItem = currentLine[i];
                     const nextItem = currentLine[i + 1];
+                    
+                    // Check if we've crossed a column boundary
+                    if (columnBoundaries.length > 0) {
+                      const itemEnd = currentItem.x + (currentItem.width || currentItem.text.length * 5);
+                      const crossedBoundary = columnBoundaries.some(boundary => 
+                        currentItem.x > boundary && lastColumnEnd < boundary
+                      );
+                      
+                      if (crossedBoundary && lineText.length > 0) {
+                        // Add extra space for column separation (2+ spaces for table detection)
+                        lineText += '  ';
+                      }
+                      lastColumnEnd = itemEnd;
+                    }
                     
                     lineText += currentItem.text;
                     
@@ -247,7 +319,12 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
                       const gap = nextItem.x - (currentItem.x + (currentItem.width || currentItem.text.length * 5));
                       // If gap is more than ~3 characters wide (rough estimate), add space
                       if (gap > 10) {
-                        lineText += ' ';
+                        // For large gaps, use multiple spaces if it might be a column boundary
+                        if (gap > 20 && columnBoundaries.length > 0) {
+                          lineText += '  '; // 2 spaces for column separation
+                        } else {
+                          lineText += ' ';
+                        }
                       } else {
                         // Items are close together, but check if we need space for word boundaries
                         // Add space if: lowercase letter followed by uppercase (word boundary)
@@ -285,18 +362,39 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
             if (currentLine.length > 0) {
               currentLine.sort((a, b) => a.x - b.x);
               
-              // Join items intelligently
+              // Join items intelligently with column awareness
               let lineText = '';
+              let lastColumnEnd = 0;
+              
               for (let i = 0; i < currentLine.length; i++) {
                 const currentItem = currentLine[i];
                 const nextItem = currentLine[i + 1];
+                
+                // Check if we've crossed a column boundary
+                if (columnBoundaries.length > 0) {
+                  const itemEnd = currentItem.x + (currentItem.width || currentItem.text.length * 5);
+                  const crossedBoundary = columnBoundaries.some(boundary => 
+                    currentItem.x > boundary && lastColumnEnd < boundary
+                  );
+                  
+                  if (crossedBoundary && lineText.length > 0) {
+                    // Add extra space for column separation (2+ spaces for table detection)
+                    lineText += '  ';
+                  }
+                  lastColumnEnd = itemEnd;
+                }
                 
                 lineText += currentItem.text;
                 
                 if (nextItem) {
                   const gap = nextItem.x - (currentItem.x + (currentItem.width || currentItem.text.length * 5));
                   if (gap > 10) {
-                    lineText += ' ';
+                    // For large gaps, use multiple spaces if it might be a column boundary
+                    if (gap > 20 && columnBoundaries.length > 0) {
+                      lineText += '  '; // 2 spaces for column separation
+                    } else {
+                      lineText += ' ';
+                    }
                   } else {
                     // Items are close together, but check if we need space for word boundaries
                     const currentEnd = currentItem.text[currentItem.text.length - 1];

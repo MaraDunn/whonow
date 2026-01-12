@@ -87,6 +87,27 @@ interface DocumentContact {
   role: string | null;
 }
 
+// Format detection types
+type DocumentFormat = 'vcard' | 'table' | 'directory' | 'freeform' | 'unknown';
+
+interface FormatInfo {
+  format: DocumentFormat;
+  confidence: number;
+  metadata?: any;
+}
+
+interface ColumnBoundary {
+  start: number;
+  end: number;
+  confidence: number;
+}
+
+interface ColumnType {
+  index: number;
+  type: 'name' | 'email' | 'phone' | 'company' | 'role' | 'unknown';
+  confidence: number;
+}
+
 function cleanDocumentText(text: string): string {
   let cleaned = text
     .replace(/\r\n/g, "\n")
@@ -118,6 +139,100 @@ function cleanDocumentText(text: string): string {
     .trim();
   
   return cleaned;
+}
+
+/**
+ * Detect column boundaries in whitespace-delimited text
+ */
+function detectColumnBoundaries(lines: string[]): ColumnBoundary[] {
+  if (lines.length < 2) return [];
+  
+  // Analyze first 20 lines to find column boundaries
+  const sampleLines = lines.slice(0, Math.min(20, lines.length));
+  
+  // Track positions where columns start (non-space after space)
+  const columnStarts = new Map<number, number>();
+  
+  for (const line of sampleLines) {
+    let inSpace = true;
+    let currentPos = 0;
+    
+    for (let i = 0; i < line.length; i++) {
+      const isSpace = /\s/.test(line[i]);
+      
+      if (inSpace && !isSpace) {
+        // Column start detected
+        columnStarts.set(currentPos, (columnStarts.get(currentPos) || 0) + 1);
+        inSpace = false;
+      } else if (!inSpace && isSpace) {
+        inSpace = true;
+        currentPos = i;
+      }
+    }
+  }
+  
+  // Find positions that appear in at least 30% of lines
+  const threshold = Math.ceil(sampleLines.length * 0.3);
+  const boundaries: ColumnBoundary[] = [];
+  
+  for (const [pos, count] of columnStarts.entries()) {
+    if (count >= threshold) {
+      boundaries.push({ start: pos, end: pos + 10, confidence: count / sampleLines.length });
+    }
+  }
+  
+  // Sort by position
+  boundaries.sort((a, b) => a.start - b.start);
+  
+  return boundaries;
+}
+
+/**
+ * Detect whitespace-delimited table format
+ */
+function detectWhitespaceDelimited(text: string): { isTable: boolean; columns: number; boundaries?: ColumnBoundary[] } | null {
+  const lines = text.split("\n").filter(l => l.trim());
+  if (lines.length < 3) return null;
+  
+  // Check for consistent multi-space separators (2+ spaces)
+  let consistentRows = 0;
+  let columnCount = 0;
+  const spacePattern = /\s{2,}/; // 2 or more spaces
+  
+  for (let i = 0; i < Math.min(15, lines.length); i++) {
+    const line = lines[i];
+    if (spacePattern.test(line)) {
+      const parts = line.split(/\s{2,}/).filter(p => p.trim().length > 0);
+      if (parts.length >= 2) {
+        if (columnCount === 0) {
+          columnCount = parts.length;
+        }
+        if (parts.length === columnCount || Math.abs(parts.length - columnCount) <= 1) {
+          consistentRows++;
+        }
+      }
+    }
+  }
+  
+  // If at least 5 rows have consistent column structure, it's likely a table
+  if (consistentRows >= 5 && columnCount >= 2) {
+    // Check if rows contain contact-like data
+    let contactLikeRows = 0;
+    for (let i = 0; i < Math.min(15, lines.length); i++) {
+      const line = lines[i];
+      if (EMAIL_REGEX.test(line) || PHONE_REGEX.test(line) || 
+          /^[A-Z][a-z]+\s+[A-Z][a-z]+/.test(line)) {
+        contactLikeRows++;
+      }
+    }
+    
+    if (contactLikeRows >= 3) {
+      const boundaries = detectColumnBoundaries(lines);
+      return { isTable: true, columns: columnCount, boundaries };
+    }
+  }
+  
+  return null;
 }
 
 function detectTableFormat(text: string): { isTable: boolean; delimiter: string; headers: string[] } {
@@ -181,7 +296,98 @@ function detectTableFormat(text: string): { isTable: boolean; delimiter: string;
     }
   }
   
+  // Check for whitespace-delimited tables
+  const whitespaceTable = detectWhitespaceDelimited(text);
+  if (whitespaceTable?.isTable) {
+    const headers = Array.from({ length: whitespaceTable.columns }, (_, i) => {
+      const headerNames = ["Name", "Email", "Phone", "Company", "Role", "Notes"];
+      return headerNames[i] || `Column ${i + 1}`;
+    });
+    return { isTable: true, delimiter: "whitespace", headers };
+  }
+  
   return { isTable: false, delimiter: "", headers: [] };
+}
+
+/**
+ * Infer column types from sample data
+ */
+function inferColumnTypes(columns: string[], sampleRows: string[][]): ColumnType[] {
+  const columnTypes: ColumnType[] = [];
+  
+  for (let colIdx = 0; colIdx < columns.length; colIdx++) {
+    const samples = sampleRows.map(row => row[colIdx]?.trim() || '').filter(s => s.length > 0);
+    if (samples.length === 0) {
+      columnTypes.push({ index: colIdx, type: 'unknown', confidence: 0 });
+      continue;
+    }
+    
+    // Analyze samples to determine type
+    let emailScore = 0;
+    let phoneScore = 0;
+    let nameScore = 0;
+    let companyScore = 0;
+    let roleScore = 0;
+    
+    for (const sample of samples) {
+      // Email detection
+      if (EMAIL_REGEX.test(sample)) {
+        emailScore += 1;
+      }
+      
+      // Phone detection
+      if (PHONE_REGEX.test(sample) && sample.replace(/\D/g, '').length >= 7) {
+        phoneScore += 1;
+      }
+      
+      // Name detection (capitalized words, 2-4 words, no special chars except spaces/hyphens)
+      if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/.test(sample) && 
+          !EMAIL_REGEX.test(sample) && 
+          !PHONE_REGEX.test(sample) &&
+          sample.length > 3 && sample.length < 50) {
+        nameScore += 1;
+      }
+      
+      // Company detection (often has Inc/LLC/etc, or appears after name)
+      if (/\b(inc\.?|llc\.?|ltd\.?|corp\.?|corporation|company|co\.?|group|technologies|tech|solutions|systems)\b/i.test(sample)) {
+        companyScore += 1;
+      }
+      
+      // Role detection (common titles)
+      const roleKeywords = /\b(ceo|cto|cfo|president|director|manager|engineer|designer|developer|analyst|coordinator|specialist|consultant|advisor|lead|officer|executive|vp|v\.?p\.?)\b/i;
+      if (roleKeywords.test(sample)) {
+        roleScore += 1;
+      }
+    }
+    
+    // Normalize scores
+    const total = samples.length;
+    emailScore /= total;
+    phoneScore /= total;
+    nameScore /= total;
+    companyScore /= total;
+    roleScore /= total;
+    
+    // Determine type with highest score
+    const scores = [
+      { type: 'email' as const, score: emailScore },
+      { type: 'phone' as const, score: phoneScore },
+      { type: 'name' as const, score: nameScore },
+      { type: 'company' as const, score: companyScore },
+      { type: 'role' as const, score: roleScore },
+    ];
+    
+    scores.sort((a, b) => b.score - a.score);
+    const bestMatch = scores[0];
+    
+    columnTypes.push({
+      index: colIdx,
+      type: bestMatch.score > 0.3 ? bestMatch.type : 'unknown',
+      confidence: bestMatch.score
+    });
+  }
+  
+  return columnTypes;
 }
 
 function parseTableFormat(text: string, delimiter: string, headers: string[]): DocumentContact[] {
@@ -189,22 +395,68 @@ function parseTableFormat(text: string, delimiter: string, headers: string[]): D
   const contacts: DocumentContact[] = [];
   
   const lowerHeaders = headers.map(h => h.toLowerCase());
-  const nameIdx = lowerHeaders.findIndex(h => h.includes("name") || h.includes("full"));
+  let nameIdx = lowerHeaders.findIndex(h => h.includes("name") || h.includes("full"));
   const firstNameIdx = lowerHeaders.findIndex(h => h.includes("first"));
   const lastNameIdx = lowerHeaders.findIndex(h => h.includes("last"));
-  const emailIdx = lowerHeaders.findIndex(h => h.includes("email") || h.includes("e-mail"));
-  const phoneIdx = lowerHeaders.findIndex(h => h.includes("phone") || h.includes("tel") || h.includes("mobile") || h.includes("cell"));
-  const companyIdx = lowerHeaders.findIndex(h => h.includes("company") || h.includes("org") || h.includes("organization"));
-  const roleIdx = lowerHeaders.findIndex(h => h.includes("title") || h.includes("role") || h.includes("position") || h.includes("job"));
+  let emailIdx = lowerHeaders.findIndex(h => h.includes("email") || h.includes("e-mail"));
+  let phoneIdx = lowerHeaders.findIndex(h => h.includes("phone") || h.includes("tel") || h.includes("mobile") || h.includes("cell"));
+  let companyIdx = lowerHeaders.findIndex(h => h.includes("company") || h.includes("org") || h.includes("organization"));
+  let roleIdx = lowerHeaders.findIndex(h => h.includes("title") || h.includes("role") || h.includes("position") || h.includes("job"));
   
   // Determine start row (skip header if it exists)
   const startRow = lowerHeaders.some(h => CONTACT_HEADERS.some(ch => h.includes(ch))) ? 1 : 0;
   
+  // If headers don't provide clear mapping, try to infer from data
+  if ((nameIdx < 0 || emailIdx < 0) && startRow < lines.length) {
+    const sampleRows: string[][] = [];
+    for (let i = startRow; i < Math.min(startRow + 10, lines.length); i++) {
+      const parts = delimiter === 'whitespace' 
+        ? lines[i].split(/\s{2,}/).map(p => p.trim()).filter(p => p.length > 0)
+        : lines[i].split(delimiter).map(p => p.trim()).filter(p => p.length > 0);
+      if (parts.length >= 2) {
+        sampleRows.push(parts);
+      }
+    }
+    
+    if (sampleRows.length > 0) {
+      const inferredTypes = inferColumnTypes(headers, sampleRows);
+      
+      // Use inferred types to update indices
+      for (const colType of inferredTypes) {
+        if (colType.type === 'name' && nameIdx < 0 && colType.confidence > 0.5) {
+          nameIdx = colType.index;
+        }
+        if (colType.type === 'email' && emailIdx < 0 && colType.confidence > 0.5) {
+          emailIdx = colType.index;
+        }
+        if (colType.type === 'phone' && phoneIdx < 0 && colType.confidence > 0.5) {
+          phoneIdx = colType.index;
+        }
+        if (colType.type === 'company' && companyIdx < 0 && colType.confidence > 0.5) {
+          companyIdx = colType.index;
+        }
+        if (colType.type === 'role' && roleIdx < 0 && colType.confidence > 0.5) {
+          roleIdx = colType.index;
+        }
+      }
+    }
+  }
+  
   console.log(`[parse-contact-pdf] Parsing table: ${lines.length} lines, start row: ${startRow}`);
   console.log(`[parse-contact-pdf] Column indices - name: ${nameIdx}, email: ${emailIdx}, phone: ${phoneIdx}, company: ${companyIdx}, role: ${roleIdx}`);
   
+  // Multi-pass parsing: try different strategies
+  const pass1Contacts: DocumentContact[] = [];
+  const pass2Contacts: DocumentContact[] = [];
+  
+  // Pass 1: Strict delimiter-based parsing
   for (let i = startRow; i < lines.length; i++) {
-    const parts = lines[i].split(delimiter).map(p => p.trim()).filter(p => p.length > 0);
+    let parts: string[];
+    if (delimiter === 'whitespace') {
+      parts = lines[i].split(/\s{2,}/).map(p => p.trim()).filter(p => p.length > 0);
+    } else {
+      parts = lines[i].split(delimiter).map(p => p.trim()).filter(p => p.length > 0);
+    }
     if (parts.length < 2) continue;
     
     // Extract data based on column indices
@@ -285,7 +537,7 @@ function parseTableFormat(text: string, delimiter: string, headers: string[]): D
       }
     }
     
-    contacts.push({
+    pass1Contacts.push({
       name: formatName(name),
       email,
       phone: phone ? formatPhoneNumber(phone) : null,
@@ -294,8 +546,47 @@ function parseTableFormat(text: string, delimiter: string, headers: string[]): D
     });
   }
   
-  console.log(`[parse-contact-pdf] Extracted ${contacts.length} contacts from table`);
-  return contacts;
+  console.log(`[parse-contact-pdf] Pass 1 (strict delimiter): Extracted ${pass1Contacts.length} contacts`);
+  
+  // Pass 2: Pattern-based extraction per row (for rows that didn't parse well)
+  if (pass1Contacts.length < lines.length - startRow) {
+    for (let i = startRow; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Skip if already extracted in pass 1 (simple check by email/phone)
+      const lineEmail = line.match(EMAIL_REGEX)?.[0];
+      const linePhone = line.match(PHONE_REGEX)?.[0];
+      const alreadyExtracted = pass1Contacts.some(c => 
+        (c.email && lineEmail && c.email.toLowerCase() === lineEmail.toLowerCase()) ||
+        (c.phone && linePhone && c.phone.replace(/\D/g, '') === linePhone.replace(/\D/g, ''))
+      );
+      
+      if (alreadyExtracted) continue;
+      
+      // Try to extract contact from line using patterns
+      const contact = extractWithContext(line, '');
+      if (contact && (contact.email || contact.phone || contact.name)) {
+        pass2Contacts.push(contact);
+      }
+    }
+    console.log(`[parse-contact-pdf] Pass 2 (pattern-based): Extracted ${pass2Contacts.length} additional contacts`);
+  }
+  
+  // Combine and deduplicate (prefer pass 1 contacts)
+  const allContacts = [...pass1Contacts, ...pass2Contacts];
+  const seen = new Set<string>();
+  const uniqueContacts: DocumentContact[] = [];
+  
+  for (const contact of allContacts) {
+    const key = contact.email?.toLowerCase() || contact.phone?.replace(/\D/g, '') || contact.name.toLowerCase();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      uniqueContacts.push(contact);
+    }
+  }
+  
+  console.log(`[parse-contact-pdf] Total unique contacts extracted from table: ${uniqueContacts.length}`);
+  return uniqueContacts;
 }
 
 function parseVCards(text: string): DocumentContact[] {
@@ -329,44 +620,148 @@ function parseVCards(text: string): DocumentContact[] {
   return contacts;
 }
 
-function detectContactBlocks(text: string): string[] {
-  const blocks: string[] = [];
+/**
+ * Extract contact with context from surrounding text
+ */
+function extractWithContext(text: string, anchor: string): DocumentContact | null {
   const lines = text.split("\n").filter(l => l.trim());
+  if (lines.length === 0) return null;
   
-  // Pattern to detect name+phone on same line
-  // Handles: "Raynard Howard :+1(202)436-6981", "David Clayton :+1(202)600-5050"
-  // Also handles when it's in the middle of a line: "text before David Clayton :+1(202)600-5050"
-  // Pattern: Capitalized name (one or two words) + optional colon + phone number
+  // Find anchor (email or phone) in text
+  const emailMatch = text.match(EMAIL_REGEX);
+  const phoneMatch = text.match(PHONE_REGEX);
+  
+  if (!emailMatch && !phoneMatch) return null;
+  
+  const email = emailMatch?.[0] || null;
+  const phone = phoneMatch?.[0] || null;
+  
+  // Look for name in lines before email/phone
+  let name = "";
+  const emailLineIdx = lines.findIndex(l => EMAIL_REGEX.test(l));
+  const phoneLineIdx = lines.findIndex(l => PHONE_REGEX.test(l));
+  const contactInfoLineIdx = Math.min(
+    emailLineIdx >= 0 ? emailLineIdx : Infinity,
+    phoneLineIdx >= 0 ? phoneLineIdx : Infinity
+  );
+  
+  // Check 2-3 lines before contact info for name
+  for (let i = Math.max(0, contactInfoLineIdx - 3); i < contactInfoLineIdx; i++) {
+    const line = lines[i].trim();
+    if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/.test(line) && 
+        !EMAIL_REGEX.test(line) && 
+        !PHONE_REGEX.test(line) &&
+        line.length > 3 && line.length < 50) {
+      name = line;
+      break;
+    }
+  }
+  
+  // Extract company and role from context
+  let company: string | null = null;
+  let role: string | null = null;
+  
+  const fullText = lines.join(" ");
+  const companyMatch = fullText.match(/\b(at|from|@)\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Corporation|Company|Co\.?|Group|Technologies|Tech|Solutions|Systems)?)/i);
+  if (companyMatch && companyMatch[2]) {
+    company = companyMatch[2].trim();
+  }
+  
+  const roleMatch = fullText.match(/\b(ceo|cto|cfo|president|director|manager|engineer|designer|developer|analyst|coordinator|specialist|consultant|advisor|lead|officer|executive|vp|v\.?p\.?)\b/i);
+  if (roleMatch) {
+    role = roleMatch[1];
+  }
+  
+  if (!name && email) {
+    name = email.split("@")[0].replace(/[._-]/g, " ");
+  }
+  
+  if (!name && !email && !phone) return null;
+  
+  return {
+    name: formatName(name || "Unknown Contact"),
+    email,
+    phone: phone ? formatPhoneNumber(phone) : null,
+    company,
+    role,
+  };
+}
+
+/**
+ * Detect contact patterns with multiple strategies
+ */
+function detectContactPatterns(text: string): Array<{ pattern: string; type: string; line: number }> {
+  const lines = text.split("\n");
+  const patterns: Array<{ pattern: string; type: string; line: number }> = [];
+  
+  // Strategy 1: Name + phone on same line
   const namePhonePattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*:?\s*\+?1?\s*\(?\d{3}\)?\s*-?\s*\d{3}\s*-?\s*\d{4}/;
   
-  console.log(`[parse-contact-pdf] detectContactBlocks: checking ${lines.length} lines for name+phone patterns`);
+  // Strategy 2: Name + email on same line
+  const nameEmailPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*[:\s]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
   
-  // Find all lines that contain name+phone patterns
-  const contactStartLines: number[] = [];
+  // Strategy 3: Email/phone clusters with nearby names
+  const emailPhoneClusterPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})|(?:\+\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}/;
+  
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+    const line = lines[i];
+    
     if (namePhonePattern.test(line)) {
-      contactStartLines.push(i);
-      if (contactStartLines.length <= 5) {
-        const match = line.match(namePhonePattern);
-        console.log(`[parse-contact-pdf] Found name+phone pattern on line ${i + 1}: "${match ? match[0] : line.substring(0, 60)}"`);
+      patterns.push({ pattern: line, type: 'name+phone', line: i });
+    } else if (nameEmailPattern.test(line)) {
+      patterns.push({ pattern: line, type: 'name+email', line: i });
+    } else if (emailPhoneClusterPattern.test(line)) {
+      // Check if previous line might be name
+      if (i > 0 && /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/.test(lines[i - 1].trim())) {
+        patterns.push({ pattern: line, type: 'email/phone-with-name', line: i });
       }
     }
   }
   
-  console.log(`[parse-contact-pdf] Total name+phone patterns found: ${contactStartLines.length}`);
+  return patterns;
+}
+
+function detectContactBlocks(text: string): string[] {
+  const blocks: string[] = [];
+  const lines = text.split("\n").filter(l => l.trim());
   
-  // Create blocks starting at each name+phone line
+  // Use multiple pattern strategies
+  const patterns = detectContactPatterns(text);
+  console.log(`[parse-contact-pdf] detectContactBlocks: found ${patterns.length} contact patterns`);
+  
+  // Strategy 1: Name + phone on same line
+  const namePhonePattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*:?\s*\+?1?\s*\(?\d{3}\)?\s*-?\s*\d{3}\s*-?\s*\d{4}/;
+  
+  // Strategy 2: Name + email on same line
+  const nameEmailPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*[:\s]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+  
+  console.log(`[parse-contact-pdf] detectContactBlocks: checking ${lines.length} lines for contact patterns`);
+  
+  // Find all lines that contain contact patterns
+  const contactStartLines: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (namePhonePattern.test(line) || nameEmailPattern.test(line)) {
+      contactStartLines.push(i);
+      if (contactStartLines.length <= 5) {
+        console.log(`[parse-contact-pdf] Found contact pattern on line ${i + 1}: "${line.substring(0, 60)}"`);
+      }
+    }
+  }
+  
+  console.log(`[parse-contact-pdf] Total contact patterns found: ${contactStartLines.length}`);
+  
+  // Create blocks starting at each contact pattern line
   for (let idx = 0; idx < contactStartLines.length; idx++) {
     const startLineIdx = contactStartLines[idx];
     const nextStartLineIdx = contactStartLines[idx + 1];
     
     const currentBlock: string[] = [];
     
-    // Add the line with the name+phone pattern
+    // Add the line with the contact pattern
     currentBlock.push(lines[startLineIdx]);
     
-    // Add following lines up to (but not including) the next name+phone line
+    // Add following lines up to (but not including) the next contact pattern line
     // Or up to 10 lines, whichever comes first
     const endLineIdx = nextStartLineIdx !== undefined 
       ? Math.min(nextStartLineIdx, startLineIdx + 11)
@@ -381,18 +776,17 @@ function detectContactBlocks(text: string): string[] {
     }
   }
   
-  console.log(`[parse-contact-pdf] Line-by-line detection: found ${contactStartLines.length} name+phone patterns, created ${blocks.length} contact blocks`);
+  console.log(`[parse-contact-pdf] Line-by-line detection: found ${contactStartLines.length} contact patterns, created ${blocks.length} contact blocks`);
   
   // If we found blocks, log first few for debugging
   if (blocks.length > 0) {
     console.log(`[parse-contact-pdf] First 3 blocks preview:`, blocks.slice(0, 3).map(b => b.substring(0, 100)));
   } else if (contactStartLines.length > 0) {
-    console.log(`[parse-contact-pdf] WARNING: Found ${contactStartLines.length} name+phone patterns but created 0 blocks!`);
+    console.log(`[parse-contact-pdf] WARNING: Found ${contactStartLines.length} contact patterns but created 0 blocks!`);
   }
   
   // If no blocks found, try pattern-based detection as fallback
   if (blocks.length === 0) {
-    
     // Look for name patterns followed by contact info
     const namePattern = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/;
     
@@ -682,6 +1076,146 @@ function parseContactBlock(block: string): DocumentContact | null {
   };
 }
 
+/**
+ * Detect directory-style format (name on one line, details below)
+ * Handles formats like:
+ *   1. Name – Role Title
+ *   Phone: (xxx) xxx-xxxx
+ *   Email: email@example.com
+ */
+function detectDirectoryFormat(text: string): { isDirectory: boolean; confidence: number } {
+  const lines = text.split("\n").filter(l => l.trim());
+  if (lines.length < 3) return { isDirectory: false, confidence: 0 };
+  
+  let directoryPatterns = 0;
+  let totalPatterns = 0;
+  let labeledFieldPatterns = 0;
+  
+  // Pattern for numbered entries: "1. Name – Role"
+  const numberedPattern = /^\d+\.\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\s*[–—\-]/;
+  
+  // Pattern for labeled fields: "Phone:", "Email:", "Role:"
+  const labeledFieldPattern = /^(Phone|Email|Role|Company|Title):/i;
+  
+  // Look for patterns where a name line is followed by contact info
+  for (let i = 0; i < lines.length - 2; i++) {
+    const line = lines[i].trim();
+    const nextLine = lines[i + 1]?.trim() || '';
+    const lineAfter = lines[i + 2]?.trim() || '';
+    
+    // Check for numbered format: "1. Name – Role"
+    const isNumberedEntry = numberedPattern.test(line);
+    
+    // Check if current line looks like a name (capitalized, 2-4 words, no email/phone)
+    const looksLikeName = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/.test(line) &&
+                         !EMAIL_REGEX.test(line) &&
+                         !PHONE_REGEX.test(line) &&
+                         line.length > 5 &&
+                         line.length < 50;
+    
+    // Check for labeled fields in following lines
+    const hasLabeledFields = labeledFieldPattern.test(nextLine) || labeledFieldPattern.test(lineAfter);
+    
+    if (isNumberedEntry || looksLikeName) {
+      totalPatterns++;
+      
+      // Check if following lines have contact info (labeled fields or direct contact info)
+      const hasContactInfo = hasLabeledFields ||
+                            (EMAIL_REGEX.test(nextLine) || PHONE_REGEX.test(nextLine) ||
+                             EMAIL_REGEX.test(lineAfter) || PHONE_REGEX.test(lineAfter) ||
+                             /@/.test(nextLine) || /@/.test(lineAfter));
+      
+      if (hasContactInfo) {
+        directoryPatterns++;
+        if (hasLabeledFields) {
+          labeledFieldPatterns++;
+        }
+      }
+    }
+  }
+  
+  // Higher confidence if we see labeled fields (Phone:, Email:, etc.)
+  let confidence = totalPatterns > 0 ? directoryPatterns / totalPatterns : 0;
+  if (labeledFieldPatterns > 0) {
+    confidence = Math.min(1.0, confidence + 0.3); // Boost confidence for labeled fields
+  }
+  
+  // Lower threshold when we have numbered entries + labeled fields (very specific pattern)
+  const hasNumberedEntries = lines.some(l => /^\d+\.\s*[A-Z]/.test(l.trim()));
+  const hasLabeledFields = lines.some(l => /^(Phone|Email|Role|Company|Title):/i.test(l.trim()));
+  
+  if (hasNumberedEntries && hasLabeledFields) {
+    // Very specific pattern - lower threshold
+    return { 
+      isDirectory: confidence > 0.2 && directoryPatterns >= 1, 
+      confidence: Math.max(confidence, 0.7) // Boost confidence for this specific pattern
+    };
+  }
+  
+  return { 
+    isDirectory: confidence > 0.3 && directoryPatterns >= 2, 
+    confidence 
+  };
+}
+
+/**
+ * Multi-strategy format detector
+ */
+function detectDocumentFormat(text: string): FormatInfo {
+  const cleanedText = cleanDocumentText(text);
+  if (!cleanedText || cleanedText.length < 5) {
+    return { format: 'unknown', confidence: 0 };
+  }
+  
+  // Strategy 1: vCard format
+  if (/BEGIN:VCARD/i.test(cleanedText)) {
+    return { format: 'vcard', confidence: 0.95, metadata: { detected: true } };
+  }
+  
+  // Strategy 2: Directory format (check BEFORE table to catch numbered + labeled format)
+  // This is more specific than table format, so check it first
+  const directoryInfo = detectDirectoryFormat(cleanedText);
+  if (directoryInfo.isDirectory) {
+    console.log(`[parse-contact-pdf] Directory format detected with confidence: ${directoryInfo.confidence}`);
+    return { 
+      format: 'directory', 
+      confidence: directoryInfo.confidence, 
+      metadata: { confidence: directoryInfo.confidence } 
+    };
+  }
+  
+  // Strategy 3: Table format
+  const tableInfo = detectTableFormat(cleanedText);
+  if (tableInfo.isTable) {
+    return { 
+      format: 'table', 
+      confidence: 0.85, 
+      metadata: { delimiter: tableInfo.delimiter, headers: tableInfo.headers } 
+    };
+  }
+  
+  // Strategy 4: Check for whitespace-delimited table
+  const whitespaceTable = detectWhitespaceDelimited(cleanedText);
+  if (whitespaceTable) {
+    return { 
+      format: 'table', 
+      confidence: 0.75, 
+      metadata: { delimiter: 'whitespace', columns: whitespaceTable.columns } 
+    };
+  }
+  
+  // Strategy 5: Freeform (default)
+  const emailCount = (cleanedText.match(EMAIL_REGEX) || []).length;
+  const phoneCount = (cleanedText.match(PHONE_REGEX) || []).length;
+  const hasContactData = emailCount > 0 || phoneCount > 0;
+  
+  if (hasContactData) {
+    return { format: 'freeform', confidence: 0.6, metadata: { emailCount, phoneCount } };
+  }
+  
+  return { format: 'unknown', confidence: 0 };
+}
+
 function parseDocumentContacts(text: string): DocumentContact[] {
   const cleanedText = cleanDocumentText(text);
   if (!cleanedText || cleanedText.length < 5) {
@@ -692,8 +1226,12 @@ function parseDocumentContacts(text: string): DocumentContact[] {
   console.log(`[parse-contact-pdf] Parsing document, text length: ${cleanedText.length}`);
   console.log(`[parse-contact-pdf] First 500 chars: ${cleanedText.substring(0, 500)}`);
   
+  // Use multi-strategy format detection
+  const formatInfo = detectDocumentFormat(cleanedText);
+  console.log(`[parse-contact-pdf] Detected format: ${formatInfo.format} (confidence: ${formatInfo.confidence})`);
+  
   // Check vCard
-  if (/BEGIN:VCARD/i.test(cleanedText)) {
+  if (formatInfo.format === 'vcard') {
     console.log('[parse-contact-pdf] Detected vCard format');
     return parseVCards(cleanedText);
   }
@@ -734,7 +1272,25 @@ function parseDocumentContacts(text: string): DocumentContact[] {
     return tableContacts;
   }
   
-  // Freeform blocks
+  // Check directory format
+  if (formatInfo.format === 'directory') {
+    console.log('[parse-contact-pdf] Detected directory format');
+    const directoryContacts = parseDirectoryFormat(cleanedText);
+    if (directoryContacts.length > 0) {
+      return directoryContacts;
+    }
+  }
+  
+  // Freeform blocks - use progressive fallback if no format detected
+  if (formatInfo.format === 'freeform' || formatInfo.format === 'unknown') {
+    console.log('[parse-contact-pdf] Using progressive fallback parsing');
+    const fallbackContacts = progressiveFallbackParse(cleanedText);
+    if (fallbackContacts.length > 0) {
+      return fallbackContacts;
+    }
+  }
+  
+  // Fallback to original freeform block detection
   console.log('[parse-contact-pdf] Using freeform block detection');
   const blocks = detectContactBlocks(cleanedText);
   console.log(`[parse-contact-pdf] Found ${blocks.length} contact blocks`);
@@ -745,19 +1301,29 @@ function parseDocumentContacts(text: string): DocumentContact[] {
     const block = blocks[i];
     console.log(`[parse-contact-pdf] Parsing block ${i + 1}/${blocks.length}, length: ${block.length}, preview: ${block.substring(0, 100)}`);
     
-    // Check if block has multiple contacts (multiple name+phone patterns or multiple emails)
+    // Enhanced multi-contact detection
     // Pattern to match: "RaynardHoward:+1(202)436-6981" or "Raynard Howard :+1(202)436-6981"
     const namePhonePattern = /[A-Z][a-z]+(?:[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)*\s*:?\s*\+?1?\s*\(?\d{3}\)?\s*-?\s*\d{3}\s*-?\s*\d{4}/g;
+    const nameEmailPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*[:\s]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
     const namePhoneMatches = block.match(namePhonePattern) || [];
+    const nameEmailMatches = block.match(nameEmailPattern) || [];
     const emails = block.match(EMAIL_REGEX) || [];
+    const phones = block.match(PHONE_REGEX) || [];
     
-    console.log(`[parse-contact-pdf] Block ${i + 1} analysis: ${namePhoneMatches.length} name+phone patterns, ${emails.length} emails`);
+    console.log(`[parse-contact-pdf] Block ${i + 1} analysis: ${namePhoneMatches.length} name+phone patterns, ${nameEmailMatches.length} name+email patterns, ${emails.length} emails, ${phones.length} phones`);
     
-    // If multiple name+phone patterns or multiple emails, split into separate contacts
-    if (namePhoneMatches.length > 1 || (emails.length > 1 && namePhoneMatches.length >= 1)) {
+    // Improved splitting: handle concatenated contacts
+    // Check for patterns like "John Doe john@example.com Jane Smith jane@example.com"
+    const concatenatedPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+    const concatenatedMatches = [...block.matchAll(concatenatedPattern)];
+    
+    // If multiple name+phone patterns, multiple name+email patterns, or concatenated contacts, split
+    if (namePhoneMatches.length > 1 || nameEmailMatches.length > 1 || 
+        (emails.length > 1 && phones.length > 1) ||
+        concatenatedMatches.length > 1) {
       console.log(`[parse-contact-pdf] Block ${i + 1} has multiple contacts - splitting...`);
       
-      // Split block by name+phone patterns - each pattern starts a new contact
+      // Split block by contact patterns - each pattern starts a new contact
       const lines = block.split("\n");
       let currentContactLines: string[] = [];
       const extractedContacts: DocumentContact[] = [];
@@ -765,12 +1331,28 @@ function parseDocumentContacts(text: string): DocumentContact[] {
       for (let j = 0; j < lines.length; j++) {
         const line = lines[j];
         // Check if line has name+phone pattern (use non-global match for single line)
-        // Handle space before colon: "Raynard Howard :+1(202)436-6981"
         const lineNamePhonePattern = /^[A-Z][a-z]+(?:[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)*\s*:?\s*\+?1?\s*\(?\d{3}\)?\s*-?\s*\d{3}\s*-?\s*\d{4}/;
+        const lineNameEmailPattern = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
         const hasNamePhone = lineNamePhonePattern.test(line);
+        const hasNameEmail = lineNameEmailPattern.test(line);
         const hasEmail = EMAIL_REGEX.test(line);
+        const hasPhone = PHONE_REGEX.test(line);
         
-        if (hasNamePhone) {
+        // Check for concatenated contacts on same line
+        const lineConcatenated = line.match(concatenatedPattern);
+        if (lineConcatenated && lineConcatenated.length > 1) {
+          // Split concatenated contacts on this line
+          for (const match of lineConcatenated) {
+            const contact = extractWithContext(match, '');
+            if (contact) {
+              extractedContacts.push(contact);
+            }
+          }
+          currentContactLines = [];
+          continue;
+        }
+        
+        if (hasNamePhone || hasNameEmail) {
           // New contact starting - save previous if exists
           if (currentContactLines.length > 0) {
             const contact = parseContactBlock(currentContactLines.join("\n"));
@@ -780,12 +1362,12 @@ function parseDocumentContacts(text: string): DocumentContact[] {
             }
           }
           currentContactLines = [line];
-        } else if (hasEmail && currentContactLines.length > 0) {
-          // Email line - add to current contact
+        } else if ((hasEmail || hasPhone) && currentContactLines.length > 0) {
+          // Email/phone line - add to current contact
           currentContactLines.push(line);
           // Check if next line starts a new contact, if so finish this one
           const nextLine = j + 1 < lines.length ? lines[j + 1] : '';
-          if (lineNamePhonePattern.test(nextLine)) {
+          if (lineNamePhonePattern.test(nextLine) || lineNameEmailPattern.test(nextLine)) {
             const contact = parseContactBlock(currentContactLines.join("\n"));
             if (contact) {
               console.log(`[parse-contact-pdf] Extracted contact from block ${i + 1}: ${contact.name}`);
@@ -832,8 +1414,282 @@ function parseDocumentContacts(text: string): DocumentContact[] {
     }
   }
   
-  console.log(`[parse-contact-pdf] Total contacts extracted: ${contacts.length}`);
+  // Final deduplication
+  const seen = new Set<string>();
+  const uniqueContacts = contacts.filter(c => {
+    const key = c.email?.toLowerCase() || c.phone?.replace(/\D/g, '') || c.name.toLowerCase();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      return true;
+    }
+    return false;
+  });
+  
+  console.log(`[parse-contact-pdf] Total contacts extracted: ${uniqueContacts.length} (${contacts.length} before deduplication)`);
+  return uniqueContacts;
+}
+
+/**
+ * Parse directory format (name on one line, details below)
+ * Handles formats like:
+ *   1. Name – Role Title
+ *   Phone: (xxx) xxx-xxxx
+ *   Email: email@example.com
+ *   Role: description
+ */
+function parseDirectoryFormat(text: string): DocumentContact[] {
+  const lines = text.split("\n").filter(l => l.trim());
+  const contacts: DocumentContact[] = [];
+  
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    
+    // Pattern 1: Numbered entry with name and role: "1. Morgan Anderson – Operations Director"
+    // Pattern 2: Simple name line: "Morgan Anderson"
+    const numberedPattern = /^\d+\.\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*[–—\-]\s*(.+)$/;
+    const simpleNamePattern = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/;
+    
+    let name = "";
+    let role = "";
+    let contactStartIdx = i;
+    
+    const numberedMatch = line.match(numberedPattern);
+    if (numberedMatch) {
+      // Numbered format: "1. Name – Role"
+      name = numberedMatch[1].trim();
+      role = numberedMatch[2].trim();
+      contactStartIdx = i;
+    } else if (simpleNamePattern.test(line) && 
+               !EMAIL_REGEX.test(line) && 
+               !PHONE_REGEX.test(line) &&
+               line.length > 5 && line.length < 50) {
+      // Simple name format
+      name = line;
+      contactStartIdx = i;
+    } else {
+      i++;
+      continue;
+    }
+    
+    // Collect labeled fields from following lines
+    let phone: string | null = null;
+    let email: string | null = null;
+    let company: string | null = null;
+    let roleDescription: string | null = null;
+    
+    // Look ahead up to 6 lines for labeled fields
+    for (let j = i + 1; j < Math.min(i + 7, lines.length); j++) {
+      const nextLine = lines[j].trim();
+      
+      // Check if we've hit the next contact (starts with number or new name pattern)
+      if (numberedPattern.test(nextLine) || 
+          (simpleNamePattern.test(nextLine) && !EMAIL_REGEX.test(nextLine) && !PHONE_REGEX.test(nextLine))) {
+        break;
+      }
+      
+      // Parse labeled fields
+      const phoneMatch = nextLine.match(/^Phone:?\s*(.+)$/i);
+      if (phoneMatch) {
+        phone = phoneMatch[1].trim();
+        // Extract phone number from the value
+        const phoneNum = phone.match(PHONE_REGEX);
+        if (phoneNum && phoneNum[0].replace(/\D/g, '').length >= 7) {
+          phone = phoneNum[0];
+        }
+        continue;
+      }
+      
+      const emailMatch = nextLine.match(/^Email:?\s*(.+)$/i);
+      if (emailMatch) {
+        const emailText = emailMatch[1].trim();
+        // STRICT: Extract ONLY the email address using regex, ignore everything else
+        const emailAddr = emailText.match(EMAIL_REGEX);
+        if (emailAddr) {
+          email = emailAddr[0]; // Only the email address, nothing before or after
+          console.log(`[parse-contact-pdf] Extracted email from line "${nextLine}": "${email}"`);
+        } else {
+          console.warn(`[parse-contact-pdf] Email label found but no valid email in: "${nextLine}"`);
+        }
+        continue;
+      }
+      
+      const roleMatch = nextLine.match(/^Role:?\s*(.+)$/i);
+      if (roleMatch) {
+        roleDescription = roleMatch[1].trim();
+        // If we don't have a role from the name line, use this
+        if (!role) {
+          role = roleDescription;
+        }
+        continue;
+      }
+      
+      // Check for company in role field (extract "Company" from "Role @ Company" pattern)
+      if (!company && role) {
+        // Pattern: "Ux Designer @ Examplecorp" or "Operations Director @ Company"
+        const companyMatch = role.match(/\s+@\s+([A-Z][A-Za-z0-9\s&]+(?:Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Corporation|Company|Co\.?|Group|Technologies|Tech|Solutions|Systems)?)/i);
+        if (companyMatch && companyMatch[1]) {
+          company = companyMatch[1].trim();
+          // Remove company from role (everything from @ onwards)
+          role = role.replace(/\s+@\s+.*$/i, '').trim();
+          console.log(`[parse-contact-pdf] Extracted company "${company}" from role, remaining role: "${role}"`);
+        }
+      }
+      
+      // Extract company from email domain if not found
+      if (!company && email) {
+        const domain = email.split("@")[1];
+        if (domain && !domain.includes("gmail") && !domain.includes("yahoo") && 
+            !domain.includes("hotmail") && !domain.includes("outlook") &&
+            !domain.includes("icloud") && !domain.includes("protonmail")) {
+          const domainParts = domain.split(".");
+          if (domainParts.length > 0) {
+            const domainName = domainParts[0];
+            company = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+            company = company.replace(/([a-z])([A-Z])/g, '$1 $2');
+          }
+        }
+      }
+    }
+    
+    // Only create contact if we have at least name and one contact method
+    if (name && (email || phone)) {
+      contacts.push({
+        name: formatName(name),
+        email,
+        phone: phone ? formatPhoneNumber(phone) : null,
+        company,
+        role: role || roleDescription || null,
+      });
+      
+      console.log(`[parse-contact-pdf] Parsed directory contact: ${name} (${email || phone || 'no contact info'})`);
+    }
+    
+    // Move to next potential contact (skip the lines we just processed)
+    i = contactStartIdx + 1;
+    
+    // Find the next contact start
+    while (i < lines.length) {
+      const checkLine = lines[i].trim();
+      if (numberedPattern.test(checkLine) || 
+          (simpleNamePattern.test(checkLine) && 
+           !EMAIL_REGEX.test(checkLine) && 
+           !PHONE_REGEX.test(checkLine) &&
+           checkLine.length > 5 && checkLine.length < 50)) {
+        break;
+      }
+      i++;
+    }
+  }
+  
+  console.log(`[parse-contact-pdf] Parsed ${contacts.length} contacts from directory format`);
   return contacts;
+}
+
+/**
+ * Progressive fallback parsing strategy
+ */
+function progressiveFallbackParse(text: string): DocumentContact[] {
+  const formatInfo = detectDocumentFormat(text);
+  console.log(`[parse-contact-pdf] Progressive fallback: Starting with format ${formatInfo.format} (confidence: ${formatInfo.confidence})`);
+  
+  // Strategy 1: Format-specific parser
+  if (formatInfo.format === 'vcard') {
+    const contacts = parseVCards(text);
+    if (contacts.length > 0) {
+      console.log(`[parse-contact-pdf] Strategy 1 (vCard) succeeded: ${contacts.length} contacts`);
+      return contacts;
+    }
+  } else if (formatInfo.format === 'table') {
+    const tableInfo = detectTableFormat(text);
+    if (tableInfo.isTable) {
+      const contacts = parseTableFormat(text, tableInfo.delimiter, tableInfo.headers);
+      if (contacts.length > 0) {
+        console.log(`[parse-contact-pdf] Strategy 1 (Table) succeeded: ${contacts.length} contacts`);
+        return contacts;
+      }
+    }
+  } else if (formatInfo.format === 'directory') {
+    const contacts = parseDirectoryFormat(text);
+    if (contacts.length > 0) {
+      console.log(`[parse-contact-pdf] Strategy 1 (Directory) succeeded: ${contacts.length} contacts`);
+      return contacts;
+    }
+  }
+  
+  // Strategy 2: Pattern-based block detection
+  console.log(`[parse-contact-pdf] Strategy 1 failed, trying Strategy 2 (Pattern-based blocks)...`);
+  const blocks = detectContactBlocks(text);
+  const blockContacts: DocumentContact[] = [];
+  for (const block of blocks) {
+    const contact = parseContactBlock(block);
+    if (contact) {
+      blockContacts.push(contact);
+    }
+  }
+  if (blockContacts.length > 0) {
+    console.log(`[parse-contact-pdf] Strategy 2 (Pattern-based) succeeded: ${blockContacts.length} contacts`);
+    return blockContacts;
+  }
+  
+  // Strategy 3: Line-by-line analysis with context
+  console.log(`[parse-contact-pdf] Strategy 2 failed, trying Strategy 3 (Line-by-line with context)...`);
+  const lineContacts: DocumentContact[] = [];
+  const lines = text.split("\n").filter(l => l.trim());
+  for (let i = 0; i < lines.length; i++) {
+    const contact = extractWithContext(lines[i], '');
+    if (contact && (contact.email || contact.phone)) {
+      lineContacts.push(contact);
+    }
+  }
+  if (lineContacts.length > 0) {
+    console.log(`[parse-contact-pdf] Strategy 3 (Line-by-line) succeeded: ${lineContacts.length} contacts`);
+    return lineContacts;
+  }
+  
+  // Strategy 4: Email/phone extraction with name inference
+  console.log(`[parse-contact-pdf] Strategy 3 failed, trying Strategy 4 (Email/phone extraction)...`);
+  const emails = text.match(EMAIL_REGEX) || [];
+  const phones = text.match(PHONE_REGEX) || [];
+  const emailPhoneContacts: DocumentContact[] = [];
+  
+  for (const email of emails) {
+    const name = email.split("@")[0].replace(/[._-]/g, " ");
+    emailPhoneContacts.push({
+      name: formatName(name),
+      email,
+      phone: null,
+      company: null,
+      role: null,
+    });
+  }
+  
+  for (const phone of phones) {
+    if (phone.replace(/\D/g, '').length >= 7) {
+      // Check if this phone is already associated with an email
+      const alreadyHasPhone = emailPhoneContacts.some(c => 
+        c.phone && c.phone.replace(/\D/g, '') === phone.replace(/\D/g, '')
+      );
+      if (!alreadyHasPhone) {
+        emailPhoneContacts.push({
+          name: `Contact ${phone.substring(0, 4)}`,
+          email: null,
+          phone: formatPhoneNumber(phone),
+          company: null,
+          role: null,
+        });
+      }
+    }
+  }
+  
+  if (emailPhoneContacts.length > 0) {
+    console.log(`[parse-contact-pdf] Strategy 4 (Email/phone extraction) succeeded: ${emailPhoneContacts.length} contacts`);
+    return emailPhoneContacts;
+  }
+  
+  // Strategy 5: Raw extraction (already done in Strategy 4, return empty)
+  console.log(`[parse-contact-pdf] All strategies failed, returning empty result`);
+  return [];
 }
 
 serve(async (req) => {
@@ -1082,6 +1938,7 @@ serve(async (req) => {
     console.log('[parse-contact-pdf] Deterministic parsing document text, length:', extractedText.length);
     console.log('[parse-contact-pdf] Text preview (first 500 chars):', extractedText.substring(0, 500));
 
+    const formatInfo = detectDocumentFormat(extractedText);
     const contacts = parseDocumentContacts(extractedText);
 
     console.log(`[parse-contact-pdf] Extracted ${contacts.length} contacts`);
@@ -1097,12 +1954,38 @@ serve(async (req) => {
     
     if (includeDebug || contacts.length === 0) {
       // Always include debug info if no contacts found, or if explicitly requested
+      const tableInfo = detectTableFormat(extractedText);
+      const directoryInfo = detectDirectoryFormat(extractedText);
+      const whitespaceTable = detectWhitespaceDelimited(extractedText);
+      
       response.debug = {
+        format: {
+          detected: formatInfo.format,
+          confidence: formatInfo.confidence,
+          metadata: formatInfo.metadata,
+        },
+        table: {
+          isTable: tableInfo.isTable,
+          delimiter: tableInfo.delimiter,
+          headers: tableInfo.headers,
+        },
+        directory: {
+          isDirectory: directoryInfo.isDirectory,
+          confidence: directoryInfo.confidence,
+        },
+        whitespaceTable: whitespaceTable ? {
+          isTable: whitespaceTable.isTable,
+          columns: whitespaceTable.columns,
+        } : null,
         extractedTextLength: extractedText.length,
         extractedTextPreview: extractedText.substring(0, 2000), // First 2000 chars
         extractedTextFull: extractedText, // Full text for debugging
         emailCount: (extractedText.match(EMAIL_REGEX) || []).length,
         phoneCount: (extractedText.match(PHONE_REGEX) || []).length,
+        parsingStrategy: formatInfo.format === 'vcard' ? 'vCard parser' :
+                        formatInfo.format === 'table' ? 'Table parser' :
+                        formatInfo.format === 'directory' ? 'Directory parser' :
+                        'Progressive fallback parser',
       };
     }
 
