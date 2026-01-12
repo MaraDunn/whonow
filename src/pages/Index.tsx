@@ -507,6 +507,8 @@ const Index = () => {
         console.log(`Importing ${normalizedContacts.length} contacts in ${batches.length} batches`);
 
         let totalInserted = 0;
+        let totalMerged = 0;
+        let totalSkipped = 0;
         const allErrors: string[] = [];
 
         // Process batches sequentially to avoid overwhelming the browser
@@ -556,7 +558,9 @@ const Index = () => {
             }
 
             totalInserted += data.inserted || 0;
-            console.log(`Batch ${i + 1} completed: ${data.inserted}/${batch.length} contacts inserted`);
+            totalMerged += data.merged || 0;
+            totalSkipped += data.skipped || 0;
+            console.log(`Batch ${i + 1} completed: ${data.inserted || 0} inserted, ${data.merged || 0} merged, ${data.skipped || 0} skipped`);
           } catch (err) {
             const errorMsg = err instanceof Error ? err.message : "Unknown error";
             console.error(`Batch ${i + 1} exception:`, err);
@@ -576,7 +580,23 @@ const Index = () => {
         const errorMsg = allErrors.length > 0 
           ? ` (${allErrors.length} batch error${allErrors.length > 1 ? "s" : ""} occurred)` 
           : "";
-        toast.success(`Imported ${totalInserted} of ${normalizedContacts.length} contacts${errorMsg}`);
+        
+        // Build success message with details
+        let successMsg = `Imported ${totalInserted} of ${normalizedContacts.length} contacts`;
+        const duplicateCount = totalMerged + totalSkipped;
+        if (duplicateCount > 0) {
+          const parts: string[] = [];
+          if (totalMerged > 0) {
+            parts.push(`${totalMerged} merged`);
+          }
+          if (totalSkipped > 0) {
+            parts.push(`${totalSkipped} skipped`);
+          }
+          successMsg += ` (${parts.join(', ')} duplicate${duplicateCount !== 1 ? 's' : ''})`;
+        }
+        successMsg += errorMsg;
+        
+        toast.success(successMsg);
       } catch (error) {
         console.error("Bulk import error:", error);
         const message = error instanceof Error ? error.message : "Failed to import contacts";

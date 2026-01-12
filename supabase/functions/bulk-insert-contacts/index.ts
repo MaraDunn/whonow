@@ -115,6 +115,80 @@ serve(async (req) => {
       );
     }
 
+    // Helper function to normalize email for comparison
+    const normalizeEmail = (email: string | null | undefined): string => {
+      if (!email || typeof email !== 'string') return '';
+      return email.trim().toLowerCase();
+    };
+
+    // Helper function to normalize phone for comparison
+    const normalizePhone = (phone: string | null | undefined): string => {
+      if (!phone || typeof phone !== 'string') return '';
+      return phone.replace(/\D/g, '');
+    };
+
+    // Helper function to check if two contacts are duplicates
+    const areDuplicates = (c1: any, c2: any): boolean => {
+      const email1 = normalizeEmail(c1.email);
+      const email2 = normalizeEmail(c2.email);
+      const phone1 = normalizePhone(c1.phone);
+      const phone2 = normalizePhone(c2.phone);
+
+      // Match by email (both must have emails)
+      if (email1 && email2 && email1 === email2) {
+        return true;
+      }
+
+      // Match by phone (both must have phones)
+      if (phone1 && phone2 && phone1 === phone2) {
+        return true;
+      }
+
+      return false;
+    };
+
+    // Helper function to merge two contacts (new data into existing)
+    const mergeContactData = (existing: any, newData: any): any => {
+      // Merge tags - combine and deduplicate
+      const existingTags = existing.tags || [];
+      const newTags = newData.tags || [];
+      const allTags = [...existingTags, ...newTags];
+      const mergedTags = Array.from(new Set(allTags.map((t: string) => t.toLowerCase())));
+
+      // Merge descriptions
+      let mergedDescription = existing.description || null;
+      if (newData.description) {
+        if (mergedDescription && mergedDescription.trim() !== newData.description.trim()) {
+          mergedDescription = `${mergedDescription.trim()}\n\n${newData.description.trim()}`;
+        } else {
+          mergedDescription = newData.description;
+        }
+      }
+
+      // Merge fields: prefer non-empty from new data, fallback to existing
+      return {
+        ...existing,
+        name: newData.name || existing.name || "",
+        email: newData.email || existing.email || null,
+        phone: newData.phone || existing.phone || null,
+        company: newData.company || existing.company || null,
+        role: newData.role || existing.role || null,
+        description: mergedDescription,
+        tags: mergedTags,
+        avatar: newData.avatar || existing.avatar || null,
+        folder_id: newData.folder_id || existing.folder_id || null,
+        address: newData.address || existing.address || null,
+        city: newData.city || existing.city || null,
+        state: newData.state || existing.state || null,
+        zip_code: newData.zip_code || existing.zip_code || null,
+        country: newData.country || existing.country || null,
+        latitude: newData.latitude ?? existing.latitude ?? null,
+        longitude: newData.longitude ?? existing.longitude ?? null,
+        business_name: newData.business_name || existing.business_name || null,
+        business_type: newData.business_type || existing.business_type || null,
+      };
+    };
+
     // Map contacts to database format
     const contactsToInsert = contacts.map((contact: any) => {
       // Use contact-level isShared if provided, otherwise use request-level isShared
@@ -144,13 +218,78 @@ serve(async (req) => {
       };
     });
 
-    // Insert contacts in batches
+    // Check for existing contacts to find duplicates
+    // Fetch all contacts the user has access to (owned, company shared, or globally shared)
+    let existingContacts: any[] = [];
+    
+    // Build query to get contacts user has access to
+    // Check: (owner_id = user.id) OR (company_id = companyId) OR (is_shared = true)
+    // AND (email IS NOT NULL OR phone IS NOT NULL)
+    let query = supabase
+      .from("contacts")
+      .select("*");
+
+    // Build OR condition for access control
+    const accessConditions: string[] = [];
+    if (user.id) {
+      accessConditions.push(`owner_id.eq.${user.id}`);
+    }
+    if (companyId) {
+      accessConditions.push(`company_id.eq.${companyId}`);
+    }
+    accessConditions.push(`is_shared.eq.true`);
+
+    if (accessConditions.length > 0) {
+      query = query.or(accessConditions.join(','));
+    }
+
+    // Also filter to only contacts with email or phone (potential duplicates)
+    query = query.or('email.not.is.null,phone.not.is.null');
+
+    const { data: allContacts, error: fetchError } = await query;
+
+    if (fetchError) {
+      console.error("[bulk-insert-contacts] Error fetching existing contacts:", fetchError);
+    } else {
+      existingContacts = allContacts || [];
+      
+      // Filter to only contacts that match by normalized email or phone
+      existingContacts = existingContacts.filter(existing => {
+        return contactsToInsert.some(newContact => areDuplicates(newContact, existing));
+      });
+      
+      console.log(`[bulk-insert-contacts] Found ${existingContacts.length} existing duplicate contacts out of ${allContacts?.length || 0} total contacts`);
+    }
+
+    // Separate contacts into new and duplicates
+    const newContacts: any[] = [];
+    const contactsToMerge: Array<{ existing: any; newData: any }> = [];
+    let skippedCount = 0;
+
+    for (const newContact of contactsToInsert) {
+      const duplicate = existingContacts.find(existing => areDuplicates(newContact, existing));
+      
+      if (duplicate) {
+        // Merge duplicate into existing contact
+        contactsToMerge.push({ existing: duplicate, newData: newContact });
+        skippedCount++;
+      } else {
+        // New contact, add to insert list
+        newContacts.push(newContact);
+      }
+    }
+
+    console.log(`[bulk-insert-contacts] Processing: ${newContacts.length} new, ${contactsToMerge.length} to merge, ${skippedCount} duplicates`);
+
+    // Insert new contacts in batches
     const batchSize = 50;
     let insertedCount = 0;
+    let mergedCount = 0;
     const errors: string[] = [];
 
-    for (let i = 0; i < contactsToInsert.length; i += batchSize) {
-      const batch = contactsToInsert.slice(i, i + batchSize);
+    // Insert new contacts
+    for (let i = 0; i < newContacts.length; i += batchSize) {
+      const batch = newContacts.slice(i, i + batchSize);
       
       const { data, error } = await supabase
         .from("contacts")
@@ -168,10 +307,28 @@ serve(async (req) => {
       console.log(`Inserted batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts`);
     }
 
-    if (insertedCount === 0 && errors.length > 0) {
+    // Merge duplicate contacts
+    for (const { existing, newData } of contactsToMerge) {
+      const merged = mergeContactData(existing, newData);
+      
+      const { error } = await supabase
+        .from("contacts")
+        .update(merged)
+        .eq("id", existing.id);
+
+      if (error) {
+        console.error(`[bulk-insert-contacts] Error merging contact ${existing.id}:`, error);
+        errors.push(`Merge ${existing.id}: ${error.message}`);
+      } else {
+        mergedCount++;
+        console.log(`[bulk-insert-contacts] Merged contact ${existing.id}`);
+      }
+    }
+
+    if (insertedCount === 0 && mergedCount === 0 && errors.length > 0) {
       return new Response(
         JSON.stringify({ 
-          error: "Failed to insert contacts",
+          error: "Failed to insert or merge contacts",
           details: errors 
         }),
         {
@@ -185,6 +342,8 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         inserted: insertedCount,
+        merged: mergedCount,
+        skipped: skippedCount,
         total: contacts.length,
         errors: errors.length > 0 ? errors : undefined,
       }),
