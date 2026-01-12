@@ -4,7 +4,7 @@ const features = [
   {
     icon: Search,
     title: "Natural language search",
-    description: "Search your contacts using plain English. Ask questions like 'who do I know at mcdonalds' or 'engineers in San Francisco' and get instant results.",
+    description: "Search your contacts using plain English. Ask questions like 'who do I know at TechCorp' or 'engineers in San Francisco' and get instant results.",
   },
   {
     icon: FolderTree,

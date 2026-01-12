@@ -19,7 +19,7 @@ const faqs = [
   {
     question: "What makes WhoNow different from other contact management tools?",
     answer:
-      "WhoNow focuses on natural language search, making it easy to find contacts using plain English questions like 'who do I know at McDonald's' or 'engineers in San Francisco'. We prioritize simplicity and speed over complex features, helping you quickly access the information you need without navigating through multiple menus or learning a complex interface.",
+      "WhoNow focuses on natural language search, making it easy to find contacts using plain English questions like 'who do I know at TechCorp' or 'engineers in San Francisco'. We prioritize simplicity and speed over complex features, helping you quickly access the information you need without navigating through multiple menus or learning a complex interface.",
   },
   {
     question: "Is my data secure?",
