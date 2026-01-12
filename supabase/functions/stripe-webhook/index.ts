@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { checkLaunchMode } from "../_shared/security.ts";
 
 // No CORS headers needed - webhooks come from Stripe servers, not browsers
 
@@ -38,6 +39,12 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
 serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
+  }
+
+  // Check launch mode - block in waitlist mode
+  const { blocked } = checkLaunchMode();
+  if (blocked) {
+    return new Response("Service unavailable", { status: 403 });
   }
 
   try {

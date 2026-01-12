@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,13 @@ serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Check launch mode - block in waitlist mode
+  const { blocked } = checkLaunchMode();
+  if (blocked) {
+    const origin = req.headers.get("origin");
+    return waitlistModeBlockedResponse(origin);
   }
 
   try {

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -147,6 +148,13 @@ function parseSearchQuery(query: string, contacts: Contact[]): ParsedResult {
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Check launch mode - block in waitlist mode
+  const { blocked } = checkLaunchMode();
+  if (blocked) {
+    const origin = req.headers.get("origin");
+    return waitlistModeBlockedResponse(origin);
   }
 
   try {

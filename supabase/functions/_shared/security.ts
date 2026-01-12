@@ -214,3 +214,28 @@ export function rateLimitExceededResponse(resetIn: number, origin?: string | nul
     }
   );
 }
+
+/**
+ * Check if the application is in waitlist mode
+ * Returns blocked status and current mode
+ */
+export function checkLaunchMode(): { blocked: boolean; mode: string } {
+  const mode = Deno.env.get("APP_LAUNCH_MODE") || "live";
+  return { blocked: mode === "waitlist", mode };
+}
+
+/**
+ * Create a 403 response for waitlist mode blocking
+ */
+export function waitlistModeBlockedResponse(origin?: string | null): Response {
+  return new Response(
+    JSON.stringify({ error: "Service unavailable" }),
+    {
+      status: 403,
+      headers: {
+        ...getCorsHeaders(origin),
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
