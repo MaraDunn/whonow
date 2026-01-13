@@ -16,6 +16,8 @@ export interface DraggableContactCardProps {
   onRestore?: () => void;
   onPermanentlyDelete?: () => void;
   folder?: Folder;
+  folders?: Folder[];
+  onUpdateFolder?: (contactId: string, folderId: string | null) => void;
   showOwnershipBadge?: boolean;
   onMarkContacted?: () => void;
   onToggleClient?: (isClient: boolean) => void;
@@ -27,6 +29,8 @@ export interface DraggableContactCardProps {
   isSelected?: boolean;
   onSelect?: (selected: boolean) => void;
   selectionMode?: boolean;
+  // Drag control
+  disableDrag?: boolean;
 }
 
 export function DraggableContactCard({ 
@@ -40,6 +44,8 @@ export function DraggableContactCard({
   onRestore,
   onPermanentlyDelete,
   folder,
+  folders = [],
+  onUpdateFolder,
   showOwnershipBadge = false,
   onMarkContacted,
   onToggleClient,
@@ -49,12 +55,13 @@ export function DraggableContactCard({
   isSelected = false,
   onSelect,
   selectionMode = false,
+  disableDrag = false,
 }: DraggableContactCardProps) {
-  // Disable dragging in compact mode (mobile/tablet) or trash view
+  // Disable dragging in compact mode (mobile/tablet), trash view, or when sidebar is not visible
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: contact.id,
     data: { contact },
-    disabled: isTrashView || compact,
+    disabled: isTrashView || compact || disableDrag,
   });
 
   // Hide the original element completely when dragging - the DragOverlay shows the preview
@@ -75,6 +82,8 @@ export function DraggableContactCard({
           onRestore={onRestore}
           onPermanentlyDelete={onPermanentlyDelete}
           folder={folder}
+          folders={folders}
+          onUpdateFolder={onUpdateFolder}
           showOwnershipBadge={showOwnershipBadge}
           onMarkContacted={onMarkContacted}
           onToggleClient={onToggleClient}
@@ -89,12 +98,14 @@ export function DraggableContactCard({
     );
   }
 
+  const isDragDisabled = isTrashView || compact || disableDrag;
+  
   return (
     <div
       ref={setNodeRef}
-      {...(isTrashView || compact ? {} : { ...listeners, ...attributes })}
+      {...(isDragDisabled ? {} : { ...listeners, ...attributes })}
       className={cn(
-        !isTrashView && !compact && "touch-none cursor-grab active:cursor-grabbing",
+        !isDragDisabled && "touch-none cursor-grab active:cursor-grabbing",
         "transition-transform duration-200"
       )}
     >
@@ -109,6 +120,8 @@ export function DraggableContactCard({
         onRestore={onRestore}
         onPermanentlyDelete={onPermanentlyDelete}
         folder={folder}
+        folders={folders}
+        onUpdateFolder={onUpdateFolder}
         showOwnershipBadge={showOwnershipBadge}
         onMarkContacted={onMarkContacted}
         onToggleClient={onToggleClient}

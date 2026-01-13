@@ -28,7 +28,7 @@ import { DragPreview } from "@/components/DragPreview";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
@@ -105,13 +105,34 @@ const centerOnCursor: Modifier = ({
   };
 };
 
-const Index = () => {
+const IndexContent = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
+  const { isMobile } = useSidebar();
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Track if screen is small (< 768px) - same logic as sidebar uses
+  const [isSmallScreen, setIsSmallScreen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768;
+  });
+
+  // Check screen width to determine if sidebar is a Sheet (not always visible)
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsSmallScreen(window.innerWidth < 768);
+    };
+    
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+    return () => window.removeEventListener("resize", checkScreenSize);
+  }, []);
+
+  // Disable drag when sidebar is not visible (i.e., when it's a Sheet on mobile/small screens)
+  const isSidebarVisible = !isMobile && !isSmallScreen;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"quick" | "full">("full");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -619,7 +640,6 @@ const Index = () => {
   }, [queryClient]);
 
   return (
-    <SidebarProvider>
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -782,6 +802,12 @@ const Index = () => {
                     onPermanentlyDelete={permanentlyDeleteContact}
                     onEmptyTrash={emptyTrash}
                     folders={folders}
+                    onUpdateFolder={(contactId, folderId) => {
+                      const contact = contacts.find(c => c.id === contactId);
+                      if (contact) {
+                        updateContact({ ...contact, folderId: folderId || undefined });
+                      }
+                    }}
                     showOwnershipBadge={!!company}
                     onMarkContacted={updateLastContacted}
                     onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
@@ -791,6 +817,7 @@ const Index = () => {
                     onBulkDelete={handleBulkDelete}
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
+                    disableDrag={!isSidebarVisible}
                   />
                 </>
               ) : (
@@ -806,6 +833,12 @@ const Index = () => {
                   onPermanentlyDelete={permanentlyDeleteContact}
                   onEmptyTrash={emptyTrash}
                   folders={folders}
+                  onUpdateFolder={(contactId, folderId) => {
+                    const contact = contacts.find(c => c.id === contactId);
+                    if (contact) {
+                      updateContact({ ...contact, folderId: folderId || undefined });
+                    }
+                  }}
                   showOwnershipBadge={!!company}
                   onMarkContacted={updateLastContacted}
                   onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
@@ -815,6 +848,7 @@ const Index = () => {
                   onBulkDelete={handleBulkDelete}
                   selectionMode={selectionMode && !showTrash}
                   onToggleSelectionMode={handleToggleSelectionMode}
+                  disableDrag={!isSidebarVisible}
                 />
               )}
 
@@ -907,6 +941,13 @@ const Index = () => {
           {activeContact ? <DragPreview contact={activeContact} /> : null}
         </DragOverlay>
       </DndContext>
+  );
+};
+
+const Index = () => {
+  return (
+    <SidebarProvider>
+      <IndexContent />
     </SidebarProvider>
   );
 };

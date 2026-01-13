@@ -20,6 +20,7 @@ interface ContactGridProps {
   onPermanentlyDelete?: (id: string) => void;
   onEmptyTrash?: () => void;
   folders?: Folder[];
+  onUpdateFolder?: (contactId: string, folderId: string | null) => void;
   showOwnershipBadge?: boolean;
   onMarkContacted?: (id: string) => void;
   onToggleClient?: (id: string, isClient: boolean) => void;
@@ -30,6 +31,7 @@ interface ContactGridProps {
   onBulkDelete?: (ids: string[]) => void;
   selectionMode?: boolean;
   onToggleSelectionMode?: () => void;
+  disableDrag?: boolean;
 }
 
 export function ContactGrid({ 
@@ -44,6 +46,7 @@ export function ContactGrid({
   onPermanentlyDelete,
   onEmptyTrash,
   folders = [],
+  onUpdateFolder,
   showOwnershipBadge = false,
   onMarkContacted,
   onToggleClient,
@@ -53,6 +56,7 @@ export function ContactGrid({
   onBulkDelete,
   selectionMode = false,
   onToggleSelectionMode,
+  disableDrag = false,
 }: ContactGridProps) {
   const responsiveView = useResponsiveView();
   const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
@@ -180,6 +184,8 @@ export function ContactGrid({
             onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
             onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
             folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
+            folders={folders}
+            onUpdateFolder={onUpdateFolder}
             showOwnershipBadge={showOwnershipBadge}
             onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
             onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
@@ -189,6 +195,7 @@ export function ContactGrid({
             isSelected={selectedContactIds.has(contact.id)}
             onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
             selectionMode={selectionMode}
+            disableDrag={disableDrag}
           />
         ))}
       </div>
