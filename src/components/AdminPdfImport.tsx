@@ -682,24 +682,26 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
         </div>
       ) : (
         <div className="border rounded-lg">
-          <div className="flex items-center justify-between p-3 border-b bg-muted/50">
-            <div className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium">
-                {parsedContacts.length} contact{parsedContacts.length === 1 ? '' : 's'} found
-              </span>
-              {fileName && (
-                <span className="text-xs text-muted-foreground">from {fileName}</span>
-              )}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b bg-muted/50 gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-medium">
+                  {parsedContacts.length} contact{parsedContacts.length === 1 ? '' : 's'} found
+                </span>
+                {fileName && (
+                  <span className="text-xs text-muted-foreground truncate">from {fileName}</span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={selectAll}>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button variant="ghost" size="sm" onClick={selectAll} className="whitespace-nowrap">
                 Select All
               </Button>
-              <Button variant="ghost" size="sm" onClick={deselectAll}>
+              <Button variant="ghost" size="sm" onClick={deselectAll} className="whitespace-nowrap">
                 Deselect All
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleClear}>
+              <Button variant="ghost" size="sm" onClick={handleClear} className="flex-shrink-0">
                 <X className="h-4 w-4" />
               </Button>
             </div>
