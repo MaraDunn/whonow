@@ -1,82 +1,98 @@
-import { Mail, Phone, Briefcase } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
 import { Contact } from "@/types/contact";
+import { Folder } from "@/types/folder";
+import { DraggableContactCard } from "./DraggableContactCard";
+import { Briefcase } from "lucide-react";
+import { ActionType } from "@/hooks/useActionSearch";
+import { useResponsiveView } from "@/hooks/use-mobile";
 
 interface TeamDirectoryGridProps {
   members: Contact[];
+  searchQuery?: string;
+  action?: ActionType;
+  onEditContact?: (contact: Contact) => void;
+  onViewContact?: (contact: Contact) => void;
+  onDeleteContact?: (id: string) => void;
+  folders?: Folder[];
+  onUpdateFolder?: (contactId: string, folderId: string | null) => void;
+  showOwnershipBadge?: boolean;
+  onMarkContacted?: (id: string) => void;
+  disableDrag?: boolean;
 }
 
-export function TeamDirectoryGrid({ members }: TeamDirectoryGridProps) {
+export function TeamDirectoryGrid({ 
+  members,
+  searchQuery = "",
+  action,
+  onEditContact,
+  onViewContact,
+  onDeleteContact,
+  folders = [],
+  onUpdateFolder,
+  showOwnershipBadge = false,
+  onMarkContacted,
+  disableDrag = false,
+}: TeamDirectoryGridProps) {
+  const responsiveView = useResponsiveView();
+  const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
+  
+  // Track which contact is expanded in compact mode
+  const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
+
+  // Create a map for quick folder lookup
+  const folderMap = new Map(folders.map(f => [f.id, f]));
+
+  const handleToggleExpand = (contactId: string) => {
+    setExpandedContactId(prev => prev === contactId ? null : contactId);
+  };
+
   if (members.length === 0) {
     return (
-      <div className="text-center py-16">
-        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-          <Briefcase className="h-8 w-8 text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+        <div className="w-20 h-20 rounded-2xl bg-secondary flex items-center justify-center mb-4">
+          <Briefcase className="h-10 w-10 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-medium mb-2">No team members yet</h3>
-        <p className="text-muted-foreground text-sm">
-          Invite others to join your company using the invite code in settings.
+        <h3 className="font-display font-semibold text-xl text-foreground mb-2">No team members yet</h3>
+        <p className="text-muted-foreground text-center max-w-sm">
+          {searchQuery
+            ? `No results for "${searchQuery}". Try a different search term.`
+            : "Invite others to join your company using the invite code in settings."}
         </p>
       </div>
     );
   }
 
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-      {members.map((member) => (
-        <Card key={member.id} className="overflow-hidden hover:shadow-md transition-shadow">
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-start gap-3 sm:gap-4 min-w-0">
-              <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0">
-                <AvatarImage src={member.avatar} alt={member.name} />
-                <AvatarFallback className="text-base sm:text-lg">
-                  {member.name
-                    ?.split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase()
-                    .slice(0, 2) || "?"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium truncate text-sm sm:text-base">{member.name || "No name"}</h3>
-                {member.role && (
-                  <Badge variant="secondary" className="mt-1 text-xs truncate max-w-full">
-                    {member.role}
-                  </Badge>
-                )}
-              </div>
-            </div>
+  // Responsive grid classes - only apply compact layout on mobile/tablet
+  const gridClasses = isCompactMode
+    ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3"
+    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6";
 
-            <div className="mt-3 sm:mt-4 space-y-2">
-              {member.email && (
-                <a
-                  href={`mailto:${member.email}`}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors min-w-0"
-                >
-                  <Mail className="h-4 w-4 shrink-0" />
-                  <span className="truncate min-w-0">{member.email}</span>
-                </a>
-              )}
-              {member.phone && (
-                <a
-                  href={`tel:${member.phone}`}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors min-w-0"
-                >
-                  <Phone className="h-4 w-4 shrink-0" />
-                  <span className="truncate min-w-0">{member.phone}</span>
-                </a>
-              )}
-              {member.description && (
-                <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 mt-2">
-                  {member.description}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+  return (
+    <div className={gridClasses}>
+      {members.map((member, index) => (
+        <DraggableContactCard
+          key={member.id}
+          contact={member}
+          index={index}
+          action={action}
+          onEdit={onEditContact ? () => onEditContact(member) : () => {}}
+          onView={onViewContact ? () => onViewContact(member) : undefined}
+          isTrashView={false}
+          onDelete={onDeleteContact ? () => onDeleteContact(member.id) : undefined}
+          folder={member.folderId ? folderMap.get(member.folderId) : undefined}
+          folders={folders}
+          onUpdateFolder={onUpdateFolder}
+          showOwnershipBadge={showOwnershipBadge}
+          onMarkContacted={onMarkContacted ? () => onMarkContacted(member.id) : undefined}
+          onToggleClient={undefined}
+          compact={isCompactMode}
+          isExpanded={expandedContactId === member.id}
+          onToggleExpand={() => handleToggleExpand(member.id)}
+          isSelected={false}
+          onSelect={undefined}
+          selectionMode={false}
+          disableDrag={disableDrag}
+        />
       ))}
     </div>
   );

@@ -767,7 +767,24 @@ const IndexContent = () => {
                       {company?.name} • {searchQuery ? filteredContacts.length : filteredTeamContacts.length} member{(searchQuery ? filteredContacts.length : filteredTeamContacts.length) !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <TeamDirectoryGrid members={searchQuery ? filteredContacts : filteredTeamContacts} />
+                  <TeamDirectoryGrid 
+                    members={searchQuery ? filteredContacts : filteredTeamContacts}
+                    searchQuery={searchQuery}
+                    action={action}
+                    onEditContact={handleEditContact}
+                    onViewContact={handleViewContact}
+                    onDeleteContact={deleteContact}
+                    folders={teamFolders}
+                    onUpdateFolder={(contactId, folderId) => {
+                      const contact = (searchQuery ? filteredContacts : filteredTeamContacts).find(c => c.id === contactId);
+                      if (contact) {
+                        updateContact({ ...contact, folderId: folderId || undefined });
+                      }
+                    }}
+                    showOwnershipBadge={!!company}
+                    onMarkContacted={updateLastContacted}
+                    disableDrag={!isSidebarVisible}
+                  />
                 </>
               ) : showClientDirectory ? (
                 <>
