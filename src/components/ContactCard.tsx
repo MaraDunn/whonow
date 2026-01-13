@@ -1,7 +1,7 @@
 import React from "react";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown, Check } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,6 +9,12 @@ import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSubscription } from "@/hooks/useSubscription";
 import { LockedFeatureButton, dialogJustClosed } from "@/components/LockedFeatureButton";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { toast } from "sonner";
 
 // Helper to format last contacted time
 function formatLastContacted(lastContactedAt?: string): string | null {
@@ -31,6 +37,8 @@ interface ContactCardProps {
   onRestore?: () => void;
   onPermanentlyDelete?: () => void;
   folder?: Folder;
+  folders?: Folder[];
+  onUpdateFolder?: (contactId: string, folderId: string | null) => void;
   showOwnershipBadge?: boolean;
   onMarkContacted?: () => void;
   onToggleClient?: (isClient: boolean) => void;
@@ -55,6 +63,8 @@ export function ContactCard({
   onRestore,
   onPermanentlyDelete,
   folder,
+  folders = [],
+  onUpdateFolder,
   showOwnershipBadge = false,
   onMarkContacted,
   onToggleClient,
@@ -67,6 +77,18 @@ export function ContactCard({
 }: ContactCardProps) {
   const { canAccessFeature } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
+  const [folderPopoverOpen, setFolderPopoverOpen] = React.useState(false);
+
+  const handleFolderChange = (newFolderId: string | null) => {
+    if (onUpdateFolder) {
+      onUpdateFolder(contact.id, newFolderId);
+      const folderName = newFolderId 
+        ? folders.find(f => f.id === newFolderId)?.name || "folder"
+        : "No folder";
+      toast.success(`Moved to ${folderName}`);
+      setFolderPopoverOpen(false);
+    }
+  };
   
   const initials = contact.name
     .split(" ")
@@ -261,14 +283,87 @@ export function ContactCard({
             </a>
           )}
 
-          <div className="flex items-center gap-2 text-sm text-foreground">
-            <Building2 className="h-4 w-4 text-secondary-foreground" />
+          <div className="flex items-center gap-2 text-sm text-foreground min-w-0">
+            <Building2 className="h-4 w-4 text-secondary-foreground shrink-0" />
             <span className="truncate">{contact.company}</span>
           </div>
 
+          {/* Folder - clickable in compact expanded mode */}
+          {folders.length > 0 && onUpdateFolder && !isTrashView && (
+            <Popover open={folderPopoverOpen} onOpenChange={setFolderPopoverOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFolderPopoverOpen(true);
+                  }}
+                  className="group/folder flex items-center gap-2.5 text-sm text-foreground hover:text-primary transition-all duration-200 w-full text-left min-w-0 px-1 py-1.5 rounded-md hover:bg-accent/50"
+                >
+                  <FolderIcon className="h-4 w-4 text-muted-foreground group-hover/folder:text-primary shrink-0 transition-colors" />
+                  {folder ? (
+                    <div 
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-secondary/80 hover:bg-secondary border border-border/50 hover:border-primary/30 transition-all duration-200"
+                      style={{ 
+                        borderLeft: `3px solid ${folder.color}`,
+                      }}
+                    >
+                      <span style={{ color: folder.color }} className="truncate font-medium">{folder.name}</span>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground group-hover/folder:text-foreground">No folder</span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent 
+                className="w-56 p-1.5" 
+                align="start"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="space-y-0.5">
+                  <button
+                    onClick={() => handleFolderChange(null)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all duration-150",
+                      !folder 
+                        ? "bg-primary/10 text-primary font-medium" 
+                        : "hover:bg-accent hover:text-accent-foreground text-foreground"
+                    )}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <FolderIcon className="h-4 w-4" />
+                      <span>No folder</span>
+                    </span>
+                    {!folder && <Check className="h-4 w-4 text-primary" />}
+                  </button>
+                  {folders.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => handleFolderChange(f.id)}
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all duration-150",
+                        folder?.id === f.id
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "hover:bg-accent hover:text-accent-foreground text-foreground"
+                    )}
+                    >
+                      <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <span 
+                          className="h-3.5 w-3.5 rounded-full shrink-0 ring-1 ring-border/50" 
+                          style={{ backgroundColor: f.color }}
+                        />
+                        <span className="truncate">{f.name}</span>
+                      </span>
+                      {folder?.id === f.id && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
           {/* Last contacted */}
           <div className="flex items-center gap-2 text-xs">
-            <Clock className="h-3 w-3 text-muted-foreground" />
+            <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
             <span className={lastContactedText ? 'text-muted-foreground' : 'text-orange-600 dark:text-orange-400 font-medium'}>
               {lastContactedText || "Never contacted"}
             </span>
@@ -378,17 +473,92 @@ export function ContactCard({
       )}
       {/* Folder indicator badge - always reserve space for consistent height */}
       <div className="h-7 mb-1">
-        {folder && (
+        {folders.length > 0 && onUpdateFolder && !isTrashView ? (
+          <Popover open={folderPopoverOpen} onOpenChange={setFolderPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFolderPopoverOpen(true);
+                }}
+                className={cn(
+                  "group/folder flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium w-fit transition-all duration-200",
+                  folder
+                    ? "bg-gradient-to-r from-secondary/90 to-secondary/70 hover:from-secondary hover:to-secondary border border-border/50 hover:border-primary/30 hover:shadow-sm"
+                    : "bg-secondary/50 hover:bg-secondary border border-dashed border-muted-foreground/40 hover:border-primary/40 hover:shadow-sm"
+                )}
+                style={folder ? { 
+                  borderLeft: `3px solid ${folder.color}`,
+                } : {}}
+              >
+                <FolderIcon className={cn(
+                  "h-3.5 w-3.5 shrink-0 transition-colors",
+                  folder ? "text-secondary-foreground group-hover/folder:text-primary" : "text-muted-foreground group-hover/folder:text-primary"
+                )} />
+                <span className={cn(
+                  "truncate max-w-[120px] transition-colors",
+                  folder ? "text-secondary-foreground group-hover/folder:text-foreground" : "text-muted-foreground group-hover/folder:text-foreground"
+                )}>
+                  {folder ? folder.name : "No folder"}
+                </span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-56 p-1.5" 
+              align="start"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => handleFolderChange(null)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all duration-150",
+                    !folder 
+                      ? "bg-primary/10 text-primary font-medium" 
+                      : "hover:bg-accent hover:text-accent-foreground text-foreground"
+                  )}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <FolderIcon className="h-4 w-4" />
+                    <span>No folder</span>
+                  </span>
+                  {!folder && <Check className="h-4 w-4 text-primary" />}
+                </button>
+                {folders.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => handleFolderChange(f.id)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all duration-150",
+                      folder?.id === f.id
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "hover:bg-accent hover:text-accent-foreground text-foreground"
+                    )}
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <span 
+                        className="h-3.5 w-3.5 rounded-full shrink-0 ring-1 ring-border/50" 
+                        style={{ backgroundColor: f.color }}
+                      />
+                      <span className="truncate">{f.name}</span>
+                    </span>
+                    {folder?.id === f.id && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        ) : folder ? (
           <div 
-            className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-secondary/80 w-fit"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-secondary/80 w-fit border border-border/50"
             style={{ 
               borderLeft: `3px solid ${folder.color}`,
             }}
           >
-            <FolderIcon className="h-3 w-3 text-secondary-foreground" />
+            <FolderIcon className="h-3.5 w-3.5 text-secondary-foreground shrink-0" />
             <span className="text-secondary-foreground truncate max-w-[120px]">{folder.name}</span>
           </div>
-        )}
+        ) : null}
       </div>
       <div className="flex items-start gap-4 flex-1">
         <div className="relative flex-shrink-0">
