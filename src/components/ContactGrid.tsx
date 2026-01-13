@@ -93,8 +93,8 @@ export function ContactGrid({
 
   // Responsive grid classes - only apply compact layout on mobile/tablet
   const gridClasses = isCompactMode
-    ? "grid grid-cols-1 sm:grid-cols-2 gap-2"
-    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6";
+    ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3"
+    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6";
 
   const allSelected = contacts.length > 0 && contacts.every(c => selectedContactIds.has(c.id));
   const someSelected = contacts.some(c => selectedContactIds.has(c.id));
@@ -104,22 +104,22 @@ export function ContactGrid({
     <div>
       {/* Selection mode toolbar */}
       {selectionMode && !isTrashView && (
-        <div className="mb-4 flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
+        <div className="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-muted/50 rounded-lg border border-border">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={(checked) => onSelectAll?.(checked === true)}
-                className="h-5 w-5"
+                className="h-5 w-5 shrink-0"
               />
-              <span className="text-sm font-medium">
+              <span className="text-sm font-medium truncate">
                 {selectedCount > 0 
                   ? `${selectedCount} contact${selectedCount !== 1 ? "s" : ""} selected`
                   : "Select all"}
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {selectedCount > 0 && onBulkDelete && (
               <Button
                 variant="destructive"
@@ -128,9 +128,11 @@ export function ContactGrid({
                   const ids = Array.from(selectedContactIds);
                   onBulkDelete(ids);
                 }}
+                className="flex-1 sm:flex-initial"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Delete {selectedCount}
+                <span className="hidden sm:inline">Delete {selectedCount}</span>
+                <span className="sm:hidden">Delete</span>
               </Button>
             )}
             {onToggleSelectionMode && (
@@ -138,9 +140,10 @@ export function ContactGrid({
                 variant="ghost"
                 size="sm"
                 onClick={onToggleSelectionMode}
+                className="flex-1 sm:flex-initial"
               >
-                <X className="h-4 w-4 mr-2" />
-                Cancel
+                <X className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Cancel</span>
               </Button>
             )}
           </div>
@@ -148,7 +151,7 @@ export function ContactGrid({
       )}
 
       {isTrashView && contacts.length > 0 && (
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             {contacts.length} contact{contacts.length !== 1 ? "s" : ""} in trash
           </p>
@@ -156,6 +159,7 @@ export function ContactGrid({
             variant="destructive"
             size="sm"
             onClick={onEmptyTrash}
+            className="w-full sm:w-auto"
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Empty Trash

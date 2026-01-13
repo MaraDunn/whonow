@@ -340,11 +340,11 @@ export function FolderSidebar({
                           onOwnershipFilterChange?.("personal");
                         }}
                         isActive={ownershipFilter === "personal" && !showTrash && !showDirectory && !showClientDirectory}
-                        className="w-full pl-6"
+                        className="w-full pl-6 min-w-0"
                       >
-                        <UserCircle className="h-4 w-4" />
-                        <span className="flex-1 text-left">Personal</span>
-                        <span className="text-xs opacity-70">{personalContactsCount}</span>
+                        <UserCircle className="h-4 w-4 shrink-0" />
+                        <span className="flex-1 text-left min-w-0 truncate">Personal</span>
+                        <span className="text-xs opacity-70 shrink-0">{personalContactsCount}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
@@ -354,11 +354,11 @@ export function FolderSidebar({
                           onOwnershipFilterChange?.("shared");
                         }}
                         isActive={ownershipFilter === "shared" && !showTrash && !showDirectory && !showClientDirectory}
-                        className="w-full pl-6"
+                        className="w-full pl-6 min-w-0"
                       >
-                        <Building2 className="h-4 w-4" />
-                        <span className="flex-1 text-left">Shared</span>
-                        <span className="text-xs opacity-70">{sharedContactsCount}</span>
+                        <Building2 className="h-4 w-4 shrink-0" />
+                        <span className="flex-1 text-left min-w-0 truncate">Shared</span>
+                        <span className="text-xs opacity-70 shrink-0">{sharedContactsCount}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   </>
@@ -548,13 +548,13 @@ export function FolderSidebar({
                           }}
                           isActive={showClientDirectory && selectedClientFolderId === null}
                           tooltip={isCollapsed ? `Client Directory (${clientDirectoryCount})` : undefined}
-                          className="w-full"
+                          className="w-full min-w-0"
                         >
-                          <Briefcase className="h-4 w-4" />
+                          <Briefcase className="h-4 w-4 shrink-0" />
                           {!isCollapsed && (
                             <>
-                              <span className="flex-1 text-left">All Clients</span>
-                              <span className="text-xs opacity-70">{clientDirectoryCount}</span>
+                              <span className="flex-1 text-left min-w-0 truncate">All Clients</span>
+                              <span className="text-xs opacity-70 shrink-0">{clientDirectoryCount}</span>
                             </>
                           )}
                         </SidebarMenuButton>
@@ -569,11 +569,11 @@ export function FolderSidebar({
                                 </div>
                               )
                             } : undefined}
-                            className="w-full opacity-70"
+                            className="w-full opacity-70 min-w-0"
                           >
-                            <Briefcase className="h-4 w-4" />
+                            <Briefcase className="h-4 w-4 shrink-0" />
                             {!isCollapsed && (
-                              <span className="flex-1 text-left">Client Directory</span>
+                              <span className="flex-1 text-left min-w-0 truncate">Client Directory</span>
                             )}
                           </SidebarMenuButton>
                         </LockedFeatureButton>
@@ -743,23 +743,23 @@ export function FolderSidebar({
                 <SidebarGroupContent>
                   <SidebarMenu>
                     <SidebarMenuItem>
-                      <SidebarMenuButton
-                        onClick={() => {
-                          onSelectDirectory();
-                          onSelectTeamFolder?.(null);
-                        }}
-                        isActive={showDirectory && selectedTeamFolderId === null}
-                        tooltip={isCollapsed ? `Team Directory (${companyMembers.length})` : undefined}
-                        className="w-full"
-                      >
-                        <Building2 className="h-4 w-4" />
-                        {!isCollapsed && (
-                          <>
-                            <span className="flex-1 text-left">All Team Members</span>
-                            <span className="text-xs opacity-70">{companyMembers.length}</span>
-                          </>
-                        )}
-                      </SidebarMenuButton>
+                        <SidebarMenuButton
+                          onClick={() => {
+                            onSelectDirectory();
+                            onSelectTeamFolder?.(null);
+                          }}
+                          isActive={showDirectory && selectedTeamFolderId === null}
+                          tooltip={isCollapsed ? `Team Directory (${companyMembers.length})` : undefined}
+                          className="w-full min-w-0"
+                        >
+                          <Building2 className="h-4 w-4 shrink-0" />
+                          {!isCollapsed && (
+                            <>
+                              <span className="flex-1 text-left min-w-0 truncate">All Team Members</span>
+                              <span className="text-xs opacity-70 shrink-0">{companyMembers.length}</span>
+                            </>
+                          )}
+                        </SidebarMenuButton>
                     </SidebarMenuItem>
 
                     {/* Personal Team Folders */}
@@ -887,14 +887,14 @@ export function FolderSidebar({
                     onClick={onSelectTrash}
                     isActive={showTrash}
                     tooltip={isCollapsed ? `Trash${trashCount > 0 ? ` (${trashCount})` : ""}` : undefined}
-                    className="w-full"
+                    className="w-full min-w-0"
                   >
-                    <Trash className="h-4 w-4" />
+                    <Trash className="h-4 w-4 shrink-0" />
                     {!isCollapsed && (
                       <>
-                        <span className="flex-1 text-left">Trash</span>
+                        <span className="flex-1 text-left min-w-0 truncate">Trash</span>
                         {trashCount > 0 && (
-                          <span className="text-xs opacity-70">{trashCount}</span>
+                          <span className="text-xs opacity-70 shrink-0">{trashCount}</span>
                         )}
                       </>
                     )}

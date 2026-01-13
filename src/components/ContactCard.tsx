@@ -226,10 +226,12 @@ export function ContactCard({
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Briefcase className="h-3 w-3" />
-              {contact.role}
-            </p>
+            {contact.role && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
+                <Briefcase className="h-3 w-3 shrink-0" />
+                <span className="truncate">{contact.role}</span>
+              </p>
+            )}
           </div>
 
           <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0 rotate-180 transition-transform" />
@@ -252,10 +254,10 @@ export function ContactCard({
             <a
               href={`tel:${contact.phone}`}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors"
+              className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors min-w-0"
             >
-              <Phone className="h-4 w-4 text-secondary-foreground" />
-              <span>{contact.phone}</span>
+              <Phone className="h-4 w-4 text-secondary-foreground shrink-0" />
+              <span className="truncate">{contact.phone}</span>
             </a>
           )}
 
@@ -355,7 +357,7 @@ export function ContactCard({
     <div
       onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
       className={cn(
-        "group relative p-6 rounded-2xl border transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col",
+        "group relative p-4 sm:p-6 rounded-xl sm:rounded-2xl border transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col",
         selectionMode 
           ? isSelected 
             ? "border-primary bg-primary/5 shadow-md" 
@@ -422,10 +424,10 @@ export function ContactCard({
               </span>
             )}
           </div>
-          {contact.role && (
-            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1.5">
-              <Briefcase className="h-3.5 w-3.5" />
-              {contact.role}
+            {contact.role && (
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1.5 min-w-0">
+              <Briefcase className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{contact.role}</span>
             </p>
           )}
           {/* Last contacted indicator */}
@@ -473,18 +475,18 @@ export function ContactCard({
             <a
               href={`tel:${contact.phone}`}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/phone"
+              className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/phone min-w-0"
             >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/phone:bg-primary/10 transition-colors">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/phone:bg-primary/10 transition-colors shrink-0">
                 <Phone className="h-4 w-4 text-secondary-foreground group-hover/phone:text-primary" />
               </div>
-              <span className="hover:underline">{contact.phone}</span>
+              <span className="truncate hover:underline">{contact.phone}</span>
             </a>
           )}
 
           {contact.company && (
-            <div className="flex items-center gap-3 text-sm text-foreground">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary">
+            <div className="flex items-center gap-3 text-sm text-foreground min-w-0">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary shrink-0">
                 <Building2 className="h-4 w-4 text-secondary-foreground" />
               </div>
               <span className="truncate">{contact.company}</span>
@@ -495,7 +497,7 @@ export function ContactCard({
 
       {/* Action buttons row - show for non-trash view */}
       {!isTrashView && (onMarkContacted || onToggleClient) && (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {onToggleClient && (
             hasClientAccess ? (
               <Button
@@ -558,12 +560,12 @@ export function ContactCard({
 
       {/* Trash view actions */}
       {isTrashView && (
-        <div className="mt-6 pt-4 border-t border-border flex gap-2.5">
+        <div className="mt-4 sm:mt-6 pt-4 border-t border-border flex flex-col sm:flex-row gap-2 sm:gap-2.5">
           {onRestore && (
             <Button
               variant="outline"
               size="default"
-              className="flex-1 min-w-0 h-10 px-4"
+              className="flex-1 min-w-0 h-10 px-4 w-full sm:w-auto"
               onClick={(e) => {
                 e.stopPropagation();
                 onRestore();
@@ -577,7 +579,7 @@ export function ContactCard({
             <Button
               variant="destructive"
               size="default"
-              className="flex-1 min-w-0 h-10 px-4"
+              className="flex-1 min-w-0 h-10 px-4 w-full sm:w-auto"
               onClick={(e) => {
                 e.stopPropagation();
                 onPermanentlyDelete();

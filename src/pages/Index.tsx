@@ -628,7 +628,7 @@ const Index = () => {
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="min-h-screen bg-background flex w-full">
+        <div className="min-h-screen bg-background flex w-full overflow-x-hidden">
           {/* Folder Sidebar */}
           <FolderSidebar
             folders={folders}
@@ -667,8 +667,8 @@ const Index = () => {
           />
 
           {/* Main Content */}
-          <div className="flex-1">
-            <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-12">
+          <div className="flex-1 min-w-0 overflow-x-hidden">
+            <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 lg:py-12">
               <Header 
                 contactCount={totalCount} 
                 onOpenAddDialog={handleOpenAddDialog}
@@ -681,8 +681,8 @@ const Index = () => {
                 onContactsImported={handleContactsImported}
               />
               
-              <div className="mb-4 sm:mb-10 flex items-center gap-3">
-                <div className="flex-1">
+              <div className="mb-4 sm:mb-6 md:mb-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="flex-1 min-w-0">
                   <SearchBar
                     value={searchQuery}
                     onChange={setSearchQuery}
@@ -695,7 +695,7 @@ const Index = () => {
                     variant={selectionMode ? "default" : "outline"}
                     size="sm"
                     onClick={handleToggleSelectionMode}
-                    className="shrink-0"
+                    className="shrink-0 w-full sm:w-auto"
                   >
                     {selectionMode ? "Cancel" : "Select"}
                   </Button>
@@ -742,8 +742,8 @@ const Index = () => {
               {showDirectory ? (
                 <>
                   <div className="mb-6">
-                    <h2 className="text-2xl font-display font-semibold">Team Directory</h2>
-                    <p className="text-muted-foreground mt-1">
+                    <h2 className="text-xl sm:text-2xl font-display font-semibold">Team Directory</h2>
+                    <p className="text-muted-foreground mt-1 text-sm sm:text-base break-words">
                       {company?.name} • {searchQuery ? filteredContacts.length : filteredTeamContacts.length} member{(searchQuery ? filteredContacts.length : filteredTeamContacts.length) !== 1 ? "s" : ""}
                     </p>
                   </div>
@@ -752,14 +752,14 @@ const Index = () => {
               ) : showClientDirectory ? (
                 <>
                   <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                      <h2 className="text-2xl font-display font-semibold">Client Directory</h2>
-                      <p className="text-muted-foreground mt-1">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-xl sm:text-2xl font-display font-semibold">Client Directory</h2>
+                      <p className="text-muted-foreground mt-1 text-sm sm:text-base">
                         {filteredContacts.length} client{filteredContacts.length !== 1 ? "s" : ""}
                       </p>
                     </div>
                     <Select value={clientSortOption} onValueChange={(v) => setClientSortOption(v as ClientSortOption)}>
-                      <SelectTrigger className="w-[220px]">
+                      <SelectTrigger className="w-full sm:w-[220px] shrink-0">
                         <SelectValue placeholder="Sort by..." />
                       </SelectTrigger>
                       <SelectContent>

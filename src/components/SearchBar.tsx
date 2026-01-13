@@ -30,13 +30,13 @@ export function SearchBar({ value, onChange, placeholder = "Search contacts...",
   }, [onChange]);
 
   return (
-    <div className="relative w-full max-w-2xl mx-auto group">
+    <div className="relative w-full max-w-2xl mx-auto group min-w-0">
       <div className="absolute inset-0 rounded-xl sm:rounded-2xl gradient-hero opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500" />
-      <div className="relative flex items-center">
+      <div className="relative flex items-center min-w-0">
         {isLoading ? (
-          <div className="absolute left-3 sm:left-5 h-4 w-4 sm:h-5 sm:w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <div className="absolute left-3 sm:left-4 md:left-5 h-4 w-4 sm:h-5 sm:w-5 animate-spin rounded-full border-2 border-primary border-t-transparent z-10" />
         ) : (
-          <Search className="absolute left-3 sm:left-5 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200" />
+          <Search className="absolute left-3 sm:left-4 md:left-5 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-focus-within:text-primary transition-colors duration-200 z-10" />
         )}
         <input
           ref={inputRef}
@@ -44,18 +44,19 @@ export function SearchBar({ value, onChange, placeholder = "Search contacts...",
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={isMobile ? "Search..." : placeholder}
-          className="w-full h-10 sm:h-14 pl-10 sm:pl-14 pr-10 sm:pr-24 rounded-xl sm:rounded-2xl border border-border bg-card text-foreground placeholder:text-muted-foreground shadow-search focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 text-sm sm:text-base"
+          className="w-full h-10 sm:h-12 md:h-14 pl-10 sm:pl-12 md:pl-14 pr-8 sm:pr-20 md:pr-24 rounded-xl sm:rounded-2xl border border-border bg-card text-foreground placeholder:text-muted-foreground shadow-search focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 text-sm sm:text-base min-w-0"
         />
         {value && (
           <button
             onClick={() => onChange("")}
-            className="absolute right-2 sm:right-16 p-1 sm:p-1.5 rounded-lg hover:bg-secondary transition-colors"
+            className="absolute right-2 sm:right-14 md:right-16 p-1 sm:p-1.5 rounded-lg hover:bg-secondary transition-colors z-10 shrink-0"
+            aria-label="Clear search"
           >
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         )}
         {!isMobile && (
-          <div className="absolute right-4 flex items-center gap-1 px-2 py-1 rounded-lg bg-secondary text-muted-foreground text-xs font-medium">
+          <div className="absolute right-3 sm:right-4 md:right-6 flex items-center gap-1 px-2 py-1 rounded-lg bg-secondary text-muted-foreground text-xs font-medium z-10 shrink-0 pointer-events-none">
             <span>⌘</span>
             <span>K</span>
           </div>

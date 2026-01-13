@@ -96,19 +96,19 @@ export function Header({
     .slice(0, 2);
 
   return (
-    <header className="flex items-center justify-between mb-4 sm:mb-8 animate-fade-in">
-      <div className="flex items-center gap-2 sm:gap-4">
+    <header className="flex items-center justify-between mb-4 sm:mb-6 md:mb-8 animate-fade-in gap-2 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
         <WhoNowLogo size={isMobile ? "sm" : "md"} showText={!isMobile} />
         {!isMobile && (
-          <div className="border-l border-border pl-4">
-            <p className="text-sm text-muted-foreground">
+          <div className="border-l border-border pl-2 sm:pl-4 min-w-0">
+            <p className="text-xs sm:text-sm text-muted-foreground truncate">
               {contactCount} {contactCount === 1 ? "contact" : "contacts"}
             </p>
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 shrink-0">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button 
@@ -123,7 +123,7 @@ export function Header({
               )}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 bg-popover">
+          <DropdownMenuContent align="end" className="w-52 sm:w-56 bg-popover max-w-[calc(100vw-2rem)]">
               <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenAddDialog("quick")}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 Quick Add
@@ -176,10 +176,10 @@ export function Header({
               </Avatar>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 bg-popover">
+          <DropdownMenuContent align="end" className="w-56 sm:w-64 bg-popover max-w-[calc(100vw-2rem)]">
             <div className="px-2 py-3">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10">
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar className="h-10 w-10 shrink-0">
                   {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt={displayName} />}
                   <AvatarFallback className="bg-primary/10 text-primary font-medium">
                     {profileInitials}
@@ -191,8 +191,8 @@ export function Header({
                 </div>
               </div>
               {company && (
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Building2 className="h-3 w-3" />
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+                  <Building2 className="h-3 w-3 shrink-0" />
                   <span className="truncate">{company.name}</span>
                 </div>
               )}

@@ -401,13 +401,13 @@ export function ContactDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 [&>button]:hidden">
+      <DialogContent className="sm:max-w-lg md:max-w-2xl max-h-[90vh] w-[calc(100vw-2rem)] sm:w-full flex flex-col p-0 [&>button]:hidden overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h2 className="font-display font-semibold text-lg text-foreground">
+        <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-border gap-2 shrink-0">
+          <h2 className="font-display font-semibold text-base sm:text-lg text-foreground truncate min-w-0">
             {isEditing ? "Edit Contact" : "Contact Details"}
           </h2>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {!isEditing && slack.status?.connected && (
               <Button
                 variant="ghost"
@@ -475,7 +475,7 @@ export function ContactDetailsDialog({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-3 space-y-4">
           {isEditing ? (
             /* EDIT MODE */
             <>
@@ -664,7 +664,7 @@ export function ContactDetailsDialog({
                     placeholder="123 Main St"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="space-y-2">
                     <Label htmlFor="edit-city">City</Label>
                     <Input
@@ -684,7 +684,7 @@ export function ContactDetailsDialog({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="space-y-2">
                     <Label htmlFor="edit-zipCode">ZIP Code</Label>
                     <Input
@@ -946,24 +946,24 @@ export function ContactDetailsDialog({
                   {contact.email && (
                     <a
                       href={`mailto:${contact.email}`}
-                      className="flex items-center gap-2.5 text-sm text-secondary-foreground hover:text-primary transition-colors group/email py-1.5"
+                      className="flex items-center gap-2.5 text-sm text-secondary-foreground hover:text-primary transition-colors group/email py-1.5 min-w-0"
                     >
                       <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/email:bg-primary/10 transition-colors flex-shrink-0">
                         <Mail className="h-4 w-4 text-muted-foreground group-hover/email:text-primary" />
                       </div>
-                      <span className="hover:underline truncate">{contact.email}</span>
+                      <span className="hover:underline truncate min-w-0">{contact.email}</span>
                     </a>
                   )}
 
                   {contact.phone && (
                     <a
                       href={`tel:${contact.phone}`}
-                      className="flex items-center gap-2.5 text-sm text-secondary-foreground hover:text-primary transition-colors group/phone py-1.5"
+                      className="flex items-center gap-2.5 text-sm text-secondary-foreground hover:text-primary transition-colors group/phone py-1.5 min-w-0"
                     >
                       <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/phone:bg-primary/10 transition-colors flex-shrink-0">
                         <Phone className="h-4 w-4 text-muted-foreground group-hover/phone:text-primary" />
                       </div>
-                      <span className="hover:underline">{contact.phone}</span>
+                      <span className="hover:underline truncate min-w-0">{contact.phone}</span>
                     </a>
                   )}
                 </div>

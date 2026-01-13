@@ -83,7 +83,7 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
         onClick={onClick}
         isActive={isActive}
         className={cn(
-          "w-full relative overflow-hidden",
+          "w-full relative overflow-hidden min-w-0",
           // Enhanced drop target styling
           isOver && !isActive && "ring-2 ring-primary bg-primary/15 scale-[1.02] shadow-md",
           // Subtle indication when dragging
@@ -104,7 +104,7 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
             )}
           />
         )}
-        <span className="flex-1 text-left">All Contacts</span>
+        <span className="flex-1 text-left min-w-0 truncate">All Contacts</span>
         <span
           className={cn(
             "text-xs opacity-70 shrink-0 transition-all duration-200 relative z-10",

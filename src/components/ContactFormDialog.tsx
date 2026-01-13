@@ -511,14 +511,14 @@ export function ContactFormDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="font-display text-xl">
+        <DialogContent className="sm:max-w-lg md:max-w-2xl max-h-[90vh] w-[calc(100vw-2rem)] sm:w-full flex flex-col overflow-hidden">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2">
+          <DialogTitle className="font-display text-lg sm:text-xl">
             {getDialogTitle()}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto pr-2">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 pr-2 sm:pr-4">
           {/* Mode Toggle - only show for new contacts */}
           {!isEditing && (
             <div className="flex gap-2 mb-4">
@@ -790,7 +790,7 @@ export function ContactFormDialog({
                     placeholder="123 Main St"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="space-y-2">
                     <Label htmlFor="city">City</Label>
                     <Input
@@ -810,7 +810,7 @@ export function ContactFormDialog({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="space-y-2">
                     <Label htmlFor="zipCode">ZIP Code</Label>
                     <Input
@@ -1024,12 +1024,12 @@ export function ContactFormDialog({
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="flex justify-end gap-3 pt-4 border-t border-border mt-4">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-border mt-4 shrink-0">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Cancel
           </Button>
           {(mode === "full" || isEditing) && (
-            <Button type="submit" className="gradient-hero text-primary-foreground">
+            <Button type="submit" className="gradient-hero text-primary-foreground w-full sm:w-auto">
               {isEditing ? "Save Changes" : "Add Contact"}
             </Button>
           )}
