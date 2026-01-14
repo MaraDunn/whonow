@@ -28,6 +28,7 @@ import { DragPreview } from "@/components/DragPreview";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
+import { SelectionToolbar } from "@/components/SelectionToolbar";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ import { useFolders } from "@/hooks/useFolders";
 import { useCustomKeywords } from "@/hooks/useCustomKeywords";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useTeamDirectoryContacts } from "@/hooks/useTeamDirectoryContacts";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
@@ -110,6 +112,8 @@ const IndexContent = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
+  const { canAccessFeature } = useSubscription();
+  const hasClientAccess = canAccessFeature("client_management");
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
   const { isMobile } = useSidebar();
   const [searchQuery, setSearchQuery] = useState("");
@@ -168,12 +172,16 @@ const IndexContent = () => {
     updateContact,
     deleteContact,
     restoreContact,
+    bulkRestoreContacts,
     permanentlyDeleteContact,
     emptyTrash,
     updateLastContacted,
+    bulkUpdateLastContacted,
     toggleClientStatus,
+    bulkToggleClientStatus,
     totalCount,
     bulkDeleteContacts,
+    bulkMoveToFolder,
   } = useContacts();
   const { 
     folders, 
@@ -348,6 +356,81 @@ const IndexContent = () => {
       },
       onError: (error) => {
         console.error("[handleBulkDelete] Error:", error);
+        // Don't clear selection on error so user can retry
+      }
+    });
+  };
+
+  const handleBulkMoveToFolder = (ids: string[], folderId: string | null) => {
+    if (!ids || ids.length === 0) {
+      toast.error("No contacts selected");
+      return;
+    }
+    const folderName = folderId 
+      ? (folders.find(f => f.id === folderId)?.name || "folder")
+      : "No folder";
+    console.log("[handleBulkMoveToFolder] Moving contacts:", ids.length, "contacts to folder:", folderId);
+    bulkMoveToFolder({ ids, folderId, folderName }, {
+      onSuccess: () => {
+        setSelectedContactIds(new Set());
+        setSelectionMode(false);
+      },
+      onError: (error) => {
+        console.error("[handleBulkMoveToFolder] Error:", error);
+        // Don't clear selection on error so user can retry
+      }
+    });
+  };
+
+  const handleBulkToggleClient = (ids: string[], isClient: boolean) => {
+    if (!ids || ids.length === 0) {
+      toast.error("No contacts selected");
+      return;
+    }
+    console.log("[handleBulkToggleClient] Marking contacts as client:", ids.length, "contacts, isClient:", isClient);
+    bulkToggleClientStatus({ ids, isClient }, {
+      onSuccess: () => {
+        setSelectedContactIds(new Set());
+        setSelectionMode(false);
+      },
+      onError: (error) => {
+        console.error("[handleBulkToggleClient] Error:", error);
+        // Don't clear selection on error so user can retry
+      }
+    });
+  };
+
+  const handleBulkMarkContacted = (ids: string[]) => {
+    if (!ids || ids.length === 0) {
+      toast.error("No contacts selected");
+      return;
+    }
+    console.log("[handleBulkMarkContacted] Marking contacts as contacted:", ids.length, "contacts");
+    bulkUpdateLastContacted(ids, {
+      onSuccess: () => {
+        setSelectedContactIds(new Set());
+        setSelectionMode(false);
+      },
+      onError: (error) => {
+        console.error("[handleBulkMarkContacted] Error:", error);
+        // Don't clear selection on error so user can retry
+      }
+    });
+  };
+
+  const handleBulkRestore = (ids: string[]) => {
+    if (!ids || ids.length === 0) {
+      toast.error("No contacts selected");
+      return;
+    }
+    console.log("[handleBulkRestore] Restoring contacts:", ids.length, "contacts");
+    bulkRestoreContacts(ids, {
+      onSuccess: () => {
+        setSelectedContactIds(new Set());
+        setSelectionMode(false);
+      },
+      onError: (error) => {
+        console.error("[handleBulkRestore] Error:", error);
         // Don't clear selection on error so user can retry
       }
     });
@@ -710,16 +793,14 @@ const IndexContent = () => {
                     isLoading={searchLoading}
                   />
                 </div>
-                {!showTrash && !showDirectory && !showClientDirectory && (
-                  <Button
-                    variant={selectionMode ? "default" : "outline"}
-                    size="sm"
-                    onClick={handleToggleSelectionMode}
-                    className="shrink-0 w-full sm:w-auto"
-                  >
-                    {selectionMode ? "Cancel" : "Select"}
-                  </Button>
-                )}
+                <Button
+                  variant={selectionMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={handleToggleSelectionMode}
+                  className="shrink-0 w-full sm:w-auto"
+                >
+                  {selectionMode ? "Cancel" : "Select"}
+                </Button>
               </div>
 
               {searchQuery && interpretation && (
@@ -759,6 +840,34 @@ const IndexContent = () => {
                 </div>
               )}
 
+              {/* Selection toolbar - appears below search bar in all directories and trash */}
+              {selectionMode && (() => {
+                const currentContacts = showTrash
+                  ? trashedContacts
+                  : showDirectory 
+                    ? (searchQuery ? filteredContacts : filteredTeamContacts)
+                    : filteredContacts;
+                const allSelected = currentContacts.length > 0 && currentContacts.every(c => selectedContactIds.has(c.id));
+                
+                return (
+                  <SelectionToolbar
+                    selectedCount={selectedContactIds.size}
+                    allSelected={allSelected}
+                    onSelectAll={handleSelectAll}
+                    onBulkDelete={!showTrash ? handleBulkDelete : undefined}
+                    onBulkMoveToFolder={!showTrash ? handleBulkMoveToFolder : undefined}
+                    onBulkMarkContacted={!showTrash ? handleBulkMarkContacted : undefined}
+                    onBulkToggleClient={!showTrash ? handleBulkToggleClient : undefined}
+                    onBulkRestore={showTrash ? handleBulkRestore : undefined}
+                    hasClientAccess={hasClientAccess}
+                    folders={showDirectory ? teamFolders : folders}
+                    selectedContactIds={selectedContactIds}
+                    onToggleSelectionMode={handleToggleSelectionMode}
+                    isTrashView={showTrash}
+                  />
+                );
+              })()}
+
               {showDirectory ? (
                 <>
                   <div className="mb-6">
@@ -783,6 +892,16 @@ const IndexContent = () => {
                     }}
                     showOwnershipBadge={!!company}
                     onMarkContacted={updateLastContacted}
+                    selectedContactIds={selectedContactIds}
+                    onSelectContact={handleSelectContact}
+                    onSelectAll={handleSelectAll}
+                    onBulkDelete={handleBulkDelete}
+                    onBulkMoveToFolder={handleBulkMoveToFolder}
+                    onBulkMarkContacted={handleBulkMarkContacted}
+                    onBulkToggleClient={handleBulkToggleClient}
+                    hasClientAccess={hasClientAccess}
+                    selectionMode={selectionMode}
+                    onToggleSelectionMode={handleToggleSelectionMode}
                     disableDrag={!isSidebarVisible}
                   />
                 </>
@@ -832,6 +951,10 @@ const IndexContent = () => {
                     onSelectContact={handleSelectContact}
                     onSelectAll={handleSelectAll}
                     onBulkDelete={handleBulkDelete}
+                    onBulkMoveToFolder={handleBulkMoveToFolder}
+                    onBulkToggleClient={handleBulkToggleClient}
+                    onBulkMarkContacted={handleBulkMarkContacted}
+                    hasClientAccess={hasClientAccess}
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
                     disableDrag={!isSidebarVisible}
@@ -863,7 +986,11 @@ const IndexContent = () => {
                   onSelectContact={handleSelectContact}
                   onSelectAll={handleSelectAll}
                   onBulkDelete={handleBulkDelete}
-                  selectionMode={selectionMode && !showTrash}
+                  onBulkMoveToFolder={handleBulkMoveToFolder}
+                  onBulkToggleClient={handleBulkToggleClient}
+                  onBulkMarkContacted={handleBulkMarkContacted}
+                  hasClientAccess={hasClientAccess}
+                  selectionMode={selectionMode}
                   onToggleSelectionMode={handleToggleSelectionMode}
                   disableDrag={!isSidebarVisible}
                 />

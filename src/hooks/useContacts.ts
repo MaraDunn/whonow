@@ -372,6 +372,69 @@ export const useContacts = () => {
     },
   });
 
+  // Bulk move to folder - move multiple contacts to a folder
+  const bulkMoveToFolder = useMutation({
+    mutationFn: async ({ ids, folderId, folderName }: { ids: string[]; folderId: string | null; folderName?: string }) => {
+      if (!ids || ids.length === 0) {
+        throw new Error("No contacts selected");
+      }
+
+      // Filter out any invalid IDs
+      const validIds = ids.filter(id => id && typeof id === 'string' && id.length > 0);
+      if (validIds.length === 0) {
+        throw new Error("No valid contact IDs provided");
+      }
+
+      console.log("[bulkMoveToFolder] Attempting to move", validIds.length, "contacts to folder:", folderId);
+
+      // Update in batches to avoid potential issues with large arrays or RLS limits
+      const batchSize = 50;
+      let successCount = 0;
+      const errors: string[] = [];
+      
+      for (let i = 0; i < validIds.length; i += batchSize) {
+        const batch = validIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from("contacts")
+          .update({ folder_id: folderId })
+          .in("id", batch)
+          .select("id"); // Select to get count of updated rows
+        
+        if (error) {
+          console.error(`[bulkMoveToFolder] Batch ${Math.floor(i / batchSize) + 1} error:`, error);
+          errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
+        } else {
+          successCount += data?.length || 0;
+          console.log(`[bulkMoveToFolder] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts moved`);
+        }
+      }
+
+      if (successCount === 0 && errors.length > 0) {
+        throw new Error(`Failed to move contacts: ${errors.join("; ")}`);
+      }
+
+      if (errors.length > 0) {
+        // Some succeeded, some failed
+        console.warn(`[bulkMoveToFolder] Partial success: ${successCount} moved, ${errors.length} batches failed`);
+      }
+
+      return { moved: successCount, total: validIds.length, folderId, folderName: folderName || (folderId ? "folder" : "No folder") };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
+      if (result.moved === result.total) {
+        toast.success(`${result.moved} contact${result.moved !== 1 ? "s" : ""} moved to ${result.folderName}`);
+      } else {
+        toast.warning(`${result.moved} of ${result.total} contact${result.total !== 1 ? "s" : ""} moved to ${result.folderName}`);
+      }
+    },
+    onError: (error) => {
+      console.error("[bulkMoveToFolder] Error:", error);
+      toast.error("Failed to move contacts: " + (error instanceof Error ? error.message : "Unknown error"));
+    },
+  });
+
   // Restore from trash
   const restoreContact = useMutation({
     mutationFn: async (id: string) => {
@@ -387,6 +450,68 @@ export const useContacts = () => {
     },
     onError: (error) => {
       toast.error("Failed to restore contact: " + error.message);
+    },
+  });
+
+  // Bulk restore from trash - restore multiple contacts
+  const bulkRestoreContacts = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!ids || ids.length === 0) {
+        throw new Error("No contacts selected");
+      }
+
+      // Filter out any invalid IDs
+      const validIds = ids.filter(id => id && typeof id === 'string' && id.length > 0);
+      if (validIds.length === 0) {
+        throw new Error("No valid contact IDs provided");
+      }
+
+      console.log("[bulkRestoreContacts] Attempting to restore", validIds.length, "contacts");
+
+      // Restore in batches to avoid potential issues with large arrays or RLS limits
+      const batchSize = 50;
+      let successCount = 0;
+      const errors: string[] = [];
+      
+      for (let i = 0; i < validIds.length; i += batchSize) {
+        const batch = validIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from("contacts")
+          .update({ deleted_at: null })
+          .in("id", batch)
+          .select("id"); // Select to get count of updated rows
+        
+        if (error) {
+          console.error(`[bulkRestoreContacts] Batch ${Math.floor(i / batchSize) + 1} error:`, error);
+          errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
+        } else {
+          successCount += data?.length || 0;
+          console.log(`[bulkRestoreContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts restored`);
+        }
+      }
+
+      if (successCount === 0 && errors.length > 0) {
+        throw new Error(`Failed to restore contacts: ${errors.join("; ")}`);
+      }
+
+      if (errors.length > 0) {
+        // Some succeeded, some failed
+        console.warn(`[bulkRestoreContacts] Partial success: ${successCount} restored, ${errors.length} batches failed`);
+      }
+
+      return { restored: successCount, total: validIds.length };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      if (result.restored === result.total) {
+        toast.success(`${result.restored} contact${result.restored !== 1 ? "s" : ""} restored`);
+      } else {
+        toast.warning(`${result.restored} of ${result.total} contact${result.total !== 1 ? "s" : ""} restored`);
+      }
+    },
+    onError: (error) => {
+      console.error("[bulkRestoreContacts] Error:", error);
+      toast.error("Failed to restore contacts: " + (error instanceof Error ? error.message : "Unknown error"));
     },
   });
 
@@ -441,6 +566,71 @@ export const useContacts = () => {
     },
   });
 
+  // Bulk update last contacted timestamp - mark multiple contacts as contacted
+  const bulkUpdateLastContacted = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!ids || ids.length === 0) {
+        throw new Error("No contacts selected");
+      }
+
+      // Filter out any invalid IDs
+      const validIds = ids.filter(id => id && typeof id === 'string' && id.length > 0);
+      if (validIds.length === 0) {
+        throw new Error("No valid contact IDs provided");
+      }
+
+      console.log("[bulkUpdateLastContacted] Attempting to mark", validIds.length, "contacts as contacted");
+
+      const timestamp = new Date().toISOString();
+
+      // Update in batches to avoid potential issues with large arrays or RLS limits
+      const batchSize = 50;
+      let successCount = 0;
+      const errors: string[] = [];
+      
+      for (let i = 0; i < validIds.length; i += batchSize) {
+        const batch = validIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from("contacts")
+          .update({ last_contacted_at: timestamp })
+          .in("id", batch)
+          .select("id"); // Select to get count of updated rows
+        
+        if (error) {
+          console.error(`[bulkUpdateLastContacted] Batch ${Math.floor(i / batchSize) + 1} error:`, error);
+          errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
+        } else {
+          successCount += data?.length || 0;
+          console.log(`[bulkUpdateLastContacted] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
+        }
+      }
+
+      if (successCount === 0 && errors.length > 0) {
+        throw new Error(`Failed to update contacts: ${errors.join("; ")}`);
+      }
+
+      if (errors.length > 0) {
+        // Some succeeded, some failed
+        console.warn(`[bulkUpdateLastContacted] Partial success: ${successCount} updated, ${errors.length} batches failed`);
+      }
+
+      return { updated: successCount, total: validIds.length };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
+      if (result.updated === result.total) {
+        toast.success(`${result.updated} contact${result.updated !== 1 ? "s" : ""} marked as contacted`);
+      } else {
+        toast.warning(`${result.updated} of ${result.total} contact${result.total !== 1 ? "s" : ""} marked as contacted`);
+      }
+    },
+    onError: (error) => {
+      console.error("[bulkUpdateLastContacted] Error:", error);
+      toast.error("Failed to update contacts: " + (error instanceof Error ? error.message : "Unknown error"));
+    },
+  });
+
   // Toggle client status
   const toggleClientStatus = useMutation({
     mutationFn: async ({ id, isClient }: { id: string; isClient: boolean }) => {
@@ -456,6 +646,68 @@ export const useContacts = () => {
     },
     onError: (error) => {
       toast.error("Failed to update contact: " + error.message);
+    },
+  });
+
+  // Bulk toggle client status - mark multiple contacts as clients
+  const bulkToggleClientStatus = useMutation({
+    mutationFn: async ({ ids, isClient }: { ids: string[]; isClient: boolean }) => {
+      if (!ids || ids.length === 0) {
+        throw new Error("No contacts selected");
+      }
+
+      // Filter out any invalid IDs
+      const validIds = ids.filter(id => id && typeof id === 'string' && id.length > 0);
+      if (validIds.length === 0) {
+        throw new Error("No valid contact IDs provided");
+      }
+
+      console.log("[bulkToggleClientStatus] Attempting to mark", validIds.length, "contacts as", isClient ? "clients" : "non-clients");
+
+      // Update in batches to avoid potential issues with large arrays or RLS limits
+      const batchSize = 50;
+      let successCount = 0;
+      const errors: string[] = [];
+      
+      for (let i = 0; i < validIds.length; i += batchSize) {
+        const batch = validIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from("contacts")
+          .update({ is_client: isClient })
+          .in("id", batch)
+          .select("id"); // Select to get count of updated rows
+        
+        if (error) {
+          console.error(`[bulkToggleClientStatus] Batch ${Math.floor(i / batchSize) + 1} error:`, error);
+          errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
+        } else {
+          successCount += data?.length || 0;
+          console.log(`[bulkToggleClientStatus] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
+        }
+      }
+
+      if (successCount === 0 && errors.length > 0) {
+        throw new Error(`Failed to update contacts: ${errors.join("; ")}`);
+      }
+
+      if (errors.length > 0) {
+        // Some succeeded, some failed
+        console.warn(`[bulkToggleClientStatus] Partial success: ${successCount} updated, ${errors.length} batches failed`);
+      }
+
+      return { updated: successCount, total: validIds.length, isClient };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      if (result.updated === result.total) {
+        toast.success(`${result.updated} contact${result.updated !== 1 ? "s" : ""} ${result.isClient ? "marked as client" : "removed from clients"}`);
+      } else {
+        toast.warning(`${result.updated} of ${result.total} contact${result.total !== 1 ? "s" : ""} ${result.isClient ? "marked as client" : "removed from clients"}`);
+      }
+    },
+    onError: (error) => {
+      console.error("[bulkToggleClientStatus] Error:", error);
+      toast.error("Failed to update contacts: " + (error instanceof Error ? error.message : "Unknown error"));
     },
   });
 
@@ -522,11 +774,15 @@ export const useContacts = () => {
     updateContact: updateContact.mutate,
     deleteContact: deleteContact.mutate,
     bulkDeleteContacts: bulkDeleteContacts.mutate,
+    bulkMoveToFolder: bulkMoveToFolder.mutate,
     restoreContact: restoreContact.mutate,
+    bulkRestoreContacts: bulkRestoreContacts.mutate,
     permanentlyDeleteContact: permanentlyDeleteContact.mutate,
     emptyTrash: emptyTrash.mutate,
     updateLastContacted: updateLastContacted.mutate,
+    bulkUpdateLastContacted: bulkUpdateLastContacted.mutate,
     toggleClientStatus: toggleClientStatus.mutate,
+    bulkToggleClientStatus: bulkToggleClientStatus.mutate,
     findDuplicatesForContact,
     mergeContact: mergeContact.mutate,
     isMerging: mergeContact.isPending,

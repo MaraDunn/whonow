@@ -57,11 +57,11 @@ export function DraggableContactCard({
   selectionMode = false,
   disableDrag = false,
 }: DraggableContactCardProps) {
-  // Disable dragging in compact mode (mobile/tablet), trash view, or when sidebar is not visible
+  // Disable dragging in compact mode (mobile/tablet), trash view, selection mode, or when sidebar is not visible
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: contact.id,
     data: { contact },
-    disabled: isTrashView || compact || disableDrag,
+    disabled: isTrashView || compact || disableDrag || selectionMode,
   });
 
   // Hide the original element completely when dragging - the DragOverlay shows the preview
@@ -98,7 +98,7 @@ export function DraggableContactCard({
     );
   }
 
-  const isDragDisabled = isTrashView || compact || disableDrag;
+  const isDragDisabled = isTrashView || compact || disableDrag || selectionMode;
   
   return (
     <div
@@ -128,6 +128,9 @@ export function DraggableContactCard({
         compact={compact}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
+        isSelected={isSelected}
+        onSelect={onSelect}
+        selectionMode={selectionMode}
       />
     </div>
   );

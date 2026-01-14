@@ -17,6 +17,17 @@ interface TeamDirectoryGridProps {
   onUpdateFolder?: (contactId: string, folderId: string | null) => void;
   showOwnershipBadge?: boolean;
   onMarkContacted?: (id: string) => void;
+  // Selection props
+  selectedContactIds?: Set<string>;
+  onSelectContact?: (id: string, selected: boolean) => void;
+  onSelectAll?: (selected: boolean) => void;
+  onBulkDelete?: (ids: string[]) => void;
+  onBulkMoveToFolder?: (ids: string[], folderId: string | null) => void;
+  onBulkMarkContacted?: (ids: string[]) => void;
+  onBulkToggleClient?: (ids: string[], isClient: boolean) => void;
+  hasClientAccess?: boolean;
+  selectionMode?: boolean;
+  onToggleSelectionMode?: () => void;
   disableDrag?: boolean;
 }
 
@@ -31,6 +42,16 @@ export function TeamDirectoryGrid({
   onUpdateFolder,
   showOwnershipBadge = false,
   onMarkContacted,
+  selectedContactIds = new Set(),
+  onSelectContact,
+  onSelectAll,
+  onBulkDelete,
+  onBulkMoveToFolder,
+  onBulkMarkContacted,
+  onBulkToggleClient,
+  hasClientAccess = false,
+  selectionMode = false,
+  onToggleSelectionMode,
   disableDrag = false,
 }: TeamDirectoryGridProps) {
   const responsiveView = useResponsiveView();
@@ -67,6 +88,9 @@ export function TeamDirectoryGrid({
     ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3"
     : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6";
 
+  const allSelected = members.length > 0 && members.every(m => selectedContactIds.has(m.id));
+  const selectedCount = selectedContactIds.size;
+
   return (
     <div className={gridClasses}>
       {members.map((member, index) => (
@@ -88,9 +112,9 @@ export function TeamDirectoryGrid({
           compact={isCompactMode}
           isExpanded={expandedContactId === member.id}
           onToggleExpand={() => handleToggleExpand(member.id)}
-          isSelected={false}
-          onSelect={undefined}
-          selectionMode={false}
+          isSelected={selectedContactIds.has(member.id)}
+          onSelect={onSelectContact ? (selected) => onSelectContact(member.id, selected) : undefined}
+          selectionMode={selectionMode}
           disableDrag={disableDrag}
         />
       ))}

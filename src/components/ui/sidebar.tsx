@@ -71,8 +71,10 @@ const SidebarProvider = React.forwardRef<
   );
 
   // Helper to toggle the sidebar.
+  // Check screen width to determine if we should use mobile Sheet behavior
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
+    const isSmallScreen = typeof window !== "undefined" && window.innerWidth < 768;
+    return (isMobile || isSmallScreen) ? setOpenMobile((open) => !open) : setOpen((open) => !open);
   }, [isMobile, setOpen, setOpenMobile]);
 
   // Adds a keyboard shortcut to toggle the sidebar.
@@ -137,6 +139,21 @@ const Sidebar = React.forwardRef<
   }
 >(({ side = "left", variant = "sidebar", collapsible = "offcanvas", className, children, ...props }, ref) => {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const [isSmallScreen, setIsSmallScreen] = React.useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768; // md breakpoint
+  });
+
+  // Check screen width to determine if sidebar should be a Sheet
+  React.useEffect(() => {
+    const checkScreenSize = () => {
+      setIsSmallScreen(window.innerWidth < 768); // md breakpoint
+    };
+    
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+    return () => window.removeEventListener("resize", checkScreenSize);
+  }, []);
 
   if (collapsible === "none") {
     return (
@@ -150,7 +167,8 @@ const Sidebar = React.forwardRef<
     );
   }
 
-  if (isMobile) {
+  // Show as Sheet on mobile devices OR small screens (< 768px)
+  if (isMobile || isSmallScreen) {
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent

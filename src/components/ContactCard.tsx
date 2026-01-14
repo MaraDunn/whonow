@@ -167,7 +167,7 @@ export function ContactCard({
       >
         {/* Selection checkbox */}
         {selectionMode && onSelect && (
-          <div className="absolute top-1.5 left-1.5 z-10" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute top-1.5 right-1.5 z-10" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={isSelected}
               onCheckedChange={(checked) => onSelect(checked === true)}
@@ -220,7 +220,7 @@ export function ContactCard({
       >
         {/* Selection checkbox */}
         {selectionMode && onSelect && (
-          <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={isSelected}
               onCheckedChange={(checked) => onSelect(checked === true)}
@@ -463,7 +463,7 @@ export function ContactCard({
     >
       {/* Selection checkbox */}
       {selectionMode && onSelect && (
-        <div className="absolute top-4 left-4 z-10" onClick={(e) => e.stopPropagation()}>
+        <div className="absolute top-4 right-4 z-10" onClick={(e) => e.stopPropagation()}>
           <Checkbox
             checked={isSelected}
             onCheckedChange={(checked) => onSelect(checked === true)}
@@ -472,7 +472,7 @@ export function ContactCard({
         </div>
       )}
       {/* Folder indicator badge - always reserve space for consistent height */}
-      <div className="h-7 mb-1">
+      <div className="h-7 mb-1 -mt-1">
         {folders.length > 0 && onUpdateFolder && !isTrashView ? (
           <Popover open={folderPopoverOpen} onOpenChange={setFolderPopoverOpen}>
             <PopoverTrigger asChild>
