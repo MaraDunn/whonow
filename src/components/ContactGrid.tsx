@@ -34,7 +34,6 @@ interface ContactGridProps {
   hasClientAccess?: boolean;
   selectionMode?: boolean;
   onToggleSelectionMode?: () => void;
-  disableDrag?: boolean;
 }
 
 export function ContactGrid({ 
@@ -63,7 +62,6 @@ export function ContactGrid({
   hasClientAccess = false,
   selectionMode = false,
   onToggleSelectionMode,
-  disableDrag = false,
 }: ContactGridProps) {
   const responsiveView = useResponsiveView();
   const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
@@ -154,7 +152,6 @@ export function ContactGrid({
             isSelected={selectedContactIds.has(contact.id)}
             onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
             selectionMode={selectionMode}
-            disableDrag={disableDrag}
           />
         ))}
       </div>

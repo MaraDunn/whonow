@@ -1,20 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  DndContext,
-  DragEndEvent,
-  DragStartEvent,
-  DragOverlay,
-  pointerWithin,
-  useSensor,
-  useSensors,
-  PointerSensor,
-  TouchSensor,
-  KeyboardSensor,
-  DragOverEvent,
-} from "@dnd-kit/core";
-import type { Modifier } from "@dnd-kit/core";
-
 import { useSearchParams } from "react-router-dom";
 import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
@@ -24,7 +9,6 @@ import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
 import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
-import { DragPreview } from "@/components/DragPreview";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
@@ -46,67 +30,6 @@ import { supabase } from "@/integrations/supabase/client";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 
-// Center the drag preview on the cursor with a small vertical offset for better visibility
-// This ensures the preview follows the mouse accurately regardless of where the user initially clicked
-const centerOnCursor: Modifier = ({
-  activatorEvent,
-  activeNodeRect,
-  overlayNodeRect,
-  transform,
-}) => {
-  if (!activatorEvent || !activeNodeRect || !overlayNodeRect) return transform;
-
-  // Get the initial click position in window coordinates
-  let initialClientX = 0;
-  let initialClientY = 0;
-  
-  if ("touches" in activatorEvent) {
-    const te = activatorEvent as TouchEvent;
-    const t = te.touches?.[0] ?? te.changedTouches?.[0];
-    if (t) {
-      initialClientX = t.clientX;
-      initialClientY = t.clientY;
-    }
-  } else if ("clientX" in activatorEvent && "clientY" in activatorEvent) {
-    const e = activatorEvent as MouseEvent;
-    initialClientX = e.clientX;
-    initialClientY = e.clientY;
-  }
-
-  // Calculate where the cursor was relative to the original card when dragging started
-  const initialX = initialClientX - activeNodeRect.left;
-  const initialY = initialClientY - activeNodeRect.top;
-
-  // The default transform maintains the grab point at initialX from the left edge.
-  // We want to center the preview, so we need to shift it.
-  //
-  // Current behavior: overlay left edge = activeNodeRect.left + transform.x
-  //                   cursor position relative to overlay = initialX
-  //
-  // Desired behavior: overlay center = cursor position
-  //                   So: overlay left edge = cursor position - overlayNodeRect.width / 2
-  //
-  // The transform.x currently positions the overlay so:
-  //   activeNodeRect.left + transform.x + initialX = cursor position (at drag start)
-  //
-  // We want:
-  //   activeNodeRect.left + transform.x + centerOffsetX + overlayNodeRect.width / 2 = cursor position
-  //
-  // So: transform.x + centerOffsetX + overlayNodeRect.width / 2 = transform.x + initialX
-  //     centerOffsetX = initialX - overlayNodeRect.width / 2
-  
-  const centerOffsetX = initialX - (overlayNodeRect.width / 2);
-  
-  // Small vertical offset above cursor for better visibility
-  const topOffsetY = 15 - initialY;
-
-  return {
-    ...transform,
-    x: transform.x + centerOffsetX,
-    y: transform.y + topOffsetY,
-  };
-};
-
 const IndexContent = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -115,28 +38,7 @@ const IndexContent = () => {
   const { canAccessFeature } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
-  const { isMobile } = useSidebar();
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // Track if screen is small (< 768px) - same logic as sidebar uses
-  const [isSmallScreen, setIsSmallScreen] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.innerWidth < 768;
-  });
-
-  // Check screen width to determine if sidebar is a Sheet (not always visible)
-  useEffect(() => {
-    const checkScreenSize = () => {
-      setIsSmallScreen(window.innerWidth < 768);
-    };
-    
-    checkScreenSize();
-    window.addEventListener("resize", checkScreenSize);
-    return () => window.removeEventListener("resize", checkScreenSize);
-  }, []);
-
-  // Disable drag when sidebar is not visible (i.e., when it's a Sheet on mobile/small screens)
-  const isSidebarVisible = !isMobile && !isSmallScreen;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"quick" | "full">("full");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -145,7 +47,6 @@ const IndexContent = () => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importDefaultTab, setImportDefaultTab] = useState<string | undefined>(undefined);
   const [showTrash, setShowTrash] = useState(false);
@@ -454,88 +355,6 @@ const IndexContent = () => {
     return counts;
   }, [contacts]);
 
-
-  // Track which folder is being hovered during drag
-  const [overId, setOverId] = useState<string | null>(null);
-
-  // Configure drag sensors with activation constraints
-  const pointerSensor = useSensor(PointerSensor, {
-    activationConstraint: {
-      distance: 8, // Require 8px movement before starting drag
-    },
-  });
-  const touchSensor = useSensor(TouchSensor, {
-    activationConstraint: {
-      delay: 200, // 200ms hold before drag starts on touch
-      tolerance: 5,
-    },
-  });
-  const keyboardSensor = useSensor(KeyboardSensor);
-
-  const sensors = useSensors(pointerSensor, touchSensor, keyboardSensor);
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const contact = event.active.data.current?.contact as Contact | undefined;
-    if (contact) {
-      setActiveContact(contact);
-      // Add haptic feedback for touch devices
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }
-  };
-
-  const handleDragOver = (event: DragOverEvent) => {
-    const overId = event.over?.id;
-    setOverId(overId ? String(overId) : null);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveContact(null);
-    setOverId(null);
-
-    const { active, over } = event;
-    if (!over) return;
-
-    const contact = active.data.current?.contact as Contact | undefined;
-    const targetFolderId = over.data.current?.folderId as string | null | undefined;
-    const isAllContacts = over.data.current?.isAllContacts as boolean | undefined;
-
-    if (!contact) return;
-
-    // Determine the new folderId: if dropped on All Contacts, remove from folder (null)
-    const newFolderId = isAllContacts ? null : targetFolderId;
-
-    // If dropped on the same folder, do nothing
-    if (contact.folderId === newFolderId) return;
-    if (!contact.folderId && newFolderId === null) return;
-
-    // Update the contact's folder
-    updateContact({
-      ...contact,
-      folderId: newFolderId || undefined,
-    });
-
-    const folderName = newFolderId
-      ? folders.find((f) => f.id === newFolderId)?.name
-      : "All Contacts";
-    
-    const message = newFolderId
-      ? `Moved "${contact.name}" to ${folderName}`
-      : `Removed "${contact.name}" from folder`;
-    toast.success(message);
-
-    // Success haptic
-    if (navigator.vibrate) {
-      navigator.vibrate([30, 50, 30]);
-    }
-  };
-
-  const handleDragCancel = () => {
-    setActiveContact(null);
-    setOverId(null);
-  };
-
   const handleSaveContact = (contactData: Omit<Contact, "id">) => {
     if (editingContact) {
       updateContact({ ...contactData, id: editingContact.id });
@@ -723,14 +542,6 @@ const IndexContent = () => {
   }, [queryClient]);
 
   return (
-      <DndContext
-        sensors={sensors}
-        collisionDetection={pointerWithin}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
-      >
         <div className="min-h-screen bg-background flex w-full overflow-x-hidden">
           {/* Folder Sidebar */}
           <FolderSidebar
@@ -902,7 +713,6 @@ const IndexContent = () => {
                     hasClientAccess={hasClientAccess}
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
-                    disableDrag={!isSidebarVisible}
                   />
                 </>
               ) : showClientDirectory ? (
@@ -957,7 +767,6 @@ const IndexContent = () => {
                     hasClientAccess={hasClientAccess}
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
-                    disableDrag={!isSidebarVisible}
                   />
                 </>
               ) : (
@@ -992,7 +801,6 @@ const IndexContent = () => {
                   hasClientAccess={hasClientAccess}
                   selectionMode={selectionMode}
                   onToggleSelectionMode={handleToggleSelectionMode}
-                  disableDrag={!isSidebarVisible}
                 />
               )}
 
@@ -1073,18 +881,6 @@ const IndexContent = () => {
             </div>
           </div>
         </div>
-
-        {/* Drag Overlay - compact preview anchored to cursor for better folder visibility */}
-        <DragOverlay
-          dropAnimation={{
-            duration: 250,
-            easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
-          }}
-          modifiers={[centerOnCursor]}
-        >
-          {activeContact ? <DragPreview contact={activeContact} /> : null}
-        </DragOverlay>
-      </DndContext>
   );
 };
 
