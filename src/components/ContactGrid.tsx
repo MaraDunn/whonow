@@ -14,6 +14,7 @@ interface ContactGridProps {
   onEditContact: (contact: Contact) => void;
   onViewContact?: (contact: Contact) => void;
   isTrashView?: boolean;
+  trashCount?: number; // Accurate count of trashed contacts (not limited by 1000)
   onDeleteContact?: (id: string) => void;
   onRestoreContact?: (id: string) => void;
   onPermanentlyDelete?: (id: string) => void;
@@ -43,6 +44,7 @@ export function ContactGrid({
   onEditContact,
   onViewContact,
   isTrashView = false,
+  trashCount,
   onDeleteContact,
   onRestoreContact,
   onPermanentlyDelete,
@@ -111,10 +113,10 @@ export function ContactGrid({
 
   return (
     <div>
-      {isTrashView && contacts.length > 0 && (
+      {isTrashView && (contacts.length > 0 || (trashCount && trashCount > 0)) && (
         <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            {contacts.length} contact{contacts.length !== 1 ? "s" : ""} in trash
+            {trashCount !== undefined ? trashCount : contacts.length} contact{(trashCount !== undefined ? trashCount : contacts.length) !== 1 ? "s" : ""} in trash
           </p>
           <Button
             variant="destructive"

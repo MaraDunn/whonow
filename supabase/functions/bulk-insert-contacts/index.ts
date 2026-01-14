@@ -1,11 +1,35 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Inline launch mode check to avoid shared module import issues
+function checkLaunchMode(): { blocked: boolean; mode: string } {
+  const mode = Deno.env.get("APP_LAUNCH_MODE") || "live";
+  return {
+    blocked: mode === "waitlist",
+    mode,
+  };
+}
+
+function waitlistModeBlockedResponse(origin?: string | null): Response {
+  return new Response(
+    JSON.stringify({
+      error: "Service is in waitlist mode",
+      message: "This feature is not yet available. Please check back later.",
+    }),
+    {
+      status: 503,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -227,46 +251,78 @@ serve(async (req) => {
     });
 
     // Check for existing contacts to find duplicates
-    // Fetch all contacts the user has access to (owned, company shared, or globally shared)
+    // Optimized: Only fetch contacts that might be duplicates (have email or phone)
+    // Use pagination to handle large contact lists
     let existingContacts: any[] = [];
     
-    // Build query to get contacts user has access to
-    // Check: (owner_id = user.id) OR (company_id = companyId) OR (is_shared = true)
-    // AND (email IS NOT NULL OR phone IS NOT NULL)
-    let query = supabase
-      .from("contacts")
-      .select("*");
+    // Extract all emails and phones from contacts to insert (normalized)
+    const emailsToCheck = contactsToInsert
+      .map(c => normalizeEmail(c.email))
+      .filter(e => e.length > 0);
+    const phonesToCheck = contactsToInsert
+      .map(c => normalizePhone(c.phone))
+      .filter(p => p.length > 0);
 
-    // Build OR condition for access control
-    const accessConditions: string[] = [];
-    if (user.id) {
-      accessConditions.push(`owner_id.eq.${user.id}`);
-    }
-    if (companyId) {
-      accessConditions.push(`company_id.eq.${companyId}`);
-    }
-    accessConditions.push(`is_shared.eq.true`);
+    // Only check for duplicates if we have emails or phones to check
+    if (emailsToCheck.length > 0 || phonesToCheck.length > 0) {
+      // Build base query to get contacts user has access to that might be duplicates
+      const accessConditions: string[] = [];
+      if (user.id) {
+        accessConditions.push(`owner_id.eq.${user.id}`);
+      }
+      if (companyId) {
+        accessConditions.push(`company_id.eq.${companyId}`);
+      }
+      accessConditions.push(`is_shared.eq.true`);
 
-    if (accessConditions.length > 0) {
-      query = query.or(accessConditions.join(','));
-    }
+      // Fetch in pages to avoid hitting 1000 row limit
+      const pageSize = 1000;
+      let page = 0;
+      let hasMore = true;
+      const allContacts: any[] = [];
 
-    // Also filter to only contacts with email or phone (potential duplicates)
-    query = query.or('email.not.is.null,phone.not.is.null');
+      while (hasMore) {
+        let query = supabase
+          .from("contacts")
+          .select("id, email, phone, tags, description, name, company, role, avatar, folder_id, address, city, state, zip_code, country, latitude, longitude, business_name, business_type")
+          .or('email.not.is.null,phone.not.is.null') // Only contacts with email or phone
+          .range(page * pageSize, (page + 1) * pageSize - 1);
 
-    const { data: allContacts, error: fetchError } = await query;
+        if (accessConditions.length > 0) {
+          query = query.or(accessConditions.join(','));
+        }
 
-    if (fetchError) {
-      console.error("[bulk-insert-contacts] Error fetching existing contacts:", fetchError);
-    } else {
-      existingContacts = allContacts || [];
+        const { data: pageContacts, error: fetchError } = await query;
+
+        if (fetchError) {
+          console.error(`[bulk-insert-contacts] Error fetching existing contacts (page ${page}):`, fetchError);
+          // If query fails, break and use what we have (better than failing completely)
+          console.warn("[bulk-insert-contacts] Stopping duplicate check due to error, using contacts found so far");
+          break;
+        }
+
+        if (!pageContacts || pageContacts.length === 0) {
+          hasMore = false;
+        } else {
+          allContacts.push(...pageContacts);
+          // If we got fewer than pageSize, we've reached the end
+          hasMore = pageContacts.length === pageSize;
+          page++;
+          
+          // Safety limit: don't check more than 5000 contacts to avoid timeout
+          if (allContacts.length >= 5000) {
+            console.warn(`[bulk-insert-contacts] Reached safety limit of 5000 contacts for duplicate check`);
+            break;
+          }
+        }
+      }
       
       // Filter to only contacts that match by normalized email or phone
-      existingContacts = existingContacts.filter(existing => {
+      existingContacts = allContacts.filter(existing => {
         return contactsToInsert.some(newContact => areDuplicates(newContact, existing));
       });
       
-      console.log(`[bulk-insert-contacts] Found ${existingContacts.length} existing duplicate contacts out of ${allContacts?.length || 0} total contacts`);
+      console.log(`[bulk-insert-contacts] Found ${existingContacts.length} existing duplicate contacts out of ${allContacts.length} total contacts checked`);
     }
 
     // Separate contacts into new and duplicates

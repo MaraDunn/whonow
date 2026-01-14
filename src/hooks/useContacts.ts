@@ -106,20 +106,73 @@ export const useContacts = () => {
 
   // Fetch total count of active contacts (not limited by 1000 row default)
   // Exclude "my-profile" contacts to match the contacts array filtering
+  // Uses a database function to ensure accurate count regardless of PostgREST limits
   const { data: totalCount = 0 } = useQuery({
     queryKey: ["contacts", "count", user?.id],
     queryFn: async () => {
-      // Fetch data and filter in JavaScript to avoid PostgREST syntax issues
-      const { data, error } = await supabase
-        .from("contacts")
-        .select("*")
-        .is("deleted_at", null);
+      if (!user?.id) return 0;
 
-      if (error) throw error;
-      // Filter out contacts with "my-profile" tag and count
-      return (data as DbContact[])
-        .filter((contact) => !contact.tags?.includes("my-profile"))
-        .length;
+      // Use database function to count contacts server-side
+      // This bypasses PostgREST's 1000 row limit and respects RLS policies
+      const { data, error } = await supabase.rpc("count_active_contacts", {
+        _user_id: user.id,
+      });
+
+      if (error) {
+        console.error("Error counting contacts:", error);
+        throw error;
+      }
+
+      return data || 0;
+    },
+    enabled: !!user,
+  });
+
+  // Fetch accurate counts using database functions (not limited by 1000 row default)
+  const { data: personalContactsCount = 0 } = useQuery({
+    queryKey: ["contacts", "personal-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { data, error } = await supabase.rpc("count_personal_contacts", {
+        _user_id: user.id,
+      });
+      if (error) {
+        console.error("Error counting personal contacts:", error);
+        return 0; // Fallback to 0 if function doesn't exist yet
+      }
+      return data || 0;
+    },
+    enabled: !!user,
+  });
+
+  const { data: sharedContactsCount = 0 } = useQuery({
+    queryKey: ["contacts", "shared-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { data, error } = await supabase.rpc("count_shared_contacts", {
+        _user_id: user.id,
+      });
+      if (error) {
+        console.error("Error counting shared contacts:", error);
+        return 0; // Fallback to 0 if function doesn't exist yet
+      }
+      return data || 0;
+    },
+    enabled: !!user && !!profile?.companyId,
+  });
+
+  const { data: clientCount = 0 } = useQuery({
+    queryKey: ["contacts", "client-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { data, error } = await supabase.rpc("count_client_contacts", {
+        _user_id: user.id,
+      });
+      if (error) {
+        console.error("Error counting client contacts:", error);
+        return 0; // Fallback to 0 if function doesn't exist yet
+      }
+      return data || 0;
     },
     enabled: !!user,
   });
@@ -143,7 +196,27 @@ export const useContacts = () => {
     enabled: !!user,
   });
 
-  // Fetch trashed contacts
+  // Fetch count of trashed contacts (accurate count, not limited by 1000)
+  const { data: trashCount = 0 } = useQuery({
+    queryKey: ["contacts", "trash-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+
+      const { data, error } = await supabase.rpc("count_trashed_contacts", {
+        _user_id: user.id,
+      });
+
+      if (error) {
+        console.error("Error counting trashed contacts:", error);
+        throw error;
+      }
+
+      return data || 0;
+    },
+    enabled: !!user,
+  });
+
+  // Fetch trashed contacts (for display - may be limited to 1000 for performance)
   const { data: trashedContacts = [], isLoading: trashLoading } = useQuery({
     queryKey: ["contacts", "trash", user?.id],
     queryFn: async () => {
@@ -151,7 +224,8 @@ export const useContacts = () => {
         .from("contacts")
         .select("*")
         .not("deleted_at", "is", null)
-        .order("deleted_at", { ascending: false });
+        .order("deleted_at", { ascending: false })
+        .limit(1000); // Limit for display, but we have accurate count from trashCount
 
       if (error) throw error;
       return (data as DbContact[]).map(mapDbToContact);
@@ -768,6 +842,10 @@ export const useContacts = () => {
     contacts,
     totalCount,
     trashedContacts,
+    trashCount,
+    personalContactsCount,
+    sharedContactsCount,
+    clientCount,
     isLoading,
     trashLoading,
     addContact: addContact.mutate,

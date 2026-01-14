@@ -68,6 +68,10 @@ const IndexContent = () => {
   const { 
     contacts, 
     trashedContacts,
+    trashCount,
+    personalContactsCount: accuratePersonalCount,
+    sharedContactsCount: accurateSharedCount,
+    clientCount: accurateClientCount,
     isLoading: contactsLoading, 
     addContact, 
     updateContact,
@@ -140,11 +144,13 @@ const IndexContent = () => {
     return filtered;
   }, [contacts, trashedContacts, selectedFolderId, showTrash, ownershipFilter, company]);
 
-  // Calculate personal/shared counts
-  const personalContactsCount = useMemo(() => 
+  // Use accurate counts from database functions (fallback to array length if not available)
+  const fallbackPersonalCount = useMemo(() => 
     contacts.filter(c => !c.isShared).length, [contacts]);
-  const sharedContactsCount = useMemo(() => 
+  const fallbackSharedCount = useMemo(() => 
     contacts.filter(c => c.isShared).length, [contacts]);
+  const personalContactsCount = accuratePersonalCount > 0 ? accuratePersonalCount : fallbackPersonalCount;
+  const sharedContactsCount = accurateSharedCount > 0 ? accurateSharedCount : fallbackSharedCount;
 
   // Client directory: only clients, sorted based on selected sort option
   const clientDirectoryContacts = useMemo(() => {
@@ -175,8 +181,9 @@ const IndexContent = () => {
     });
   }, [contacts, clientSortOption]);
 
-  // Count of clients for sidebar
-  const clientCount = useMemo(() => contacts.filter(c => c.isClient).length, [contacts]);
+  // Count of clients for sidebar - use accurate count from database function
+  const fallbackClientCount = useMemo(() => contacts.filter(c => c.isClient).length, [contacts]);
+  const clientCount = accurateClientCount > 0 ? accurateClientCount : fallbackClientCount;
 
   // Filtered team contacts: filter by selectedTeamFolderId when a team folder is selected
   const filteredTeamContacts = useMemo(() => {
@@ -235,10 +242,92 @@ const IndexContent = () => {
     });
   };
 
-  const handleSelectAll = (selected: boolean) => {
+  const handleSelectAll = async (selected: boolean) => {
     if (selected) {
-      // Use filteredContacts which contains the currently visible contacts
-      setSelectedContactIds(new Set(filteredContacts.map(c => c.id)));
+      // Fetch all contact IDs with pagination to avoid 1000 row limit
+      // This ensures we select all contacts that match the current filters
+      try {
+        const allIds: string[] = [];
+        const pageSize = 1000;
+        let page = 0;
+        let hasMore = true;
+
+        // Handle trash view differently
+        if (showTrash) {
+          // For trash, fetch all trashed contacts
+          while (hasMore) {
+            let query = supabase
+              .from("contacts")
+              .select("id")
+              .not("deleted_at", "is", null)
+              .order("deleted_at", { ascending: false })
+              .range(page * pageSize, (page + 1) * pageSize - 1);
+
+            const { data, error } = await query;
+
+            if (error) {
+              console.error("Error fetching trashed contact IDs:", error);
+              setSelectedContactIds(new Set(filteredContacts.map(c => c.id)));
+              return;
+            }
+
+            if (!data || data.length === 0) {
+              hasMore = false;
+            } else {
+              allIds.push(...data.map((c: any) => c.id));
+              hasMore = data.length === pageSize;
+              page++;
+            }
+          }
+        } else {
+          // For active contacts, match the same filters as folderFilteredContacts
+          while (hasMore) {
+            let query = supabase
+              .from("contacts")
+              .select("id, folder_id, is_shared, tags")
+              .is("deleted_at", null)
+              .range(page * pageSize, (page + 1) * pageSize - 1);
+
+            // Apply folder filter if active
+            if (selectedFolderId !== null) {
+              query = query.eq("folder_id", selectedFolderId);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+              console.error("Error fetching contact IDs:", error);
+              setSelectedContactIds(new Set(filteredContacts.map(c => c.id)));
+              return;
+            }
+
+            if (!data || data.length === 0) {
+              hasMore = false;
+            } else {
+              // Filter out my-profile contacts and apply ownership filter
+              const filtered = data
+                .filter((c: any) => !c.tags?.includes("my-profile"))
+                .filter((c: any) => {
+                  if (company && ownershipFilter !== "all") {
+                    return ownershipFilter === "shared" ? c.is_shared : !c.is_shared;
+                  }
+                  return true;
+                })
+                .map((c: any) => c.id);
+
+              allIds.push(...filtered);
+              hasMore = data.length === pageSize;
+              page++;
+            }
+          }
+        }
+
+        setSelectedContactIds(new Set(allIds));
+      } catch (err) {
+        console.error("Error in handleSelectAll:", err);
+        // Fallback to using filteredContacts (may be limited to 1000)
+        setSelectedContactIds(new Set(filteredContacts.map(c => c.id)));
+      }
     } else {
       setSelectedContactIds(new Set());
     }
@@ -468,6 +557,10 @@ const IndexContent = () => {
               const errorMsg = data.error || data.message || `HTTP ${resp.status}`;
               console.error(`Batch ${i + 1} error (${resp.status}):`, errorMsg, data);
               allErrors.push(`Batch ${i + 1}: ${errorMsg}`);
+              // Add delay before continuing to avoid rate limits
+              if (i < batches.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
               continue;
             }
 
@@ -477,6 +570,10 @@ const IndexContent = () => {
               if (data.errors) {
                 allErrors.push(...data.errors);
               }
+              // Add delay before continuing
+              if (i < batches.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
               continue;
             }
 
@@ -484,10 +581,21 @@ const IndexContent = () => {
             totalMerged += data.merged || 0;
             totalSkipped += data.skipped || 0;
             console.log(`Batch ${i + 1} completed: ${data.inserted || 0} inserted, ${data.merged || 0} merged, ${data.skipped || 0} skipped`);
+            
+            // Add a small delay between batches to avoid rate limiting and give the database time to process
+            // Longer delay after every 5 batches to prevent timeouts
+            if (i < batches.length - 1) {
+              const delay = (i + 1) % 5 === 0 ? 2000 : 500; // 2 second delay every 5 batches, 500ms otherwise
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
           } catch (err) {
             const errorMsg = err instanceof Error ? err.message : "Unknown error";
             console.error(`Batch ${i + 1} exception:`, err);
             allErrors.push(`Batch ${i + 1}: ${errorMsg}`);
+            // Add delay before continuing
+            if (i < batches.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
             continue;
           }
         }
@@ -554,7 +662,7 @@ const IndexContent = () => {
             onDeleteFolder={deleteFolder}
             contactCountByFolder={contactCountByFolder}
             totalContacts={totalCount}
-            trashCount={trashedContacts.length}
+            trashCount={trashCount}
             showTrash={showTrash}
             onSelectTrash={handleSelectTrash}
             companyMembers={teamContacts}
@@ -777,6 +885,7 @@ const IndexContent = () => {
                   onEditContact={handleEditContact}
                   onViewContact={handleViewContact}
                   isTrashView={showTrash}
+                  trashCount={showTrash ? trashCount : undefined}
                   onDeleteContact={deleteContact}
                   onRestoreContact={restoreContact}
                   onPermanentlyDelete={permanentlyDeleteContact}
