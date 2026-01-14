@@ -12,7 +12,7 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
   const navigate = useNavigate();
 
   return (
-    <section className="py-24 sm:py-32">
+    <section className="py-24 sm:py-32 bg-background">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <div className="relative">
           {/* Background glow */}

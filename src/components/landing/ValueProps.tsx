@@ -25,7 +25,7 @@ const features = [
 
 export const ValueProps = () => {
   return (
-    <section id="features" className="py-24 sm:py-32 bg-muted/30">
+    <section id="features" className="py-24 sm:py-32 bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section header */}
         <div className="text-center mb-16">

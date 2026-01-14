@@ -37,7 +37,7 @@
     --radius: 0.75rem;
 
     /* Custom tokens */
-    --gradient-hero: linear-gradient(135deg, hsl(172 66% 40%) 0%, hsl(190 70% 45%) 100%);
+    --gradient-hero: linear-gradient(135deg, #2D9B8A 0%, #2A9BC4 100%);
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 20% 98%) 100%);
     --shadow-card: 0 4px 24px -4px hsl(220 25% 10% / 0.08), 0 2px 8px -2px hsl(220 25% 10% / 0.04);
     --shadow-card-hover: 0 12px 32px -8px hsl(172 66% 40% / 0.15), 0 4px 12px -4px hsl(220 25% 10% / 0.08);
@@ -82,7 +82,7 @@
     --input: 220 20% 18%;
     --ring: 172 66% 50%;
 
-    --gradient-hero: linear-gradient(135deg, hsl(172 66% 50%) 0%, hsl(190 70% 55%) 100%);
+    --gradient-hero: linear-gradient(135deg, #3DB8A3 0%, #3AB8D4 100%);
     --gradient-card: linear-gradient(180deg, hsl(220 25% 12%) 0%, hsl(220 25% 10%) 100%);
     --shadow-card: 0 4px 24px -4px hsl(0 0% 0% / 0.3), 0 2px 8px -2px hsl(0 0% 0% / 0.2);
     --shadow-card-hover: 0 12px 32px -8px hsl(172 66% 50% / 0.2), 0 4px 12px -4px hsl(0 0% 0% / 0.3);

@@ -6,7 +6,7 @@ export const Footer = () => {
   const branding = useBranding();
 
   return (
-    <footer className="py-12 border-t border-border bg-muted/20">
+    <footer className="py-12 border-t border-border bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">

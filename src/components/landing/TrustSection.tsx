@@ -20,7 +20,7 @@ const trustIndicators = [
 
 export const TrustSection = () => {
   return (
-    <section className="py-16 sm:py-20 bg-muted/20">
+    <section className="py-24 sm:py-32 bg-background">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid sm:grid-cols-3 gap-8 sm:gap-12">
           {trustIndicators.map((indicator, index) => (
