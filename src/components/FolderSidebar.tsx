@@ -188,6 +188,19 @@ export function FolderSidebar({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCollapsed]);
+
+  // Helper functions to check if directory was expanded
+  // When collapsed, check localStorage (state before collapse)
+  // When expanded, check state variable (current state)
+  const wasContactDirectoryExpanded = isCollapsed 
+    ? loadDirectoryState("contact", true)
+    : isContactDirectoryExpanded;
+  const wasClientDirectoryExpanded = isCollapsed
+    ? loadDirectoryState("client", true)
+    : isClientDirectoryExpanded;
+  const wasTeamDirectoryExpanded = isCollapsed
+    ? loadDirectoryState("team", true)
+    : isTeamDirectoryExpanded;
   
   const hasClientAccess = canAccessFeature("client_management");
   const hasTeamAccess = canAccessFeature("team_features");
@@ -397,7 +410,7 @@ export function FolderSidebar({
                 )}
 
                 {/* Personal Contact Folders */}
-                {isContactDirectoryExpanded && folders.map((folder) => (
+                {wasContactDirectoryExpanded && folders.map((folder) => (
                   <SidebarMenuItem key={folder.id} className="group relative">
                     <DroppableFolder
                       folder={folder}
@@ -437,7 +450,7 @@ export function FolderSidebar({
                 ))}
 
                 {/* Organization Contact Folders */}
-                {hasCompany && organizationFolders.length > 0 && (
+                {hasCompany && organizationFolders.length > 0 && wasContactDirectoryExpanded && (
                   <>
                     {!isCollapsed && (
                       <div className="px-2 py-1.5 mt-2">
@@ -581,7 +594,7 @@ export function FolderSidebar({
                     </SidebarMenuItem>
 
                     {/* Personal Client Folders */}
-                    {hasClientAccess && isClientDirectoryExpanded && clientFolders.map((folder) => (
+                    {hasClientAccess && wasClientDirectoryExpanded && clientFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <SidebarMenuButton
                           onClick={() => {
@@ -630,7 +643,7 @@ export function FolderSidebar({
                     ))}
 
                     {/* Organization Client Folders */}
-                    {hasClientAccess && hasCompany && organizationClientFolders.length > 0 && (
+                    {hasClientAccess && hasCompany && organizationClientFolders.length > 0 && wasClientDirectoryExpanded && (
                       <>
                         {!isCollapsed && (
                           <div className="px-2 py-1.5 mt-2">
@@ -763,7 +776,7 @@ export function FolderSidebar({
                     </SidebarMenuItem>
 
                     {/* Personal Team Folders */}
-                    {isTeamDirectoryExpanded && teamFolders.map((folder) => (
+                    {wasTeamDirectoryExpanded && teamFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <SidebarMenuButton
                           onClick={() => {
@@ -812,7 +825,7 @@ export function FolderSidebar({
                     ))}
 
                     {/* Organization Team Folders */}
-                    {hasCompany && organizationTeamFolders.length > 0 && isTeamDirectoryExpanded && (
+                    {hasCompany && organizationTeamFolders.length > 0 && wasTeamDirectoryExpanded && (
                       <>
                         {!isCollapsed && (
                           <div className="px-2 py-1.5 mt-2">
