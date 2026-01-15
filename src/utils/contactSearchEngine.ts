@@ -100,16 +100,34 @@ function fuzzyMatch(text: string, searchTerm: string): boolean {
  * Returns true if the search company matches the contact company at word boundaries
  */
 function companyMatches(contactCompany: string, searchCompany: string): boolean {
-  if (!contactCompany || !searchCompany) return false;
+  console.log('[SEARCH DEBUG] companyMatches - contactCompany:', contactCompany, 'searchCompany:', searchCompany);
+  if (!contactCompany || !searchCompany) {
+    console.log('[SEARCH DEBUG] companyMatches - One is empty, returning false');
+    return false;
+  }
   
   const contactLower = contactCompany.toLowerCase().trim();
   const searchLower = searchCompany.toLowerCase().trim();
   
+  console.log('[SEARCH DEBUG] companyMatches - Normalized - contact:', contactLower, 'search:', searchLower);
+  
   // Exact match
-  if (contactLower === searchLower) return true;
+  if (contactLower === searchLower) {
+    console.log('[SEARCH DEBUG] companyMatches - Exact match found');
+    return true;
+  }
+  
+  // Check if search company is contained in contact company (substring match)
+  // This handles cases like "quantum solutions" matching "Quantum Solutions Inc"
+  if (contactLower.includes(searchLower)) {
+    console.log('[SEARCH DEBUG] companyMatches - Substring match found (search in contact)');
+    return true;
+  }
   
   // Word boundary match - check if all words in search company appear in contact company
   const searchWords = searchLower.split(/\s+/).filter(w => w.length >= 2);
+  if (searchWords.length === 0) return false;
+  
   const contactWords = new Set(contactLower.split(/\s+/));
   
   // All search words must be present in contact company
@@ -324,9 +342,39 @@ function scoreContact(
       }
     }
     
+    // Special handling for phone numbers - normalize search term to digits only
+    const normalizedTerm = termLower.replace(/\D/g, "");
+    const isPhoneSearch = normalizedTerm.length >= 3; // At least 3 digits to be considered a phone search
+    if (isPhoneSearch && fields.phone) {
+      const phoneWeight = FIELD_WEIGHTS.phone || 2;
+      
+      // Check if normalized search term appears anywhere in normalized phone
+      if (fields.phone.includes(normalizedTerm)) {
+        result.score += phoneWeight;
+        matched = true;
+        if (!result.matchedFields.includes("phone")) {
+          result.matchedFields.push("phone");
+        }
+        
+        // Bonus for longer matches (more digits matched)
+        if (normalizedTerm.length >= 7) {
+          result.score += phoneWeight * 0.5; // Extra bonus for 7+ digit matches
+        }
+        
+        // Extra bonus if search term matches the end of the phone number (most common case)
+        // This handles "814044" matching "3814044" or "8140443"
+        if (fields.phone.endsWith(normalizedTerm)) {
+          result.score += phoneWeight * 0.5;
+        }
+      }
+    }
+    
     // Score by field with weights
     for (const [fieldName, fieldValue] of Object.entries(fields)) {
       if (!fieldValue) continue;
+      
+      // Skip phone field in general loop - we handle it specially above
+      if (fieldName === "phone") continue;
       
       const weight = FIELD_WEIGHTS[fieldName as keyof typeof FIELD_WEIGHTS] || 1;
       
@@ -396,12 +444,33 @@ export function searchContacts(
   
   if (!searchTerms.length) return contacts.slice(0, maxResults);
   
+  // For very short search terms (partial matches), use lower threshold
+  const shortestTerm = Math.min(...searchTerms.map(t => t.length));
+  // Check if query is numeric-only (likely a phone number search)
+  const isNumericQuery = searchTerms.every(t => /^\d+$/.test(t));
+  // Lower threshold for short queries OR numeric-only queries (phone searches)
+  const adjustedMinScore = (shortestTerm <= 3 || isNumericQuery) 
+    ? Math.max(1, minScore - 3) 
+    : minScore;
+  
   const scored = contacts
     .map(contact => scoreContact(contact, searchTerms))
-    .filter(s => s.score >= minScore)
+    .filter(s => s.score >= adjustedMinScore)
     .sort((a, b) => b.score - a.score);
   
-  return scored.slice(0, maxResults).map(s => s.contact);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Scored contacts count:', scored.length);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Adjusted min score:', adjustedMinScore);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Top scored contacts:', scored.slice(0, 5).map(s => ({ 
+    name: s.contact.name, 
+    company: s.contact.company, 
+    score: s.score,
+    matchedFields: s.matchedFields 
+  })));
+  
+  const results = scored.slice(0, maxResults).map(s => s.contact);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Final results count:', results.length);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Results:', results.map(c => ({ name: c.name, company: c.company })));
+  return results;
 }
 
 /**
@@ -412,6 +481,15 @@ export function searchWithParsedQuery(
   parsedQuery: ParsedQuery,
   options: { maxResults?: number } = {}
 ): Contact[] {
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Starting search');
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Parsed query:', {
+    companies: parsedQuery.entities.companies,
+    roles: parsedQuery.entities.roles,
+    keywords: parsedQuery.keywords,
+    searchTerms: parsedQuery.searchTerms,
+    originalQuery: parsedQuery.originalQuery
+  });
+  
   const { maxResults = MAX_RESULTS } = options;
   
   // Check which filters are active
@@ -426,6 +504,24 @@ export function searchWithParsedQuery(
   const hasNeedsFollowUp = parsedQuery.needsFollowUp === true;
   const hasResponsibilityFilter = !!parsedQuery.responsibility;
   
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Active filters:', {
+    hasCompanyFilter,
+    hasRoleFilter,
+    hasBusinessFilter,
+    hasTimeFilter,
+    hasLocationFilter,
+    hasRelationshipFilter,
+    companies: parsedQuery.entities.companies
+  });
+  
+  // Check for negated entities
+  const hasNegatedCompanies = parsedQuery.negatedEntities.companies.length > 0;
+  const hasNegatedRoles = parsedQuery.negatedEntities.roles.length > 0;
+  const hasNegatedDepartments = parsedQuery.negatedEntities.departments.length > 0;
+  const hasNegatedLocations = parsedQuery.negatedEntities.locations.length > 0;
+  const hasNegatedRelationships = parsedQuery.negatedEntities.relationships.length > 0;
+  const hasNegatedNames = parsedQuery.negatedEntities.names.length > 0;
+  
   // Build search terms from parsed query (EXCLUDE structured entities - they're handled separately)
   const searchTerms = [
     ...parsedQuery.keywords,
@@ -434,11 +530,23 @@ export function searchWithParsedQuery(
     // DON'T include companies, roles, locations, relationships in general search terms
   ].filter(Boolean).map(t => t.toLowerCase());
   
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Search terms:', searchTerms);
+  
+  // Adjust threshold for numeric queries (phone searches) or short queries
+  const shortestTerm = searchTerms.length > 0 ? Math.min(...searchTerms.map(t => t.length)) : 0;
+  const isNumericQuery = searchTerms.length > 0 && searchTerms.every(t => /^\d+$/.test(t));
+  const adjustedMinScore = (shortestTerm <= 3 || isNumericQuery) 
+    ? Math.max(1, MIN_SCORE_THRESHOLD - 3) 
+    : MIN_SCORE_THRESHOLD;
+  
   const hasAnyFilter = hasCompanyFilter || hasRoleFilter || hasBusinessFilter || hasTimeFilter || 
                        hasLocationFilter || hasRelationshipFilter || hasInteractionFilter ||
                        hasInteractionTimeFilter || hasNeedsFollowUp || hasResponsibilityFilter;
   
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - hasAnyFilter:', hasAnyFilter, 'searchTerms.length:', searchTerms.length);
+  
   if (searchTerms.length === 0 && !hasAnyFilter) {
+    console.log('[SEARCH DEBUG] searchWithParsedQuery - No filters and no search terms, falling back');
     // Fall back to original query terms
     return searchContacts(contacts, parsedQuery.searchTerms, { maxResults });
   }
@@ -491,12 +599,60 @@ export function searchWithParsedQuery(
         }
       }
       
+      // Handle comparative filters (e.g., "more than 30 days ago")
+      if (parsedQuery.comparativeFilters?.timeRange) {
+        const contactCreatedAt = contact.createdAt;
+        if (!contactCreatedAt || contactCreatedAt.trim() === '') {
+          // For "more than X days ago", contacts without timestamps might be included
+          // For "less than X days ago", exclude contacts without timestamps
+          if (parsedQuery.comparativeFilters.timeRange.operator === "less than" ||
+              parsedQuery.comparativeFilters.timeRange.operator === "newer than") {
+            return {
+              contact,
+              score: 0,
+              matchedFields: [],
+              matchedTerms: [],
+            };
+          }
+        } else {
+          const createdAt = new Date(contactCreatedAt);
+          if (!isNaN(createdAt.getTime())) {
+            const now = new Date();
+            const daysDiff = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+            const threshold = parsedQuery.comparativeFilters.timeRange.days;
+            const operator = parsedQuery.comparativeFilters.timeRange.operator;
+            
+            let matches = false;
+            if (operator === "more than" || operator === "older than") {
+              matches = daysDiff > threshold;
+            } else if (operator === "less than" || operator === "newer than") {
+              matches = daysDiff < threshold;
+            }
+            
+            if (!matches) {
+              return {
+                contact,
+                score: 0,
+                matchedFields: [],
+                matchedTerms: [],
+              };
+            }
+          }
+        }
+      }
+      
       // Check company filter - if company is specified, require match
       if (hasCompanyFilter) {
         const contactCompany = contact.company || "";
-        const matchesCompany = parsedQuery.entities.companies.some(company =>
-          companyMatches(contactCompany, company)
-        );
+        const contactBusinessName = contact.businessName || "";
+        const contactDescription = contact.description || "";
+        
+        // Check company in multiple fields
+        const matchesCompany = parsedQuery.entities.companies.some(company => {
+          return companyMatches(contactCompany, company) ||
+                 (contactBusinessName && companyMatches(contactBusinessName, company)) ||
+                 (contactDescription && companyMatches(contactDescription, company));
+        });
         
         // If company filter is specified but contact doesn't match, exclude it
         if (!matchesCompany) {
@@ -666,6 +822,69 @@ export function searchWithParsedQuery(
         // If no lastContactedAt, it matches (needs follow-up)
       }
       
+      // Check negated entities - exclude contacts that match negated criteria
+      if (hasNegatedCompanies) {
+        const contactCompany = contact.company || "";
+        const matchesNegatedCompany = parsedQuery.negatedEntities.companies.some(company =>
+          companyMatches(contactCompany, company)
+        );
+        if (matchesNegatedCompany) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      if (hasNegatedRoles) {
+        const contactRole = contact.role || "";
+        const matchesNegatedRole = parsedQuery.negatedEntities.roles.some(role =>
+          roleMatches(contactRole, role)
+        );
+        if (matchesNegatedRole) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      if (hasNegatedRelationships) {
+        const contactTags = (contact.tags || []).map(t => t.toLowerCase());
+        const isClient = contact.isClient || false;
+        const matchesNegatedRelationship = parsedQuery.negatedEntities.relationships.some(rel => {
+          if (rel === "client" && isClient) return true;
+          return contactTags.includes(rel.toLowerCase());
+        });
+        if (matchesNegatedRelationship) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
+      if (hasNegatedNames) {
+        const contactName = (contact.name || "").toLowerCase();
+        const matchesNegatedName = parsedQuery.negatedEntities.names.some(name =>
+          contactName.includes(name.toLowerCase())
+        );
+        if (matchesNegatedName) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+      
       // Check responsibility filter
       if (hasResponsibilityFilter && parsedQuery.responsibility) {
         const resp = parsedQuery.responsibility;
@@ -738,15 +957,54 @@ export function searchWithParsedQuery(
         result.matchedFields.push("time");
       }
       
+      // If we have filters but no search terms, give a base score to contacts that pass filters
+      // This ensures filter-only queries (like "who do I know at company?") return results
+      if (searchTerms.length === 0 && hasAnyFilter && result.score === 0) {
+        // We'll add boosts for matching filters below, but give a base score here
+        result.score = 1; // Small base score, filters will boost it
+      }
+      
       // Boost for exact company matches (only if company matches)
+      // Check multiple fields: company, businessName, and description
       if (hasCompanyFilter) {
         const contactCompany = contact.company || "";
+        const contactBusinessName = contact.businessName || "";
+        const contactDescription = contact.description || "";
+        
+        console.log('[SEARCH DEBUG] Checking company match for contact:', contact.name);
+        console.log('[SEARCH DEBUG] Contact fields - company:', contactCompany, 'businessName:', contactBusinessName, 'description:', contactDescription?.substring(0, 50));
+        
         for (const company of parsedQuery.entities.companies) {
-          if (companyMatches(contactCompany, company)) {
+          console.log('[SEARCH DEBUG] Comparing search company:', company);
+          
+          // Check company field
+          let matches = companyMatches(contactCompany, company);
+          console.log('[SEARCH DEBUG] Company field match:', matches);
+          
+          // Check businessName field if company field doesn't match
+          if (!matches && contactBusinessName) {
+            matches = companyMatches(contactBusinessName, company);
+            console.log('[SEARCH DEBUG] BusinessName field match:', matches);
+          }
+          
+          // Check description field if still no match
+          if (!matches && contactDescription) {
+            matches = companyMatches(contactDescription, company);
+            console.log('[SEARCH DEBUG] Description field match:', matches);
+          }
+          
+          if (matches) {
+            console.log('[SEARCH DEBUG] Company matched! Adding score boost. Current score:', result.score);
             result.score += 20; // Strong boost for company match
             if (!result.matchedFields.includes("company")) {
               result.matchedFields.push("company");
             }
+            // Ensure company-matched contacts pass threshold even if searchTerms are empty
+            // This handles queries like "Who do I know at quantum solutions?" where searchTerms might be empty
+            if (result.score < adjustedMinScore) {
+              result.score = Math.max(adjustedMinScore, result.score);
+            }
+            console.log('[SEARCH DEBUG] Final score after company match:', result.score, 'threshold:', adjustedMinScore);
           }
         }
       }
@@ -892,10 +1150,22 @@ export function searchWithParsedQuery(
       
       return result;
     })
-    .filter(s => s.score >= MIN_SCORE_THRESHOLD)
+    .filter(s => s.score >= adjustedMinScore)
     .sort((a, b) => b.score - a.score);
   
-  return scored.slice(0, maxResults).map(s => s.contact);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Scored contacts count:', scored.length);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Adjusted min score:', adjustedMinScore);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Top scored contacts:', scored.slice(0, 5).map(s => ({ 
+    name: s.contact.name, 
+    company: s.contact.company, 
+    score: s.score,
+    matchedFields: s.matchedFields 
+  })));
+  
+  const results = scored.slice(0, maxResults).map(s => s.contact);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Final results count:', results.length);
+  console.log('[SEARCH DEBUG] searchWithParsedQuery - Results:', results.map(c => ({ name: c.name, company: c.company })));
+  return results;
 }
 
 /**

@@ -37,8 +37,24 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
       return contacts.slice(0, MAX_RESULTS);
     }
 
-    // If no meaningful search terms extracted, return all
+    // Check if we have filters (company, role, etc.) even if searchTerms is empty
+    const hasFilters = parsedQuery.entities.companies.length > 0 ||
+                      parsedQuery.entities.roles.length > 0 ||
+                      parsedQuery.entities.businesses.length > 0 ||
+                      parsedQuery.entities.locations.length > 0 ||
+                      parsedQuery.entities.relationships.length > 0 ||
+                      !!parsedQuery.timeRange ||
+                      !!parsedQuery.interactionType ||
+                      !!parsedQuery.interactionTimeRange ||
+                      parsedQuery.needsFollowUp === true ||
+                      !!parsedQuery.responsibility;
+
+    // If no meaningful search terms extracted, but we have filters, still use search engine
     if (parsedQuery.searchTerms.length === 0) {
+      if (hasFilters) {
+        // Use search engine to apply filters even without search terms
+        return searchWithParsedQuery(contacts, parsedQuery, { maxResults: MAX_RESULTS });
+      }
       return parsedQuery.action ? contacts : contacts.slice(0, MAX_RESULTS);
     }
 
@@ -46,7 +62,8 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     const results = searchWithParsedQuery(contacts, parsedQuery, { maxResults: MAX_RESULTS });
     
     // If no results from parsed query, try basic search on original terms
-    if (results.length === 0) {
+    // BUT only if we don't have filters (filters should be respected)
+    if (results.length === 0 && !hasFilters) {
       const fallbackTerms = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
       return searchContacts(contacts, fallbackTerms, { maxResults: MAX_RESULTS });
     }

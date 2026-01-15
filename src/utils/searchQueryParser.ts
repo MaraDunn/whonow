@@ -44,6 +44,15 @@ export interface ParsedQuery {
     relationships: string[]; // Relationship types: client, prospect, vendor, etc.
     businesses: string[]; // Business names (e.g., "mcdonalds", "starbucks")
   };
+  negatedEntities: {
+    names: string[];
+    companies: string[];
+    roles: string[];
+    departments: string[];
+    locations: string[];
+    relationships: string[];
+    businesses: string[];
+  };
   keywords: string[];
   filters: Record<string, string>;
   originalQuery: string;
@@ -55,6 +64,9 @@ export interface ParsedQuery {
   needsFollowUp?: boolean; // "need to follow up", "haven't talked to"
   responsibility?: ResponsibilityMatch | null; // Matched responsibility
   interpretation?: string; // Human-readable interpretation of the query
+  comparativeFilters?: {
+    timeRange?: { operator: "more than" | "less than" | "older than" | "newer than"; days: number };
+  };
 }
 
 // Action keywords that trigger specific actions
@@ -63,39 +75,132 @@ const ACTION_KEYWORDS: Record<string, ActionType> = {
   mail: "email",
   message: "email",
   send: "email",
+  "send email": "email",
+  "reach out via email": "email",
+  "reach out": "email",
   call: "call",
   phone: "call",
   ring: "call",
   dial: "call",
+  "reach out": "call",
+  contact: "call",
   text: "text",
   sms: "text",
+  dm: "text",
+  "direct message": "text",
 };
 
-// Question/intent detection patterns
+// Expanded synonym maps for better entity recognition
+const SYNONYM_MAP: Record<string, string[]> = {
+  // Role/Title abbreviations and full forms
+  "ceo": ["chief executive officer", "chief exec", "executive officer"],
+  "chief executive officer": ["ceo", "chief exec"],
+  "chief exec": ["ceo", "chief executive officer"],
+  "vp": ["vice president", "v.p.", "vice pres"],
+  "vice president": ["vp", "v.p.", "vice pres"],
+  "v.p.": ["vp", "vice president"],
+  "cto": ["chief technology officer", "chief tech officer"],
+  "chief technology officer": ["cto", "chief tech officer"],
+  "chief tech officer": ["cto"],
+  "cfo": ["chief financial officer"],
+  "chief financial officer": ["cfo"],
+  "coo": ["chief operating officer"],
+  "chief operating officer": ["coo"],
+  "pm": ["product manager", "project manager", "program manager"],
+  "product manager": ["pm"],
+  "project manager": ["pm"],
+  "program manager": ["pm"],
+  "hr": ["human resources", "people ops", "people operations"],
+  "human resources": ["hr", "people ops"],
+  "people ops": ["hr", "human resources"],
+  "it": ["information technology", "tech support", "tech"],
+  "information technology": ["it", "tech"],
+  
+  // Department synonyms
+  "engineering": ["dev", "development", "software", "tech", "engineering"],
+  "dev": ["engineering", "development", "software"],
+  "development": ["engineering", "dev", "software"],
+  "software": ["engineering", "dev", "development"],
+  "sales": ["business development", "bd", "revenue", "account management"],
+  "business development": ["sales", "bd"],
+  "bd": ["sales", "business development"],
+  "revenue": ["sales"],
+  "marketing": ["growth", "demand gen", "brand", "marketing"],
+  "growth": ["marketing"],
+  "demand gen": ["marketing"],
+  "finance": ["accounting", "fpa", "fp&a", "financial planning"],
+  "accounting": ["finance"],
+  "fpa": ["finance", "financial planning"],
+  "fp&a": ["finance", "financial planning"],
+  
+  // Location expansions (extend existing)
+  "sf": ["san francisco", "bay area"],
+  "nyc": ["new york", "new york city", "manhattan"],
+  "ny": ["new york", "new york city"],
+  "la": ["los angeles", "l.a."],
+  "dc": ["washington", "washington dc", "d.c."],
+};
+
+// Abbreviation to full form mapping
+const ABBREVIATION_MAP: Record<string, string> = {
+  "ceo": "chief executive officer",
+  "cto": "chief technology officer",
+  "cfo": "chief financial officer",
+  "coo": "chief operating officer",
+  "vp": "vice president",
+  "pm": "product manager",
+  "hr": "human resources",
+  "it": "information technology",
+  "bd": "business development",
+  "fpa": "financial planning",
+  "sf": "san francisco",
+  "nyc": "new york city",
+  "ny": "new york",
+  "la": "los angeles",
+  "dc": "washington dc",
+};
+
+// Question/intent detection patterns (expanded)
 const QUESTION_STARTERS = new Set([
-  "who", "what", "where", "which", "find", "show", "get", 
-  "search", "look", "can", "do", "does", "is", "are", "help",
-  "list", "display", "give"
+  "who", "what", "where", "which", "when", "how", "why",
+  "find", "show", "get", "search", "look", "can", "do", "does", "is", "are", "help",
+  "list", "display", "give", "show me", "find all", "find me", "get me",
+  "i need", "i need to", "i want", "i want to", "i'm looking for",
+  "can you", "can you find", "can you show", "please find", "please show",
+  "list all", "give me", "help me find"
 ]);
 
-// Controlled vocabulary for roles/departments
+// Controlled vocabulary for roles/departments (expanded with synonyms)
 const ROLE_VOCABULARY = new Set([
   // Departments
-  "hr", "sales", "marketing", "engineering", "finance", "legal", "operations",
-  "support", "customer service", "it", "tech", "product", "design", "research",
-  "development", "accounting", "admin", "administration", "executive",
-  // Titles
-  "ceo", "cto", "cfo", "coo", "vp", "director", "manager", "lead", "senior",
-  "junior", "intern", "associate", "analyst", "consultant", "specialist",
-  "coordinator", "assistant", "executive", "founder", "partner", "president",
-  "head", "chief", "officer", "developer", "engineer", "designer", "architect"
+  "hr", "human resources", "people ops", "sales", "business development", "bd", "revenue",
+  "marketing", "growth", "demand gen", "engineering", "dev", "development", "software",
+  "finance", "accounting", "fpa", "fp&a", "legal", "operations",
+  "support", "customer service", "it", "information technology", "tech", "product", "design", "research",
+  "admin", "administration", "executive",
+  // Titles (with abbreviations)
+  "ceo", "chief executive officer", "chief exec", "cto", "chief technology officer", "chief tech officer",
+  "cfo", "chief financial officer", "coo", "chief operating officer",
+  "vp", "vice president", "v.p.", "vice pres",
+  "pm", "product manager", "project manager", "program manager",
+  "director", "manager", "lead", "senior", "junior", "intern", "associate",
+  "analyst", "consultant", "specialist", "coordinator", "assistant",
+  "founder", "partner", "president", "head", "chief", "officer",
+  "developer", "engineer", "designer", "architect"
 ]);
 
-// Company suffixes to identify company names
+// Company suffixes to identify company names (expanded with variations)
 const COMPANY_SUFFIXES = new Set([
-  "inc", "llc", "ltd", "corp", "corporation", "company", "co", "group",
-  "holdings", "partners", "solutions", "technologies", "tech", "systems",
-  "enterprises", "industries", "services", "consulting", "agency"
+  "inc", "inc.", "incorporated",
+  "llc", "l.l.c.", "limited liability company",
+  "ltd", "ltd.", "limited",
+  "corp", "corp.", "corporation",
+  "company", "co", "co.",
+  "group", "holdings", "partners",
+  "solutions", "technologies", "tech", "systems",
+  "enterprises", "industries", "services", "consulting", "agency",
+  // International suffixes
+  "gmbh", "ag", "sa", "s.a.", "srl", "bv", "nv",
 ]);
 
 // Stop words to filter from keywords
@@ -261,19 +366,349 @@ const ENTITY_PREPOSITIONS = {
   business: new Set(["at", "in"]), // "who do I know at mcdonalds"
 };
 
+// Semantic verb mapping - verbs that imply entity relationships
+const SEMANTIC_VERB_MAP: Record<string, { entityType: keyof ParsedQuery["entities"]; hint: string }> = {
+  "handles": { entityType: "departments", hint: "responsibility" },
+  "handle": { entityType: "departments", hint: "responsibility" },
+  "works at": { entityType: "companies", hint: "company" },
+  "work at": { entityType: "companies", hint: "company" },
+  "works for": { entityType: "companies", hint: "company" },
+  "work for": { entityType: "companies", hint: "company" },
+  "manages": { entityType: "roles", hint: "responsibility" },
+  "manage": { entityType: "roles", hint: "responsibility" },
+  "based in": { entityType: "locations", hint: "location" },
+  "based at": { entityType: "locations", hint: "location" },
+  "located in": { entityType: "locations", hint: "location" },
+  "located at": { entityType: "locations", hint: "location" },
+  "knows": { entityType: "relationships", hint: "relationship" },
+  "know": { entityType: "relationships", hint: "relationship" },
+  "met": { entityType: "relationships", hint: "interaction" },
+  "meet": { entityType: "relationships", hint: "interaction" },
+};
+
+// Negation keywords
+const NEGATION_KEYWORDS = new Set([
+  "not", "except", "excluding", "without", "but not", "excluding",
+  "no", "never", "neither", "nor"
+]);
+
+// Conversational patterns
+const CONVERSATIONAL_PATTERNS = new Set([
+  "show me", "show", "find", "find all", "find me", "get", "get me",
+  "i need", "i need to", "i want", "i want to", "i'm looking for",
+  "can you", "can you find", "can you show", "please find", "please show",
+  "list", "list all", "display", "give me", "give", "help me find"
+]);
+
 /**
- * Normalize query text
+ * Expand contractions in query
  */
-function normalizeQuery(query: string): string {
-  return query
-    .toLowerCase()
-    .trim()
-    .replace(/[?!.,;:]+$/g, "") // Remove trailing punctuation
-    .replace(/\s+/g, " "); // Normalize whitespace
+function expandContractions(query: string): string {
+  const contractions: Record<string, string> = {
+    "don't": "do not",
+    "doesn't": "does not",
+    "didn't": "did not",
+    "won't": "will not",
+    "can't": "cannot",
+    "couldn't": "could not",
+    "shouldn't": "should not",
+    "wouldn't": "would not",
+    "isn't": "is not",
+    "aren't": "are not",
+    "wasn't": "was not",
+    "weren't": "were not",
+    "haven't": "have not",
+    "hasn't": "has not",
+    "hadn't": "had not",
+    "i've": "i have",
+    "you've": "you have",
+    "we've": "we have",
+    "they've": "they have",
+    "i'm": "i am",
+    "you're": "you are",
+    "he's": "he is",
+    "she's": "she is",
+    "it's": "it is",
+    "we're": "we are",
+    "they're": "they are",
+    "i'd": "i would",
+    "you'd": "you would",
+    "he'd": "he would",
+    "she'd": "she would",
+    "we'd": "we would",
+    "they'd": "they would",
+    "i'll": "i will",
+    "you'll": "you will",
+    "he'll": "he will",
+    "she'll": "she will",
+    "we'll": "we will",
+    "they'll": "they will",
+  };
+  
+  let expanded = query.toLowerCase();
+  for (const [contraction, expansion] of Object.entries(contractions)) {
+    const regex = new RegExp(`\\b${contraction}\\b`, "gi");
+    expanded = expanded.replace(regex, expansion);
+  }
+  return expanded;
 }
 
 /**
- * Check if query is a question
+ * Detect email or phone in query
+ */
+function detectEmailOrPhone(text: string): { type: "email" | "phone" | null; value: string } {
+  // Email pattern
+  const emailPattern = /\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/;
+  const emailMatch = text.match(emailPattern);
+  if (emailMatch) {
+    return { type: "email", value: emailMatch[0] };
+  }
+  
+  // Phone pattern (7+ digits, may include formatting)
+  const phonePattern = /\b[\d\s\-\(\)\+]{7,}\b/;
+  const phoneMatch = text.match(phonePattern);
+  if (phoneMatch) {
+    const digits = phoneMatch[0].replace(/\D/g, "");
+    if (digits.length >= 7) {
+      return { type: "phone", value: phoneMatch[0] };
+    }
+  }
+  
+  return { type: null, value: "" };
+}
+
+/**
+ * Expand query terms using synonym maps
+ */
+function expandQueryTerms(term: string): string[] {
+  const lower = term.toLowerCase();
+  const expanded: string[] = [term]; // Always include original
+  
+  // Check synonym map
+  if (SYNONYM_MAP[lower]) {
+    expanded.push(...SYNONYM_MAP[lower]);
+  }
+  
+  // Check reverse mapping (if full form, include abbreviations)
+  for (const [key, synonyms] of Object.entries(SYNONYM_MAP)) {
+    if (synonyms.includes(lower)) {
+      expanded.push(key);
+    }
+  }
+  
+  // Check abbreviation map
+  if (ABBREVIATION_MAP[lower]) {
+    expanded.push(ABBREVIATION_MAP[lower]);
+  }
+  
+  // Reverse: if full form, check if it's an abbreviation
+  for (const [abbr, full] of Object.entries(ABBREVIATION_MAP)) {
+    if (full === lower) {
+      expanded.push(abbr);
+    }
+  }
+  
+  return [...new Set(expanded)]; // Remove duplicates
+}
+
+/**
+ * Normalize query text with enhanced processing
+ */
+function normalizeQuery(query: string): string {
+  let normalized = query
+    .trim()
+    .replace(/[?!.,;:]+$/g, "") // Remove trailing punctuation
+    .replace(/\s+/g, " "); // Normalize whitespace
+  
+  // Expand contractions
+  normalized = expandContractions(normalized);
+  
+  // Convert to lowercase
+  normalized = normalized.toLowerCase();
+  
+  return normalized;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  
+  if (len1 === 0) return len2;
+  if (len2 === 0) return len1;
+  
+  const matrix: number[][] = [];
+  
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // deletion
+        matrix[i][j - 1] + 1,      // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  
+  return matrix[len1][len2];
+}
+
+/**
+ * Fuzzy match entity with typo tolerance
+ */
+function fuzzyMatchEntity(term: string, candidates: string[], maxDistance: number = 2): string | null {
+  const termLower = term.toLowerCase();
+  
+  for (const candidate of candidates) {
+    const candidateLower = candidate.toLowerCase();
+    const distance = levenshteinDistance(termLower, candidateLower);
+    
+    // Adjust threshold based on length
+    const threshold = termLower.length <= 4 ? 1 : termLower.length <= 7 ? 2 : maxDistance;
+    
+    if (distance <= threshold) {
+      return candidate;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Disambiguate entity type based on context
+ */
+function disambiguateEntity(
+  entity: string,
+  context: { before?: string; after?: string; query: string }
+): { type: "name" | "company" | "role" | "location" | "unknown"; confidence: number } {
+  let score = { name: 0, company: 0, role: 0, location: 0 };
+  
+  const entityLower = entity.toLowerCase();
+  const queryLower = context.query.toLowerCase();
+  
+  // Capitalization pattern - proper nouns (names, companies) often capitalized
+  if (entity[0] === entity[0].toUpperCase() && entity.length > 1) {
+    score.name += 2;
+    score.company += 2;
+  }
+  
+  // Context clues - words before/after
+  if (context.before) {
+    const beforeLower = context.before.toLowerCase();
+    if (ENTITY_PREPOSITIONS.company.has(beforeLower) || beforeLower === "from" || beforeLower === "at") {
+      score.company += 5;
+    }
+    if (beforeLower === "named" || beforeLower === "called" || beforeLower === "is") {
+      score.name += 5;
+    }
+    if (SEMANTIC_VERB_MAP[beforeLower]) {
+      const hint = SEMANTIC_VERB_MAP[beforeLower];
+      if (hint.entityType === "companies") score.company += 3;
+      if (hint.entityType === "roles") score.role += 3;
+      if (hint.entityType === "locations") score.location += 3;
+    }
+  }
+  
+  // Pattern matching
+  if (/who\s+(works\s+at|at)\s+/i.test(queryLower)) {
+    const match = queryLower.match(/who\s+(?:works\s+at|at)\s+([^?]+)/i);
+    if (match && match[1].includes(entityLower)) {
+      score.company += 4;
+    }
+  }
+  
+  if (/(?:named|called|is)\s+([^?]+)/i.test(queryLower)) {
+    const match = queryLower.match(/(?:named|called|is)\s+([^?]+)/i);
+    if (match && match[1].includes(entityLower)) {
+      score.name += 4;
+    }
+  }
+  
+  // Company suffix check
+  const words = entityLower.split(/\s+/);
+  if (words.some(w => COMPANY_SUFFIXES.has(w))) {
+    score.company += 5;
+  }
+  
+  // Role vocabulary check
+  if (ROLE_VOCABULARY.has(entityLower)) {
+    score.role += 5;
+  }
+  
+  // Location keywords check
+  if (LOCATION_KEYWORDS.has(entityLower) || Object.keys(LOCATION_SYNONYMS).some(loc => 
+    LOCATION_SYNONYMS[loc].includes(entityLower)
+  )) {
+    score.location += 5;
+  }
+  
+  // Find highest score
+  const maxScore = Math.max(score.name, score.company, score.role, score.location);
+  if (maxScore === 0) return { type: "unknown", confidence: 0 };
+  
+  let type: "name" | "company" | "role" | "location" = "unknown";
+  if (maxScore === score.company) type = "company";
+  else if (maxScore === score.name) type = "name";
+  else if (maxScore === score.role) type = "role";
+  else if (maxScore === score.location) type = "location";
+  
+  return { type, confidence: maxScore / 10 }; // Normalize to 0-1
+}
+
+/**
+ * Classify question type for better intent understanding
+ */
+function classifyQuestionType(query: string): { type: "who" | "what" | "where" | "when" | "how" | "unknown"; intent: string } {
+  const normalized = normalizeQuery(query);
+  const firstWord = normalized.split(" ")[0];
+  
+  if (firstWord === "who") {
+    // "who handles X" → responsibility
+    if (normalized.includes("handles") || normalized.includes("handle")) {
+      return { type: "who", intent: "responsibility" };
+    }
+    // "who works at X" → company
+    if (normalized.includes("works at") || normalized.includes("work at") || normalized.includes("at")) {
+      return { type: "who", intent: "company" };
+    }
+    // "who did I meet" → interaction
+    if (normalized.includes("meet") || normalized.includes("met")) {
+      return { type: "who", intent: "interaction" };
+    }
+    return { type: "who", intent: "person" };
+  }
+  
+  if (firstWord === "what") {
+    return { type: "what", intent: "information" };
+  }
+  
+  if (firstWord === "where") {
+    return { type: "where", intent: "location" };
+  }
+  
+  if (firstWord === "when") {
+    return { type: "when", intent: "time" };
+  }
+  
+  if (firstWord === "how") {
+    return { type: "how", intent: "method" };
+  }
+  
+  return { type: "unknown", intent: "search" };
+}
+
+/**
+ * Check if query is a question (enhanced)
  */
 function isQuestion(query: string): boolean {
   const normalized = normalizeQuery(query);
@@ -285,8 +720,18 @@ function isQuestion(query: string): boolean {
   const firstWord = normalized.split(" ")[0];
   if (QUESTION_STARTERS.has(firstWord)) return true;
   
+  // Check conversational patterns
+  for (const pattern of CONVERSATIONAL_PATTERNS) {
+    if (normalized.startsWith(pattern)) return true;
+  }
+  
   // Check for "someone who" / "anyone who" patterns
   if (normalized.includes("someone") || normalized.includes("anyone")) {
+    return true;
+  }
+  
+  // Check for question patterns
+  if (/do\s+i\s+know/i.test(query) || /is\s+there/i.test(query) || /can\s+you/i.test(query)) {
     return true;
   }
   
@@ -307,6 +752,93 @@ function detectAction(words: string[]): { action: ActionType; remainingWords: st
   }
   
   return { action: null, remainingWords: words };
+}
+
+/**
+ * Extract negated entities from query
+ */
+function extractNegations(words: string[]): ParsedQuery["negatedEntities"] {
+  const negated: ParsedQuery["negatedEntities"] = {
+    names: [],
+    companies: [],
+    roles: [],
+    departments: [],
+    locations: [],
+    relationships: [],
+    businesses: [],
+  };
+  
+  const normalized = words.join(" ").toLowerCase();
+  
+  // Find negation keywords and extract what follows
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].toLowerCase();
+    
+    if (NEGATION_KEYWORDS.has(word)) {
+      // Extract entities after negation keyword
+      const afterNegation = words.slice(i + 1).join(" ").toLowerCase();
+      
+      // Check for "except X" or "not X" patterns
+      if (word === "except" || word === "excluding" || word === "but not") {
+        // Try to extract what's being excluded
+        const remaining = words.slice(i + 1);
+        
+        // Check if it's a relationship
+        for (const [relType, keywords] of Object.entries(RELATIONSHIP_KEYWORDS)) {
+          if (keywords.some(k => afterNegation.includes(k))) {
+            negated.relationships.push(relType);
+          }
+        }
+        
+        // Check if it's a company (after "from" or "at")
+        for (let j = 0; j < remaining.length; j++) {
+          if (ENTITY_PREPOSITIONS.company.has(remaining[j]?.toLowerCase())) {
+            const companyWords = remaining.slice(j + 1, j + 4);
+            if (companyWords.length > 0) {
+              negated.companies.push(companyWords.join(" "));
+            }
+            break;
+          }
+        }
+        
+        // Check if it's a role
+        if (ROLE_VOCABULARY.has(remaining[0]?.toLowerCase())) {
+          negated.roles.push(remaining[0]);
+        }
+      }
+    }
+  }
+  
+  return negated;
+}
+
+/**
+ * Extract comparative filters from query
+ */
+function extractComparativeFilters(query: string): ParsedQuery["comparativeFilters"] {
+  const normalized = normalizeQuery(query);
+  const result: ParsedQuery["comparativeFilters"] = {};
+  
+  // Pattern: "more than X days ago", "less than X days", "older than X days", "newer than X days"
+  const patterns = [
+    { regex: /more\s+than\s+(\d+)\s+days?\s+ago/i, operator: "more than" as const },
+    { regex: /less\s+than\s+(\d+)\s+days?\s+ago/i, operator: "less than" as const },
+    { regex: /older\s+than\s+(\d+)\s+days?/i, operator: "older than" as const },
+    { regex: /newer\s+than\s+(\d+)\s+days?/i, operator: "newer than" as const },
+    { regex: /over\s+(\d+)\s+days?\s+ago/i, operator: "more than" as const },
+    { regex: /within\s+(\d+)\s+days?/i, operator: "less than" as const },
+  ];
+  
+  for (const { regex, operator } of patterns) {
+    const match = normalized.match(regex);
+    if (match && match[1]) {
+      const days = parseInt(match[1], 10);
+      result.timeRange = { operator, days };
+      break;
+    }
+  }
+  
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 /**
@@ -487,6 +1019,7 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
   const text = words.join(" ");
   
   // Extract companies (words after "at", "from", or with company suffixes)
+  // This must happen BEFORE semantic verb extraction to avoid conflicts
   for (let i = 0; i < words.length; i++) {
     const word = words[i].toLowerCase();
     const nextWord = words[i + 1]?.toLowerCase();
@@ -497,12 +1030,39 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
       const companyWords: string[] = [];
       for (let j = i + 1; j < words.length; j++) {
         const w = words[j];
-        if (STOP_WORDS.has(w.toLowerCase()) && j > i + 1) break;
+        const wLower = w.toLowerCase();
+        
+        // Stop on stop words only if we've already collected at least one word
+        // This allows "at quantum solutions" to work even if there are stop words
+        // BUT: Don't stop on "at" if it appears later (it's a preposition, not a stop word in this context)
+        // Also: Don't stop on question words that might appear at the end
+        // IMPORTANT: Don't stop on "know" or "do" if they appear after we've collected company words
+        // (they might be part of the query structure like "who do I know at company")
+        if (STOP_WORDS.has(wLower) && j > i + 1 && companyWords.length > 0) {
+          // Only break if we hit a significant stop word after collecting company words
+          // Allow common words like "the", "a", "an" to be part of company name
+          // Also allow "at" if it's part of a compound company name (rare but possible)
+          // Don't break on question words that might be at the end
+          // Don't break on "know" or "do" - they're likely part of the query structure
+          const questionWords = ["who", "what", "where", "when", "why", "how"];
+          const queryStructureWords = ["know", "do", "does", "did", "i", "you", "we", "they"];
+          if (wLower !== "the" && wLower !== "a" && wLower !== "an" && wLower !== "at" && 
+              !questionWords.includes(wLower) && !queryStructureWords.includes(wLower)) {
+            break;
+          }
+        }
         companyWords.push(w);
-        if (COMPANY_SUFFIXES.has(w.toLowerCase())) break;
+        // If we hit a company suffix, include it and stop (this is good - we have the full company name)
+        if (COMPANY_SUFFIXES.has(wLower)) break;
       }
       if (companyWords.length > 0) {
-        entities.companies.push(companyWords.join(" "));
+        const companyName = companyWords.join(" ").trim();
+        // Remove any trailing punctuation that might have been included
+        const cleanedName = companyName.replace(/[?!.,;:]+$/, "").trim();
+        // Only add if not already added (avoid duplicates) and if it's not empty
+        if (cleanedName && !entities.companies.includes(cleanedName)) {
+          entities.companies.push(cleanedName);
+        }
       }
     }
     
@@ -573,21 +1133,176 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
     }
   }
   
-  // Extract roles and departments from vocabulary
+  // Extract roles and departments from vocabulary (with synonym expansion)
   for (const word of words) {
     const lower = word.toLowerCase();
-    if (ROLE_VOCABULARY.has(lower)) {
-      // Classify as role or department
-      const depts = ["hr", "sales", "marketing", "engineering", "finance", "legal", 
-                     "operations", "support", "it", "tech", "product", "design", 
-                     "research", "development", "accounting", "admin", "administration"];
-      if (depts.includes(lower)) {
-        if (!entities.departments.includes(lower)) {
-          entities.departments.push(lower);
+    
+    // Expand synonyms first
+    const expanded = expandQueryTerms(lower);
+    
+    for (const term of expanded) {
+      const termLower = term.toLowerCase();
+      if (ROLE_VOCABULARY.has(termLower)) {
+        // Classify as role or department
+        const depts = ["hr", "human resources", "people ops", "sales", "business development", "bd", "revenue",
+                       "marketing", "growth", "demand gen", "engineering", "dev", "development", "software",
+                       "finance", "accounting", "fpa", "fp&a", "legal", 
+                       "operations", "support", "it", "information technology", "tech", "product", "design", 
+                       "research", "admin", "administration"];
+        if (depts.includes(termLower)) {
+          if (!entities.departments.includes(termLower)) {
+            entities.departments.push(termLower);
+          }
+        } else {
+          if (!entities.roles.includes(termLower)) {
+            entities.roles.push(termLower);
+          }
         }
-      } else {
-        if (!entities.roles.includes(lower)) {
-          entities.roles.push(lower);
+      }
+    }
+  }
+  
+  // Track entity relationships for multi-entity queries (e.g., "engineers at Google")
+  // This helps understand that "engineers" and "Google" are related
+  const entityRelationships: Array<{ type1: string; value1: string; type2: string; value2: string; proximity: number }> = [];
+  
+  // Use semantic verbs to extract entities and track relationships
+  const queryText = words.join(" ").toLowerCase();
+  for (const [verb, mapping] of Object.entries(SEMANTIC_VERB_MAP)) {
+    if (queryText.includes(verb)) {
+      // Find what comes after the verb
+      const verbIndex = queryText.indexOf(verb);
+      const beforeVerb = queryText.substring(0, verbIndex);
+      const afterVerb = queryText.substring(verbIndex + verb.length).trim();
+      const afterWords = afterVerb.split(/\s+/).slice(0, 3); // Take up to 3 words
+      
+      if (afterWords.length > 0) {
+        const entityValue = afterWords.join(" ");
+        
+        // Check if there's an entity before the verb (e.g., "engineers at Google")
+        const beforeWords = beforeVerb.trim().split(/\s+/).slice(-2); // Last 2 words before verb
+        let relatedEntity: { type: string; value: string } | null = null;
+        
+        if (beforeWords.length > 0) {
+          const beforeText = beforeWords.join(" ").toLowerCase();
+          // Check if it's a role
+          for (const role of entities.roles) {
+            if (beforeText.includes(role.toLowerCase())) {
+              relatedEntity = { type: "role", value: role };
+              break;
+            }
+          }
+          // Check if it's a department
+          if (!relatedEntity) {
+            for (const dept of entities.departments) {
+              if (beforeText.includes(dept.toLowerCase())) {
+                relatedEntity = { type: "department", value: dept };
+                break;
+              }
+            }
+          }
+        }
+        
+        // Apply fuzzy matching for known entities if needed
+        if (mapping.entityType === "companies") {
+          if (!entities.companies.includes(entityValue)) {
+            entities.companies.push(entityValue);
+          }
+          // Track relationship if we found a related entity
+          if (relatedEntity) {
+            entityRelationships.push({
+              type1: relatedEntity.type,
+              value1: relatedEntity.value,
+              type2: "company",
+              value2: entityValue,
+              proximity: 1,
+            });
+          }
+        } else if (mapping.entityType === "departments") {
+          const expanded = expandQueryTerms(entityValue);
+          for (const term of expanded) {
+            if (!entities.departments.includes(term.toLowerCase())) {
+              entities.departments.push(term.toLowerCase());
+            }
+          }
+        } else if (mapping.entityType === "roles") {
+          const expanded = expandQueryTerms(entityValue);
+          for (const term of expanded) {
+            if (!entities.roles.includes(term.toLowerCase())) {
+              entities.roles.push(term.toLowerCase());
+            }
+          }
+        } else if (mapping.entityType === "locations") {
+          if (!entities.locations.includes(entityValue)) {
+            entities.locations.push(entityValue);
+          }
+          // Track relationship (e.g., "sales in San Francisco")
+          if (relatedEntity) {
+            entityRelationships.push({
+              type1: relatedEntity.type,
+              value1: relatedEntity.value,
+              type2: "location",
+              value2: entityValue,
+              proximity: 1,
+            });
+          }
+        } else if (mapping.entityType === "relationships") {
+          // Don't extract relationships if the value looks like a company (has "at" or company suffix)
+          // This prevents "know at quantum solutions" from being extracted as a relationship
+          const entityValueLower = entityValue.toLowerCase();
+          const hasCompanyPreposition = entityValueLower.includes(" at ") || entityValueLower.startsWith("at ");
+          const hasCompanySuffix = entityValueLower.split(/\s+/).some(w => COMPANY_SUFFIXES.has(w));
+          
+          // Only add as relationship if it doesn't look like a company
+          if (!hasCompanyPreposition && !hasCompanySuffix) {
+            if (!entities.relationships.includes(entityValue)) {
+              entities.relationships.push(entityValue);
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // Also detect proximity-based relationships (entities near each other)
+  // Pattern: "engineers at Google in SF" → role + company + location
+  for (let i = 0; i < words.length - 1; i++) {
+    const word = words[i].toLowerCase();
+    const nextWord = words[i + 1]?.toLowerCase();
+    
+    // Check for "X at Y" or "X in Y" patterns
+    if ((ENTITY_PREPOSITIONS.company.has(word) || ENTITY_PREPOSITIONS.location.has(word)) && nextWord) {
+      // Look backwards for a role/department
+      for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+        const prevWord = words[j].toLowerCase();
+        if (ROLE_VOCABULARY.has(prevWord)) {
+          const roleOrDept = prevWord;
+          const companyOrLocation = words.slice(i + 1, i + 4).join(" ").toLowerCase();
+          
+          if (ENTITY_PREPOSITIONS.company.has(word)) {
+            if (!entities.companies.includes(companyOrLocation)) {
+              entities.companies.push(companyOrLocation);
+            }
+            entityRelationships.push({
+              type1: entities.roles.includes(roleOrDept) ? "role" : "department",
+              value1: roleOrDept,
+              type2: "company",
+              value2: companyOrLocation,
+              proximity: i - j,
+            });
+          } else if (ENTITY_PREPOSITIONS.location.has(word)) {
+            if (!entities.locations.includes(companyOrLocation)) {
+              entities.locations.push(companyOrLocation);
+            }
+            entityRelationships.push({
+              type1: entities.roles.includes(roleOrDept) ? "role" : "department",
+              value1: roleOrDept,
+              type2: "location",
+              value2: companyOrLocation,
+              proximity: i - j,
+            });
+          }
+          break;
         }
       }
     }
@@ -666,10 +1381,55 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
 }
 
 /**
- * Extract time range from query
+ * Extract time range from query (with comparative support)
  */
 function extractTimeRange(query: string): TimeRange | undefined {
   const normalized = normalizeQuery(query);
+  
+  // Check for comparative patterns first (e.g., "more than 30 days ago")
+  const comparativePatterns = [
+    { regex: /more\s+than\s+(\d+)\s+days?\s+ago/i, operator: "more than" as const },
+    { regex: /less\s+than\s+(\d+)\s+days?\s+ago/i, operator: "less than" as const },
+    { regex: /over\s+(\d+)\s+days?\s+ago/i, operator: "more than" as const },
+    { regex: /within\s+(\d+)\s+days?/i, operator: "less than" as const },
+  ];
+  
+  for (const { regex, operator } of comparativePatterns) {
+    const match = normalized.match(regex);
+    if (match && match[1]) {
+      const days = parseInt(match[1], 10);
+      const end = new Date();
+      const start = new Date();
+      
+      if (operator === "more than") {
+        // More than X days ago = before (now - X days)
+        start.setTime(0); // Beginning of time
+        end.setDate(end.getDate() - days);
+        end.setHours(23, 59, 59, 999);
+      } else if (operator === "less than") {
+        // Less than X days ago = within last X days
+        start.setDate(end.getDate() - days);
+        start.setHours(0, 0, 0, 0);
+      }
+      
+      return { start, end };
+    }
+  }
+  
+  // Check for relative time expressions
+  if (normalized.includes("recently")) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 7); // Last 7 days
+    return { start, end };
+  }
+  
+  if (normalized.includes("a while ago") || normalized.includes("awhile ago")) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 30); // More than 30 days ago
+    return { start, end };
+  }
   
   // FIRST: Check for combined patterns like "last [day] [time-of-day]" (e.g., "last friday night")
   // This must come before individual day/time-of-day checks
@@ -1042,31 +1802,383 @@ function extractKeywords(words: string[]): string[] {
 }
 
 /**
+ * Extract company from natural language question patterns
+ * This runs FIRST and handles common question patterns explicitly
+ * Uses the ORIGINAL query (not normalized) to preserve structure
+ */
+function extractCompanyFromQuestionPatterns(query: string): string | null {
+  console.log('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - Input query:', query);
+  
+  // Try multiple specific patterns in order of specificity
+  
+  // Pattern 1: "who do I know at [company]" - most specific
+  let match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
+  console.log('[SEARCH DEBUG] Pattern 1 match:', match);
+  if (match && match[1]) {
+    console.log('[SEARCH DEBUG] Pattern 1 captured:', match[1]);
+    const company = cleanCompanyName(match[1]);
+    console.log('[SEARCH DEBUG] Pattern 1 cleaned company:', company);
+    if (company) return company;
+  }
+  
+  // Pattern 2: "who do I know at [company]?" - alternative word order
+  match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]+)/i);
+  console.log('[SEARCH DEBUG] Pattern 2 match:', match);
+  if (match && match[1]) {
+    console.log('[SEARCH DEBUG] Pattern 2 captured:', match[1]);
+    const company = cleanCompanyName(match[1]);
+    console.log('[SEARCH DEBUG] Pattern 2 cleaned company:', company);
+    if (company) return company;
+  }
+  
+  // Pattern 3: "who works at [company]"
+  match = query.match(/who\s+(?:works?|work)\s+(?:at|for|@)\s+([^?]+?)(?:\s*\?|$)/i);
+  console.log('[SEARCH DEBUG] Pattern 3 match:', match);
+  if (match && match[1]) {
+    const company = cleanCompanyName(match[1]);
+    if (company) return company;
+  }
+  
+  // Pattern 4: "who is at [company]"
+  match = query.match(/who\s+(?:is|are)\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
+  console.log('[SEARCH DEBUG] Pattern 4 match:', match);
+  if (match && match[1]) {
+    const company = cleanCompanyName(match[1]);
+    if (company) return company;
+  }
+  
+  // Pattern 5: Generic "at [company]" - find "at" and extract what follows
+  // This is a fallback that should catch most cases
+  // Look for "at" as a word boundary (not part of another word)
+  const atMatch = query.match(/\b(at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
+  console.log('[SEARCH DEBUG] Pattern 5 (generic at) match:', atMatch);
+  if (atMatch && atMatch[2]) {
+    console.log('[SEARCH DEBUG] Pattern 5 captured:', atMatch[2]);
+    const company = cleanCompanyName(atMatch[2]);
+    console.log('[SEARCH DEBUG] Pattern 5 cleaned company:', company);
+    if (company) return company;
+  }
+  
+  // Pattern 6: "at [company]" at start or with word boundary
+  match = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*?)(?:\s*\?|$)/i);
+  console.log('[SEARCH DEBUG] Pattern 6 match:', match);
+  if (match && match[1]) {
+    const company = cleanCompanyName(match[1]);
+    if (company) return company;
+  }
+  
+  console.log('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - No company found');
+  return null;
+}
+
+/**
+ * Clean and validate company name extracted from query
+ */
+function cleanCompanyName(rawCompany: string): string | null {
+  console.log('[SEARCH DEBUG] cleanCompanyName - Input:', rawCompany);
+  if (!rawCompany) return null;
+  
+  // Remove trailing punctuation
+  let cleaned = rawCompany.trim().replace(/[?!.,;:]+$/, "").trim();
+  console.log('[SEARCH DEBUG] cleanCompanyName - After punctuation removal:', cleaned);
+  if (!cleaned) return null;
+  
+  // Split into words and filter
+  const words = cleaned.split(/\s+/);
+  console.log('[SEARCH DEBUG] cleanCompanyName - Split words:', words);
+  const filtered: string[] = [];
+  
+  for (const word of words) {
+    const wLower = word.toLowerCase();
+    
+    // Always keep company suffixes
+    if (COMPANY_SUFFIXES.has(wLower)) {
+      console.log('[SEARCH DEBUG] cleanCompanyName - Keeping suffix:', word);
+      filtered.push(word);
+      continue;
+    }
+    
+    // Filter out query structure words
+    const skipWords = new Set([
+      "who", "what", "where", "when", "why", "how",
+      "do", "does", "did", "is", "are", "was", "were",
+      "i", "you", "we", "they", "he", "she", "it",
+      "know", "knows", "knew", "known",
+      "works", "work", "worked", "working",
+      "at", "from", "for", "the", "a", "an"
+    ]);
+    
+    if (skipWords.has(wLower)) {
+      console.log('[SEARCH DEBUG] cleanCompanyName - Skipping query word:', word);
+      continue; // Skip this word
+    }
+    
+    // Filter out action keywords
+    if (ACTION_KEYWORDS[wLower]) {
+      console.log('[SEARCH DEBUG] cleanCompanyName - Skipping action word:', word);
+      continue; // Skip action words
+    }
+    
+    // Keep everything else (likely part of company name)
+    console.log('[SEARCH DEBUG] cleanCompanyName - Keeping word:', word);
+    filtered.push(word);
+  }
+  
+  console.log('[SEARCH DEBUG] cleanCompanyName - Filtered words:', filtered);
+  if (filtered.length === 0) return null;
+  
+  const result = filtered.join(" ").trim();
+  console.log('[SEARCH DEBUG] cleanCompanyName - Final result:', result);
+  return result || null;
+}
+
+/**
  * Parse search query into structured, deterministic result
  */
 export function parseSearchQuery(query: string): ParsedQuery {
+  // Detect email/phone in query first
+  const emailOrPhone = detectEmailOrPhone(query);
+  
   const normalized = normalizeQuery(query);
   const words = normalized.split(" ").filter(Boolean);
   
   // Detect action
   const { action, remainingWords } = detectAction(words);
   
-  // Determine intent
+  // Determine intent (enhanced with question classification)
   let intent: IntentType = "find";
   if (action) {
     intent = "action";
   } else if (isQuestion(query)) {
     intent = "question";
+    const questionType = classifyQuestionType(query);
+    // Use question intent to guide entity extraction
   }
   
-  // Extract entities from remaining words
-  const entities = extractEntities(remainingWords);
+  // PRIORITY 1: Extract company from natural language question patterns FIRST
+  // This handles "who do I know at X" patterns explicitly before any other logic
+  console.log('[SEARCH DEBUG] parseSearchQuery - Starting parse for query:', query);
+  console.log('[SEARCH DEBUG] parseSearchQuery - Normalized:', normalized);
+  console.log('[SEARCH DEBUG] parseSearchQuery - Words:', words);
+  console.log('[SEARCH DEBUG] parseSearchQuery - Remaining words:', remainingWords);
   
-  // Extract keywords
-  const keywords = extractKeywords(remainingWords);
+  const questionCompany = extractCompanyFromQuestionPatterns(query);
+  console.log('[SEARCH DEBUG] parseSearchQuery - Question company extracted:', questionCompany);
+  
+  // Extract entities from remaining words (with semantic verb hints)
+  const entities = extractEntities(remainingWords);
+  console.log('[SEARCH DEBUG] parseSearchQuery - Entities extracted:', {
+    companies: entities.companies,
+    roles: entities.roles,
+    names: entities.names,
+    locations: entities.locations
+  });
+  
+  // If we extracted a company from question patterns, add it (highest priority)
+  if (questionCompany && !entities.companies.includes(questionCompany)) {
+    console.log('[SEARCH DEBUG] parseSearchQuery - Adding question company to entities');
+    entities.companies.unshift(questionCompany); // Add to front to prioritize
+  }
+  console.log('[SEARCH DEBUG] parseSearchQuery - Final companies:', entities.companies);
+  
+  // Special case: If still no company was found and query contains "at [words]", try direct extraction
+  // This handles queries like "who do I know at quantum solutions?" where the question structure
+  // might prevent normal extraction
+  if (entities.companies.length === 0) {
+    // Look for "at" in the full normalized query (not just remainingWords)
+    const allWords = normalized.split(" ").filter(Boolean);
+    const atIndex = allWords.findIndex(w => ENTITY_PREPOSITIONS.company.has(w.toLowerCase()));
+    if (atIndex >= 0 && atIndex < allWords.length - 1) {
+      // Extract words after "at"
+      const companyWords: string[] = [];
+      for (let j = atIndex + 1; j < allWords.length; j++) {
+        const w = allWords[j];
+        const wLower = w.toLowerCase();
+        // Stop on significant stop words (but allow "the", "a", "an")
+        // Don't stop on question words or query structure words
+        const questionWords = ["who", "what", "where", "when", "why", "how"];
+        const queryStructureWords = ["know", "do", "does", "did", "i", "you", "we", "they"];
+        if (STOP_WORDS.has(wLower) && j > atIndex + 1 && companyWords.length > 0) {
+          if (wLower !== "the" && wLower !== "a" && wLower !== "an" && 
+              !questionWords.includes(wLower) && !queryStructureWords.includes(wLower)) {
+            break;
+          }
+        }
+        companyWords.push(w);
+        // If we hit a company suffix, include it and stop
+        if (COMPANY_SUFFIXES.has(wLower)) break;
+      }
+      if (companyWords.length > 0) {
+        const companyName = companyWords.join(" ").replace(/[?!.,;:]+$/, "").trim();
+        if (companyName && !entities.companies.includes(companyName)) {
+          entities.companies.push(companyName);
+        }
+      }
+    }
+  }
+  
+  // Apply entity disambiguation for ambiguous entities
+  for (let i = 0; i < entities.names.length; i++) {
+    const name = entities.names[i];
+    const context = {
+      before: i > 0 ? remainingWords[i - 1] : undefined,
+      after: i < remainingWords.length - 1 ? remainingWords[i + 1] : undefined,
+      query: normalized,
+    };
+    const disambiguation = disambiguateEntity(name, context);
+    
+    // If disambiguation suggests it's not a name, move it to appropriate entity type
+    if (disambiguation.type === "company" && disambiguation.confidence > 0.5) {
+      entities.companies.push(name);
+      entities.names.splice(i, 1);
+      i--;
+    } else if (disambiguation.type === "role" && disambiguation.confidence > 0.5) {
+      entities.roles.push(name);
+      entities.names.splice(i, 1);
+      i--;
+    }
+  }
+  
+  // Fallback: If no company was extracted but query contains "at [words]", try to extract it
+  // This handles cases where the extraction might have missed the company
+  // Use regex pattern matching as a more robust fallback
+  // Also check the ORIGINAL query (before normalization) in case normalization removed something
+  if (entities.companies.length === 0) {
+    // First, try the original query with a simple pattern
+    const originalAtMatch = query.match(/(?:^|\s)(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
+    if (originalAtMatch && originalAtMatch[1]) {
+      const potentialCompany = originalAtMatch[1].trim();
+      // Remove trailing punctuation
+      const cleaned = potentialCompany.replace(/[?!.,;:]+$/, "").trim();
+      if (cleaned) {
+        // Split and filter - be more permissive here
+        const companyWords = cleaned.split(/\s+/).filter(w => {
+          const wLower = w.toLowerCase();
+          if (!wLower) return false;
+          // Keep company suffixes
+          if (COMPANY_SUFFIXES.has(wLower)) return true;
+          // Filter out obvious stop words but be lenient
+          const obviousStopWords = ["who", "what", "where", "when", "why", "how", "do", "does", "did", "i", "know", "you", "we", "they"];
+          if (obviousStopWords.includes(wLower)) return false;
+          // Keep everything else
+          return true;
+        });
+        if (companyWords.length > 0) {
+          const companyName = companyWords.join(" ").trim();
+          if (companyName && !entities.companies.includes(companyName)) {
+            entities.companies.push(companyName);
+          }
+        }
+      }
+    }
+    // Pattern: "at [company name]" - match "at" followed by words
+    // Try multiple patterns to catch different cases
+    const atCompanyPatterns = [
+      // Pattern 1: "at [words]" at end of query (with or without question mark)
+      /(?:^|\s)(?:at|from|@)\s+([a-z0-9\s]+?)(?:\s*\?|$)/i,
+      // Pattern 2: "at [words]" anywhere in query
+      /(?:^|\s)(?:at|from|@)\s+([a-z0-9\s]+?)(?=\s|$)/i,
+      // Pattern 3: More permissive - just "at" followed by non-stop words
+      /(?:^|\s)(?:at|from|@)\s+((?:[a-z0-9]+(?:\s+[a-z0-9]+)*))/i,
+    ];
+    
+    for (const pattern of atCompanyPatterns) {
+      const match = normalized.match(pattern);
+      if (match && match[1]) {
+        const potentialCompany = match[1].trim();
+        // Remove trailing question marks and punctuation
+        const cleaned = potentialCompany.replace(/[?!.,;:]+$/, "").trim();
+        
+        if (cleaned) {
+          // Split into words and filter out stop words (but keep company suffixes)
+          const companyWords = cleaned.split(/\s+/).filter(w => {
+            const wLower = w.toLowerCase();
+            // Remove empty strings
+            if (!wLower) return false;
+            // Keep company suffixes
+            if (COMPANY_SUFFIXES.has(wLower)) return true;
+            // Filter out stop words (except allow "the", "a", "an")
+            if (STOP_WORDS.has(wLower) && wLower !== "the" && wLower !== "a" && wLower !== "an") {
+              return false;
+            }
+            // Filter out question words
+            const questionWords = ["who", "what", "where", "when", "why", "how", "do", "does", "did", "i", "know"];
+            if (questionWords.includes(wLower)) return false;
+            // Filter out action words
+            if (ACTION_KEYWORDS[wLower]) return false;
+            return true;
+          });
+          
+          if (companyWords.length > 0) {
+            const companyName = companyWords.join(" ").trim();
+            if (companyName && !entities.companies.includes(companyName)) {
+              entities.companies.push(companyName);
+              break; // Found a company, stop trying other patterns
+            }
+          }
+        }
+      }
+    }
+    
+    // Also try the word-by-word approach as additional fallback
+    let atIndex = remainingWords.findIndex(w => ENTITY_PREPOSITIONS.company.has(w.toLowerCase()));
+    let wordsToSearch = remainingWords;
+    
+    // If not found in remainingWords, check all words (in case "at" was in the original query)
+    if (atIndex === -1) {
+      const allWords = normalized.split(" ").filter(Boolean);
+      atIndex = allWords.findIndex(w => ENTITY_PREPOSITIONS.company.has(w.toLowerCase()));
+      wordsToSearch = allWords;
+    }
+    
+    if (atIndex >= 0 && atIndex < wordsToSearch.length - 1 && entities.companies.length === 0) {
+      // Extract words after "at"
+      const companyWords: string[] = [];
+      for (let j = atIndex + 1; j < wordsToSearch.length; j++) {
+        const w = wordsToSearch[j];
+        const wLower = w.toLowerCase();
+        // Stop on significant stop words (but allow "the", "a", "an")
+        // Also don't stop on question marks or other punctuation that might be at the end
+        const questionWords = ["who", "what", "where", "when", "why", "how"];
+        if (STOP_WORDS.has(wLower) && j > atIndex + 1 && companyWords.length > 0) {
+          if (wLower !== "the" && wLower !== "a" && wLower !== "an" && !questionWords.includes(wLower)) {
+            break;
+          }
+        }
+        companyWords.push(w);
+        // If we hit a company suffix, include it and stop
+        if (COMPANY_SUFFIXES.has(wLower)) break;
+      }
+      if (companyWords.length > 0) {
+        const companyName = companyWords.join(" ");
+        // Remove any trailing punctuation
+        const cleanedName = companyName.replace(/[?!.,;:]+$/, "").trim();
+        if (cleanedName && !entities.companies.includes(cleanedName)) {
+          entities.companies.push(cleanedName);
+        }
+      }
+    }
+  }
+  
+  // Extract negated entities
+  const negatedEntities = extractNegations(remainingWords);
+  
+  // Extract keywords (with query expansion)
+  const rawKeywords = extractKeywords(remainingWords);
+  const keywords: string[] = [];
+  for (const keyword of rawKeywords) {
+    // Expand synonyms
+    const expanded = expandQueryTerms(keyword);
+    keywords.push(...expanded);
+  }
+  // Remove duplicates and keep original order
+  const uniqueKeywords = Array.from(new Set(keywords));
   
   // Extract time range if present (for creation date)
   const timeRange = extractTimeRange(query);
+  
+  // Extract comparative filters
+  const comparativeFilters = extractComparativeFilters(query);
   
   // Extract interaction type
   let interactionType = extractInteractionType(query);
@@ -1139,8 +2251,8 @@ export function parseSearchQuery(query: string): ParsedQuery {
     // Add responsibility tags to keywords for fallback search
     if (responsibility.filters.tags) {
       for (const tag of responsibility.filters.tags) {
-        if (!keywords.includes(tag)) {
-          keywords.push(tag);
+        if (!uniqueKeywords.includes(tag)) {
+          uniqueKeywords.push(tag);
         }
       }
     }
@@ -1149,15 +2261,15 @@ export function parseSearchQuery(query: string): ParsedQuery {
     const normalizedPhrase = normalizeResponsibilityPhrase(responsibilityPhrase);
     const phraseTokens = normalizedPhrase.split(/\s+/).filter(t => t.length >= 2);
     for (const token of phraseTokens) {
-      if (!keywords.includes(token)) {
-        keywords.push(token);
+      if (!uniqueKeywords.includes(token)) {
+        uniqueKeywords.push(token);
       }
     }
   }
   
   // Build search terms (unique, meaningful terms for text search)
   const searchTerms = [...new Set([
-    ...keywords,
+    ...uniqueKeywords,
     ...entities.names.map(n => n.toLowerCase()),
     ...entities.roles,
     ...entities.departments,
@@ -1169,7 +2281,8 @@ export function parseSearchQuery(query: string): ParsedQuery {
     intent,
     action,
     entities,
-    keywords,
+    negatedEntities,
+    keywords: uniqueKeywords,
     filters: {},
     originalQuery: query,
     searchTerms,
@@ -1179,6 +2292,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
     interactionTimeRange,
     needsFollowUp,
     responsibility: responsibility || null,
+    comparativeFilters,
   };
   
   // Generate interpretation
