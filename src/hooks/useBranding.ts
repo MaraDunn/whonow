@@ -4,7 +4,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useAuth } from "@/hooks/useAuth";
 import { FEATURE_ACCESS } from "@/types/subscription";
-import whonowLogo from "@/assets/whonow-logo.png";
+import whonowLogoIcon from "@/assets/whonow-logo-icon.png";
 
 export interface BrandingAssets {
   logo: string;
@@ -96,7 +96,7 @@ export function useBranding(): BrandingAssets {
   useEffect(() => {
     if (company?.id && profile?.companyId === company.id && hasCustomBranding) {
       const branding: BrandingAssets = {
-        logo: company.logoUrl || whonowLogo,
+        logo: company.logoUrl || whonowLogoIcon,
         favicon: company.faviconUrl,
         primaryColor: company.primaryColor,
         secondaryColor: company.secondaryColor,
@@ -110,7 +110,7 @@ export function useBranding(): BrandingAssets {
     // Always return default branding on landing page
     if (isLandingPage) {
       return {
-        logo: whonowLogo,
+        logo: whonowLogoIcon,
         companyName: "WhoNow",
       };
     }
@@ -121,7 +121,7 @@ export function useBranding(): BrandingAssets {
     // Use fresh company data if available, otherwise use cached data for instant display
     if (hasCustomBranding && company && userBelongsToCompany) {
       return {
-        logo: company.logoUrl || whonowLogo, // Fallback to default logo if not set
+        logo: company.logoUrl || whonowLogoIcon, // Fallback to default logo if not set
         favicon: company.faviconUrl,
         primaryColor: company.primaryColor,
         secondaryColor: company.secondaryColor,
@@ -133,7 +133,7 @@ export function useBranding(): BrandingAssets {
     if (!company && cachedBranding && profile?.companyId && 
         (cachedBranding.primaryColor || cachedBranding.secondaryColor || cachedBranding.logo)) {
       return {
-        logo: cachedBranding.logo || whonowLogo,
+        logo: cachedBranding.logo || whonowLogoIcon,
         favicon: cachedBranding.favicon,
         primaryColor: cachedBranding.primaryColor,
         secondaryColor: cachedBranding.secondaryColor,
@@ -143,7 +143,7 @@ export function useBranding(): BrandingAssets {
 
     // Default WhoNow branding (always return this if user doesn't belong to company or no branding)
     return {
-      logo: whonowLogo,
+      logo: whonowLogoIcon,
       companyName: "WhoNow",
     };
   }, [hasCustomBranding, company, profile, user, isLandingPage, cachedBranding]);
