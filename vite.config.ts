@@ -25,19 +25,42 @@ function waitlistMetaTags(): Plugin {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
-  },
-  plugins: [
-    react(),
-    mode === "development" && componentTagger(),
-    waitlistMetaTags(),
-  ].filter(Boolean),
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+export default defineConfig(({ mode }) => {
+  // Check if running in Tauri mode
+  const isTauri = process.env.TAURI_PLATFORM !== undefined;
+  
+  return {
+    server: {
+      host: "::",
+      port: 8080,
+      // Tauri expects strict port and host configuration
+      strictPort: isTauri,
+      // Allow external connections for Tauri
+      hmr: isTauri ? {
+        protocol: "ws",
+        host: "localhost",
+        port: 8080,
+      } : undefined,
     },
-  },
-}));
+    // Clear screen on restart (useful for Tauri dev mode)
+    clearScreen: false,
+    // Environment variables prefix
+    envPrefix: ["VITE_", "TAURI_"],
+    plugins: [
+      react(),
+      mode === "development" && componentTagger(),
+      waitlistMetaTags(),
+    ].filter(Boolean),
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
+    },
+    // Build configuration works for both web and Tauri
+    build: {
+      // Tauri uses a custom protocol, so we don't need to worry about base path
+      // Web builds continue to work as before
+      target: process.env.TAURI_PLATFORM ? ["es2021", "chrome100", "safari13"] : undefined,
+    },
+  };
+});

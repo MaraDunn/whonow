@@ -1,0 +1,153 @@
+# Tauri Desktop App Setup
+
+This document describes the Tauri desktop app setup for WhoNow.
+
+## Prerequisites
+
+1. **Rust Toolchain**: Tauri requires Rust. Install it using:
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+   Or visit https://rustup.rs/
+
+2. **System Dependencies**:
+   - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
+   - **Windows**: Microsoft Visual Studio C++ Build Tools
+   - **Linux**: `libwebkit2gtk-4.0-dev`, `build-essential`, `curl`, `wget`, `libssl-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`
+
+## Installation
+
+1. Install npm dependencies:
+   ```bash
+   npm install
+   ```
+
+2. The Tauri CLI will be installed as part of npm dependencies. If Rust is not installed, Tauri will guide you through the installation.
+
+## Development
+
+### Web Development (unchanged)
+```bash
+npm run dev
+```
+
+### Desktop Development
+```bash
+npm run tauri:dev
+```
+
+This will:
+- Start the Vite dev server on port 8080
+- Launch the Tauri desktop app window
+- Enable hot-reload for both frontend and Rust code
+
+## Building
+
+### Build for Current Platform
+```bash
+npm run tauri:build
+```
+
+### Platform-Specific Builds
+```bash
+# Windows
+npm run tauri:build:win
+
+# macOS
+npm run tauri:build:mac
+
+# Linux
+npm run tauri:build:linux
+```
+
+## Build Output
+
+Built applications will be in:
+- `src-tauri/target/release/bundle/`
+
+Platform-specific outputs:
+- **Windows**: `.msi` installer and `.exe` executable
+- **macOS**: `.dmg` disk image and `.app` bundle
+- **Linux**: `.deb`, `.AppImage`, or `.rpm` depending on target
+
+## Environment Variables
+
+The desktop app uses the same environment variables as the web app:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_APP_LAUNCH_MODE`
+
+These are loaded from `.env` file, just like the web version.
+
+## Features
+
+### Current Capabilities
+- ✅ Full web app functionality in desktop window
+- ✅ Supabase authentication
+- ✅ File upload/download (using browser APIs)
+- ✅ Camera access for business card scanning
+- ✅ All integrations (Slack, Teams, Google Contacts)
+- ✅ Stripe payment processing
+
+### Desktop-Specific Features (Available for Future)
+- File system access via Tauri APIs
+- System tray integration
+- Native notifications
+- Auto-update functionality
+- Custom protocol handlers
+- Native menus and dialogs
+
+## Configuration
+
+### Window Settings
+Edit `src-tauri/tauri.conf.json` to customize:
+- Window size and dimensions
+- App title and icons
+- Security policies (CSP)
+- File system permissions
+
+### Icons
+Icons are located in `src-tauri/icons/`:
+- `32x32.png` - Small icon
+- `128x128.png` - Standard icon
+- `128x128@2x.png` - High DPI icon (256x256)
+- `icon.ico` - Windows icon
+- `icon.icns` - macOS icon
+
+To update icons, replace these files with your own (maintaining the same names and formats).
+
+## Security
+
+The app uses Content Security Policy (CSP) to restrict resource loading. Allowed domains include:
+- Supabase endpoints (`*.supabase.co`, `*.supabase.in`)
+- Stripe (`api.stripe.com`, `hooks.stripe.com`)
+- Google APIs (`accounts.google.com`, `people.googleapis.com`)
+- Slack (`slack.com`, `*.slack.com`)
+- Microsoft (`login.microsoftonline.com`, `graph.microsoft.com`)
+
+## Troubleshooting
+
+### Rust Not Found
+If you see "rustc not found", install Rust using rustup (see Prerequisites).
+
+### Build Fails on macOS
+Ensure Xcode Command Line Tools are installed:
+```bash
+xcode-select --install
+```
+
+### Icons Not Showing
+Verify all required icon files exist in `src-tauri/icons/`. The `.icns` file may need to be regenerated using macOS's `iconutil` command.
+
+### OAuth Redirects Not Working
+OAuth redirects should work automatically through Supabase. If issues occur, check:
+1. CSP allows the OAuth provider domains
+2. Supabase redirect URLs are configured correctly
+3. The app is using the correct Supabase project URL
+
+## Notes
+
+- The web build (`npm run build`) continues to work independently
+- Development supports both web and desktop modes
+- Initial Rust compilation may take several minutes, but subsequent builds are faster
+- The desktop app bundle size is significantly smaller than Electron (~3-10MB vs ~100MB+)
