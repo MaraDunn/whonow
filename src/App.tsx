@@ -1,3 +1,4 @@
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,7 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { ThemeProvider } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandingTheme } from "@/components/BrandingTheme";
-import { IS_WAITLIST_MODE } from "@/utils/launchMode";
+import { IS_WAITLIST_MODE, isDesktopOrNativeApp } from "@/utils/launchMode";
 import Index from "./pages/Index";
 import Landing from "./pages/Landing";
 import Waitlist from "./pages/Waitlist";
@@ -19,6 +20,7 @@ const queryClient = new QueryClient();
 // Protected route wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
+  const isNative = isDesktopOrNativeApp();
 
   if (loading) {
     return (
@@ -29,6 +31,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!user) {
+    // In desktop/native apps, don't redirect to landing page - stay on /app
+    // The Index page will handle showing auth UI
+    if (isNative) {
+      return <>{children}</>;
+    }
     return <Navigate to="/" replace />;
   }
 
@@ -52,44 +59,78 @@ const WaitlistRouteGuard = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-const AppRoutes = () => (
-  <>
-    <BrandingTheme />
-    <WaitlistRouteGuard>
-      <Routes>
-        {IS_WAITLIST_MODE ? (
-          <>
-            <Route path="/" element={<Waitlist />} />
-            <Route path="/waitlist" element={<Waitlist />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
-            {/* Block all other routes in waitlist mode */}
-            <Route path="/app" element={<Navigate to="/" replace />} />
-            <Route path="/auth" element={<Navigate to="/" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </>
-        ) : (
-          <>
-            <Route path="/" element={<Landing />} />
-            <Route
-              path="/app"
-              element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
-            {/* Redirect old /auth route to landing */}
-            <Route path="/auth" element={<Navigate to="/" replace />} />
-            <Route path="*" element={<NotFound />} />
-          </>
-        )}
-      </Routes>
-    </WaitlistRouteGuard>
-  </>
-);
+// Component to handle desktop/native app root redirect
+const DesktopAppRootRedirect = () => {
+  const [isNative, setIsNative] = React.useState(false);
+  
+  // Check for native app after component mounts (Tauri globals may not be available immediately)
+  React.useEffect(() => {
+    const checkNative = () => {
+      const detected = isDesktopOrNativeApp();
+      console.log('[DesktopAppRootRedirect] Native detection result:', detected);
+      setIsNative(detected);
+    };
+    
+    // Check immediately
+    checkNative();
+    
+    // Also check after a short delay in case Tauri hasn't initialized yet
+    const timeout = setTimeout(checkNative, 100);
+    
+    return () => clearTimeout(timeout);
+  }, []);
+  
+  // In desktop/native apps, redirect root path to /app
+  if (isNative && !IS_WAITLIST_MODE) {
+    console.log('[DesktopAppRootRedirect] Redirecting to /app');
+    return <Navigate to="/app" replace />;
+  }
+  
+  // Otherwise show landing page
+  console.log('[DesktopAppRootRedirect] Showing landing page, isNative:', isNative);
+  return <Landing />;
+};
+
+const AppRoutes = () => {
+  return (
+    <>
+      <BrandingTheme />
+      <WaitlistRouteGuard>
+        <Routes>
+          {IS_WAITLIST_MODE ? (
+            <>
+              <Route path="/" element={<Waitlist />} />
+              <Route path="/waitlist" element={<Waitlist />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              {/* Block all other routes in waitlist mode */}
+              <Route path="/app" element={<Navigate to="/" replace />} />
+              <Route path="/auth" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </>
+          ) : (
+            <>
+              <Route path="/" element={<DesktopAppRootRedirect />} />
+              <Route
+                path="/app"
+                element={
+                  <ProtectedRoute>
+                    <Index />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              {/* Redirect old /auth route to landing */}
+              <Route path="/auth" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFound />} />
+            </>
+          )}
+        </Routes>
+      </WaitlistRouteGuard>
+    </>
+  );
+};
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem>

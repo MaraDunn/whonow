@@ -79,6 +79,12 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
               Demo
             </button>
             <button
+              onClick={() => scrollToSection("downloads")}
+              className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
+            >
+              Downloads
+            </button>
+            <button
               onClick={() => scrollToSection("pricing")}
               className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
             >
@@ -172,6 +178,12 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
               className="block w-full text-left text-muted-foreground hover:text-foreground transition-colors py-2"
             >
               Demo
+            </button>
+            <button
+              onClick={() => scrollToSection("downloads")}
+              className="block w-full text-left text-muted-foreground hover:text-foreground transition-colors py-2"
+            >
+              Downloads
             </button>
             <button
               onClick={() => scrollToSection("pricing")}

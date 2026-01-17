@@ -1,0 +1,225 @@
+import { Monitor, Smartphone, Download, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  detectPlatform,
+  getDownloadUrl,
+  hasDownloadUrl,
+  getPlatformName,
+  type Platform,
+} from "@/utils/downloadLinks";
+
+interface PlatformConfig {
+  platform: Platform;
+  icon: typeof Monitor;
+  label: string;
+  description: string;
+  isMobile: boolean;
+}
+
+const platforms: PlatformConfig[] = [
+  {
+    platform: "windows",
+    icon: Monitor,
+    label: "Windows",
+    description: "Download for Windows",
+    isMobile: false,
+  },
+  {
+    platform: "mac",
+    icon: Monitor,
+    label: "macOS",
+    description: "Download for Mac",
+    isMobile: false,
+  },
+  {
+    platform: "linux",
+    icon: Monitor,
+    label: "Linux",
+    description: "Download for Linux",
+    isMobile: false,
+  },
+  {
+    platform: "ios",
+    icon: Smartphone,
+    label: "iOS",
+    description: "Available on App Store",
+    isMobile: true,
+  },
+  {
+    platform: "android",
+    icon: Smartphone,
+    label: "Android",
+    description: "Available on Play Store",
+    isMobile: true,
+  },
+];
+
+export const DownloadSection = () => {
+  const currentPlatform = detectPlatform();
+
+  const handleDownload = (platform: Platform) => {
+    const url = getDownloadUrl(platform);
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const desktopPlatforms = platforms.filter((p) => !p.isMobile);
+  const mobilePlatforms = platforms.filter((p) => p.isMobile);
+
+  return (
+    <section id="downloads" className="py-24 sm:py-32 bg-background">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Section header */}
+        <div className="text-center mb-16">
+          <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
+            Download WhoNow
+          </h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+            Get the native app for your platform. Available on desktop and mobile.
+          </p>
+        </div>
+
+        {/* Desktop Downloads */}
+        <div className="mb-16">
+          <h3 className="text-xl font-semibold mb-8 text-center text-foreground">
+            Desktop Apps
+          </h3>
+          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            {desktopPlatforms.map((platformConfig) => {
+              const { platform, icon: Icon, label, description } = platformConfig;
+              const isAvailable = hasDownloadUrl(platform);
+              const isCurrentPlatform = currentPlatform === platform;
+              const url = getDownloadUrl(platform);
+
+              return (
+                <div
+                  key={platform}
+                  className={`group relative bg-card rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 border ${
+                    isCurrentPlatform
+                      ? "border-primary ring-2 ring-primary/20"
+                      : "border-border/50"
+                  } animate-fade-in`}
+                >
+                  {/* Current platform badge */}
+                  {isCurrentPlatform && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-primary-foreground text-xs font-semibold rounded-full">
+                      Your Platform
+                    </div>
+                  )}
+
+                  {/* Icon */}
+                  <div className="w-12 h-12 rounded-xl gradient-hero flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                    <Icon className="h-6 w-6 text-primary-foreground" />
+                  </div>
+
+                  {/* Content */}
+                  <h4 className="font-display text-lg font-semibold mb-2 text-foreground">
+                    {label}
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {description}
+                  </p>
+
+                  {/* Download Button */}
+                  {isAvailable ? (
+                    <Button
+                      onClick={() => handleDownload(platform)}
+                      className="w-full gradient-hero text-primary-foreground hover:shadow-lg transition-shadow"
+                      size="sm"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled
+                      variant="outline"
+                      className="w-full"
+                      size="sm"
+                    >
+                      Coming Soon
+                    </Button>
+                  )}
+
+                  {/* Hover glow effect */}
+                  <div className="absolute inset-0 rounded-2xl bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Mobile Downloads */}
+        <div>
+          <h3 className="text-xl font-semibold mb-8 text-center text-foreground">
+            Mobile Apps
+          </h3>
+          <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+            {mobilePlatforms.map((platformConfig) => {
+              const { platform, icon: Icon, label, description } = platformConfig;
+              const isAvailable = hasDownloadUrl(platform);
+              const isCurrentPlatform = currentPlatform === platform;
+              const url = getDownloadUrl(platform);
+
+              return (
+                <div
+                  key={platform}
+                  className={`group relative bg-card rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 border ${
+                    isCurrentPlatform
+                      ? "border-primary ring-2 ring-primary/20"
+                      : "border-border/50"
+                  } animate-fade-in`}
+                >
+                  {/* Current platform badge */}
+                  {isCurrentPlatform && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-primary-foreground text-xs font-semibold rounded-full">
+                      Your Platform
+                    </div>
+                  )}
+
+                  {/* Icon */}
+                  <div className="w-12 h-12 rounded-xl gradient-hero flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                    <Icon className="h-6 w-6 text-primary-foreground" />
+                  </div>
+
+                  {/* Content */}
+                  <h4 className="font-display text-lg font-semibold mb-2 text-foreground">
+                    {label}
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {description}
+                  </p>
+
+                  {/* App Store Button */}
+                  {isAvailable ? (
+                    <Button
+                      onClick={() => handleDownload(platform)}
+                      className="w-full gradient-hero text-primary-foreground hover:shadow-lg transition-shadow"
+                      size="sm"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      View in Store
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled
+                      variant="outline"
+                      className="w-full"
+                      size="sm"
+                    >
+                      Coming Soon
+                    </Button>
+                  )}
+
+                  {/* Hover glow effect */}
+                  <div className="absolute inset-0 rounded-2xl bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};

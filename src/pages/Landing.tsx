@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LandingNav } from "@/components/landing/LandingNav";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { ValueProps } from "@/components/landing/ValueProps";
+import { DownloadSection } from "@/components/landing/DownloadSection";
 import { ProductDemo } from "@/components/landing/ProductDemo";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { TrustSection } from "@/components/landing/TrustSection";
@@ -32,6 +33,7 @@ const Landing = () => {
         <HeroSection onSignIn={openSignIn} onGetStarted={openSignUp} />
         <ValueProps />
         <ProductDemo />
+        <DownloadSection />
         <PricingSection onGetStarted={openSignUp} />
         <TrustSection />
         <FAQSection />
