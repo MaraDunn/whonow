@@ -9,8 +9,11 @@
  * - Error response formatting
  */
 
-// Allowed origins for CORS - update for production
-// Can be overridden with ALLOWED_ORIGINS environment variable (comma-separated)
+// Allowed origins for CORS. For production, set ALLOWED_ORIGINS in Supabase
+// (Edge Function secrets) to your domain(s), e.g.:
+//   ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+// If unset, only DEFAULT_ORIGINS (localhost) are used and waitlist/form requests
+// from your production site will fail CORS.
 const DEFAULT_ORIGINS = [
   "http://localhost:8080",  // Default dev server port
   "http://localhost:5173",  // Alternative Vite port

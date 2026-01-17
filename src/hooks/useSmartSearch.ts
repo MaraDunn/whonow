@@ -1,7 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Contact } from "@/types/contact";
-import { parseSearchQuery, ActionType } from "@/utils/searchQueryParser";
-import { searchWithParsedQuery, searchContacts } from "@/utils/contactSearchEngine";
+import { parseSearchQuery, ActionType, parseSearchQueryToSchema } from "@/utils/searchQueryParser";
+import { searchWithParsedQuery, searchContacts, executeSearchQuery } from "@/utils/contactSearchEngine";
+import { semanticAssist } from "@/utils/semanticAssist";
+import { SearchQuery } from "@/types/searchQuery";
 
 export type { ActionType };
 
@@ -15,74 +17,150 @@ interface SmartSearchResult {
 }
 
 const MAX_RESULTS = 10; // Reduced for better precision
+const SEMANTIC_ASSIST_DEBOUNCE_MS = 300; // Debounce semantic assist for performance
 
 /**
- * Deterministic smart search hook - NO AI/LLM
- * Uses rule-based query parsing and weighted full-text search
+ * Debounce function for semantic assist
+ */
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+/**
+ * Smart search hook with offline semantic assist
+ * Uses deterministic parsing + platform-specific semantic assist
+ * Includes performance optimizations: debouncing, memoization
  */
 export function useSmartSearch(contacts: Contact[], query: string): SmartSearchResult {
-  // Parse query deterministically
-  const parsedQuery = useMemo(() => {
+  const [enhancedQuery, setEnhancedQuery] = useState<SearchQuery | null>(null);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const semanticAssistAbortController = useRef<AbortController | null>(null);
+
+  // Step 1: Deterministic parsing (always runs, synchronous)
+  // Memoized for performance
+  const deterministicQuery = useMemo(() => {
     if (!query.trim()) return null;
-    return parseSearchQuery(query);
+    return parseSearchQueryToSchema(query);
   }, [query]);
 
-  // Compute filtered contacts with deterministic search
+  // Debounce query for semantic assist (only for semantic assist, not deterministic parsing)
+  const debouncedQuery = useDebounce(query, SEMANTIC_ASSIST_DEBOUNCE_MS);
+
+  // Step 2: Semantic assist (platform-specific, async, optional)
+  // Debounced to avoid excessive calls
+  useEffect(() => {
+    // Cancel previous semantic assist request
+    if (semanticAssistAbortController.current) {
+      semanticAssistAbortController.current.abort();
+    }
+
+    if (!deterministicQuery || !debouncedQuery.trim()) {
+      setEnhancedQuery(null);
+      setIsEnhancing(false);
+      return;
+    }
+
+    // Create new abort controller for this request
+    const abortController = new AbortController();
+    semanticAssistAbortController.current = abortController;
+
+    setIsEnhancing(true);
+    
+    // Apply semantic assist asynchronously with timeout
+    const timeoutId = setTimeout(() => {
+      semanticAssist(debouncedQuery, deterministicQuery)
+        .then((enhanced) => {
+          // Check if request was aborted
+          if (abortController.signal.aborted) return;
+          
+          setEnhancedQuery(enhanced);
+          setIsEnhancing(false);
+        })
+        .catch((error) => {
+          // Ignore abort errors
+          if (error.name === 'AbortError') return;
+          
+          console.warn("Semantic assist failed, using deterministic only:", error);
+          if (!abortController.signal.aborted) {
+            setEnhancedQuery(deterministicQuery);
+            setIsEnhancing(false);
+          }
+        });
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      abortController.abort();
+    };
+  }, [debouncedQuery, deterministicQuery]);
+
+  // Step 3: Execute search with final query (deterministic or enhanced)
   const filteredContacts = useMemo(() => {
     if (!query.trim()) {
       return contacts;
     }
 
-    if (!parsedQuery) {
+    // Use enhanced query if available, otherwise use deterministic
+    const finalQuery = enhancedQuery || deterministicQuery;
+    
+    if (!finalQuery) {
       return contacts.slice(0, MAX_RESULTS);
     }
 
-    // Check if we have filters (company, role, etc.) even if searchTerms is empty
-    const hasFilters = parsedQuery.entities.companies.length > 0 ||
-                      parsedQuery.entities.roles.length > 0 ||
-                      parsedQuery.entities.businesses.length > 0 ||
-                      parsedQuery.entities.locations.length > 0 ||
-                      parsedQuery.entities.relationships.length > 0 ||
-                      !!parsedQuery.timeRange ||
-                      !!parsedQuery.interactionType ||
-                      !!parsedQuery.interactionTimeRange ||
-                      parsedQuery.needsFollowUp === true ||
-                      !!parsedQuery.responsibility;
+    // Execute search with SearchQuery
+    const results = executeSearchQuery(contacts, finalQuery, { maxResults: MAX_RESULTS });
 
-    // If no meaningful search terms extracted, but we have filters, still use search engine
-    if (parsedQuery.searchTerms.length === 0) {
-      if (hasFilters) {
-        // Use search engine to apply filters even without search terms
-        return searchWithParsedQuery(contacts, parsedQuery, { maxResults: MAX_RESULTS });
+    // Fallback: if no results and no filters, try basic search
+    if (results.length === 0) {
+      const hasFilters = !!(
+        finalQuery.filters.company ||
+        finalQuery.filters.job_title ||
+        finalQuery.filters.name ||
+        finalQuery.filters.location ||
+        finalQuery.filters.relationship_type ||
+        finalQuery.filters.date_range ||
+        (finalQuery.filters.tags && finalQuery.filters.tags.length > 0)
+      );
+
+      if (!hasFilters) {
+        const fallbackTerms = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
+        return searchContacts(contacts, fallbackTerms, { maxResults: MAX_RESULTS });
       }
-      return parsedQuery.action ? contacts : contacts.slice(0, MAX_RESULTS);
-    }
-
-    // Use deterministic search engine
-    const results = searchWithParsedQuery(contacts, parsedQuery, { maxResults: MAX_RESULTS });
-    
-    // If no results from parsed query, try basic search on original terms
-    // BUT only if we don't have filters (filters should be respected)
-    if (results.length === 0 && !hasFilters) {
-      const fallbackTerms = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
-      return searchContacts(contacts, fallbackTerms, { maxResults: MAX_RESULTS });
     }
 
     return results;
-  }, [contacts, query, parsedQuery]);
+  }, [contacts, query, deterministicQuery, enhancedQuery]);
 
-  // Build search term (query without action prefix)
+  // Build search term
   const searchTerm = useMemo(() => {
-    if (!parsedQuery) return query.trim();
-    return parsedQuery.searchTerms.join(" ");
-  }, [parsedQuery, query]);
+    if (!query.trim()) return "";
+    return query.trim();
+  }, [query]);
+
+  // Extract action from legacy parser for backward compatibility
+  const legacyParsed = useMemo(() => {
+    if (!query.trim()) return null;
+    return parseSearchQuery(query);
+  }, [query]);
 
   return {
     contacts: filteredContacts,
-    action: parsedQuery?.action || null,
+    action: legacyParsed?.action || null,
     searchTerm,
-    isLoading: false, // No longer async - deterministic search is synchronous
-    aiIntent: parsedQuery?.intent || null, // Now deterministic intent
-    interpretation: parsedQuery?.interpretation || null, // Query interpretation
+    isLoading: isEnhancing, // Show loading while semantic assist is running
+    aiIntent: deterministicQuery?.intent || null,
+    interpretation: enhancedQuery?.explanation || deterministicQuery?.explanation || null,
   };
 }

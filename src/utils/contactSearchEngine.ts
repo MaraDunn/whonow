@@ -5,6 +5,7 @@
 
 import { Contact } from "@/types/contact";
 import { ParsedQuery } from "./searchQueryParser";
+import { SearchQuery } from "@/types/searchQuery";
 
 // Field weights for scoring
 const FIELD_WEIGHTS = {
@@ -1176,4 +1177,220 @@ export function quickSearch(contacts: Contact[], query: string): Contact[] {
   
   const terms = tokenize(query);
   return searchContacts(contacts, terms, { maxResults: 10, minScore: 2 });
+}
+
+/**
+ * Execute search using canonical SearchQuery schema
+ * This is the new primary execution function
+ * Uses semantic_hint only for ranking, never for filtering
+ */
+export function executeSearchQuery(
+  contacts: Contact[],
+  searchQuery: SearchQuery,
+  options: { maxResults?: number } = {}
+): Contact[] {
+  const { maxResults = MAX_RESULTS } = options;
+  const { filters, semantic_hint } = searchQuery;
+
+  // Build search terms from filters and semantic hint
+  const searchTerms: string[] = [];
+
+  // Add name to search terms if present
+  if (filters.name) {
+    searchTerms.push(...tokenize(filters.name));
+  }
+
+  // Add tags to search terms if present
+  if (filters.tags && filters.tags.length > 0) {
+    searchTerms.push(...filters.tags.map(t => t.toLowerCase()));
+  }
+
+  // Add semantic_hint to search terms for ranking (not filtering)
+  if (semantic_hint) {
+    searchTerms.push(...tokenize(semantic_hint));
+  }
+
+  // Score contacts with deterministic filtering
+  const scored = contacts
+    .map(contact => {
+      // Apply deterministic filters first
+      
+      // Filter by company
+      if (filters.company) {
+        const contactCompany = (contact.company || "").toLowerCase();
+        const searchCompany = filters.company.toLowerCase();
+        if (!companyMatches(contactCompany, searchCompany)) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+
+      // Filter by job_title
+      if (filters.job_title) {
+        const contactRole = (contact.role || "").toLowerCase();
+        const searchRole = filters.job_title.toLowerCase();
+        if (!roleMatches(contactRole, searchRole)) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+
+      // Filter by name
+      if (filters.name) {
+        const contactName = (contact.name || "").toLowerCase();
+        const searchName = filters.name.toLowerCase();
+        if (!contactName.includes(searchName)) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+
+      // Filter by location
+      if (filters.location) {
+        const contactLocation = [
+          contact.address || "",
+          contact.city || "",
+          contact.state || "",
+          contact.country || "",
+        ].join(" ").toLowerCase();
+        const searchLocation = filters.location.toLowerCase();
+        if (!contactLocation.includes(searchLocation)) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+
+      // Filter by relationship_type
+      if (filters.relationship_type) {
+        const isClient = contact.isClient || false;
+        const tags = (contact.tags || []).map(t => t.toLowerCase());
+        
+        let matches = false;
+        if (filters.relationship_type === "client" && isClient) {
+          matches = true;
+        } else if (filters.relationship_type === "vendor" && tags.includes("vendor")) {
+          matches = true;
+        } else if (filters.relationship_type === "met" && tags.some(t => t.includes("met") || t.includes("meet"))) {
+          matches = true;
+        } else if (filters.relationship_type === "worked_with" && tags.some(t => t.includes("work") || t.includes("colleague"))) {
+          matches = true;
+        }
+
+        if (!matches) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+
+      // Filter by date_range
+      if (filters.date_range) {
+        const contactCreatedAt = contact.createdAt;
+        if (!contactCreatedAt || contactCreatedAt.trim() === '') {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+
+        const createdAt = new Date(contactCreatedAt);
+        if (isNaN(createdAt.getTime())) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+
+        const fromDate = new Date(filters.date_range.from);
+        const toDate = new Date(filters.date_range.to);
+        const createdAtTime = createdAt.getTime();
+        const fromTime = fromDate.getTime();
+        const toTime = toDate.getTime();
+
+        if (createdAtTime < fromTime || createdAtTime > toTime) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+
+      // Filter by tags
+      if (filters.tags && filters.tags.length > 0) {
+        const contactTags = (contact.tags || []).map(t => t.toLowerCase());
+        const searchTags = filters.tags.map(t => t.toLowerCase());
+        const hasMatchingTag = searchTags.some(tag => contactTags.includes(tag));
+        
+        if (!hasMatchingTag) {
+          return {
+            contact,
+            score: 0,
+            matchedFields: [],
+            matchedTerms: [],
+          };
+        }
+      }
+
+      // Score against search terms (including semantic_hint for ranking)
+      const result = scoreContact(contact, searchTerms);
+
+      // Boost score if semantic_hint matches (for ranking only)
+      if (semantic_hint && result.score > 0) {
+        const hintTerms = tokenize(semantic_hint);
+        const contactText = [
+          contact.name || "",
+          contact.description || "",
+          contact.company || "",
+          contact.role || "",
+        ].join(" ").toLowerCase();
+
+        let hintMatches = 0;
+        for (const term of hintTerms) {
+          if (contactText.includes(term)) {
+            hintMatches++;
+          }
+        }
+
+        if (hintMatches > 0) {
+          // Boost score based on semantic hint matches
+          result.score += hintMatches * 2;
+        }
+      }
+
+      // Give base score if filters matched but no search terms
+      if (searchTerms.length === 0 && result.score === 0) {
+        result.score = MIN_SCORE_THRESHOLD;
+      }
+
+      return result;
+    })
+    .filter(s => s.score >= MIN_SCORE_THRESHOLD)
+    .sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, maxResults).map(s => s.contact);
 }

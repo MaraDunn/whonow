@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { getCorsHeaders, isValidEmail } from "../_shared/security.ts";
+import { getCorsHeaders, isValidEmail, checkRateLimit, rateLimitExceededResponse } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,6 +26,15 @@ serve(async (req) => {
         headers: { ...corsHeaders, ...corsHeadersWithOrigin, "Content-Type": "application/json" },
       }
     );
+  }
+
+  // Rate limit: 10 signups per minute per IP (by IP or x-forwarded-for / x-real-ip)
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || req.headers.get("x-real-ip")
+    || "unknown";
+  const { allowed, resetIn } = checkRateLimit(`waitlist:${ip}`, 10, 60_000);
+  if (!allowed) {
+    return rateLimitExceededResponse(resetIn, origin);
   }
 
   try {

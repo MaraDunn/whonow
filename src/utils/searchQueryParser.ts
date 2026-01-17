@@ -9,6 +9,7 @@ import {
   normalizeResponsibilityPhrase 
 } from "./responsibilityIndex";
 import { RESPONSIBILITIES } from "@/data/responsibilities";
+import { SearchQuery, SearchIntent, RelationshipType, DateRange } from "@/types/searchQuery";
 
 // Build responsibility index at module load time
 const RESPONSIBILITY_INDEX = buildResponsibilityIndex();
@@ -2316,4 +2317,108 @@ export function getSearchTerm(query: string): { action: ActionType; searchTerm: 
       parsed.searchTerms.join(" ") : 
       query.trim()
   };
+}
+
+/**
+ * Convert ParsedQuery to SearchQuery (canonical schema)
+ */
+function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
+  // Map intent
+  let intent: SearchIntent = "search_contacts";
+  if (parsed.intent === "question" && parsed.entities.relationships.length > 0) {
+    intent = "relationship_lookup";
+  } else if (parsed.timeRange && !parsed.entities.companies.length && !parsed.entities.roles.length) {
+    intent = "list_recent";
+  }
+
+  // Map filters
+  const filters: SearchQuery["filters"] = {};
+
+  // Map company
+  if (parsed.entities.companies.length > 0) {
+    filters.company = parsed.entities.companies[0]; // Take first company
+  }
+
+  // Map job_title (from roles)
+  if (parsed.entities.roles.length > 0) {
+    filters.job_title = parsed.entities.roles[0]; // Take first role
+  }
+
+  // Map name
+  if (parsed.entities.names.length > 0) {
+    filters.name = parsed.entities.names[0]; // Take first name
+  }
+
+  // Map location
+  if (parsed.entities.locations.length > 0) {
+    filters.location = parsed.entities.locations[0]; // Take first location
+  }
+
+  // Map relationship_type
+  if (parsed.entities.relationships.length > 0) {
+    const rel = parsed.entities.relationships[0].toLowerCase();
+    if (rel === "client" || rel === "clients") {
+      filters.relationship_type = "client";
+    } else if (rel === "vendor" || rel === "vendors") {
+      filters.relationship_type = "vendor";
+    } else if (rel.includes("met") || rel.includes("meet")) {
+      filters.relationship_type = "met";
+    } else if (rel.includes("work") || rel.includes("colleague")) {
+      filters.relationship_type = "worked_with";
+    }
+  }
+
+  // Map date_range
+  if (parsed.timeRange) {
+    filters.date_range = {
+      from: parsed.timeRange.start.toISOString(),
+      to: parsed.timeRange.end.toISOString(),
+    };
+  }
+
+  // Map tags (from keywords that look like tags)
+  if (parsed.keywords.length > 0) {
+    // Filter keywords that might be tags (short, capitalized, or common tag patterns)
+    const potentialTags = parsed.keywords.filter(
+      (k) => k.length >= 2 && k.length <= 20
+    );
+    if (potentialTags.length > 0) {
+      filters.tags = potentialTags.slice(0, 5); // Limit to 5 tags
+    }
+  }
+
+  // Map introduced_by (if found in query)
+  // This would need additional parsing logic - for now, leave undefined
+
+  // Set confidence (deterministic parse always has high confidence)
+  const confidence = 0.7; // Base confidence for deterministic parse
+  // Boost confidence if we extracted structured entities
+  const hasStructuredFilters =
+    filters.company ||
+    filters.job_title ||
+    filters.relationship_type ||
+    filters.date_range;
+  const finalConfidence = hasStructuredFilters ? Math.min(0.9, confidence + 0.1) : confidence;
+
+  // Generate explanation
+  const explanation = parsed.interpretation || "Deterministic query parsing";
+
+  return {
+    intent,
+    filters,
+    confidence: finalConfidence,
+    explanation,
+  };
+}
+
+/**
+ * Parse search query into canonical SearchQuery schema
+ * This is the new primary function that outputs the canonical schema
+ */
+export function parseSearchQueryToSchema(query: string): SearchQuery {
+  // First parse using existing deterministic parser
+  const parsed = parseSearchQuery(query);
+  
+  // Convert to canonical schema
+  return convertToSearchQuery(parsed);
 }
