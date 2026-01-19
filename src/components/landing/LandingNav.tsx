@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { AccountManagementDialog } from "./AccountManagementDialog";
+import { IS_WAITLIST_MODE } from "@/utils/launchMode";
 
 interface LandingNavProps {
   onSignIn: () => void;
@@ -28,7 +29,7 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
   const { profile } = useProfile(user?.id);
   const navigate = useNavigate();
   const location = useLocation();
-  const isWaitlistPage = location.pathname === "/waitlist";
+  const isWaitlistPage = IS_WAITLIST_MODE || location.pathname === "/waitlist";
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -80,12 +81,14 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
             >
               Demo
             </button>
-            <button
-              onClick={() => scrollToSection("downloads")}
-              className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
-            >
-              Downloads
-            </button>
+            {!isWaitlistPage && (
+              <button
+                onClick={() => scrollToSection("downloads")}
+                className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
+              >
+                Downloads
+              </button>
+            )}
             <button
               onClick={() => scrollToSection("pricing")}
               className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
@@ -102,7 +105,14 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
 
           {/* Desktop CTAs */}
           <div className="hidden md:flex items-center gap-3">
-            {user ? (
+            {isWaitlistPage ? (
+              <Button 
+                onClick={() => scrollToSection("waitlist")} 
+                className="gradient-hero text-primary-foreground"
+              >
+                Join Our Waitlist
+              </Button>
+            ) : user ? (
               <>
                 <Button
                   onClick={() => navigate("/app")}
@@ -143,13 +153,6 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
-            ) : isWaitlistPage ? (
-              <Button 
-                onClick={() => scrollToSection("waitlist")} 
-                className="gradient-hero text-primary-foreground"
-              >
-                Join Our Waitlist
-              </Button>
             ) : (
               <>
                 <Button variant="ghost" onClick={onSignIn}>
@@ -188,12 +191,14 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
             >
               Demo
             </button>
-            <button
-              onClick={() => scrollToSection("downloads")}
-              className="block w-full text-left text-muted-foreground hover:text-foreground transition-colors py-2"
-            >
-              Downloads
-            </button>
+            {!isWaitlistPage && (
+              <button
+                onClick={() => scrollToSection("downloads")}
+                className="block w-full text-left text-muted-foreground hover:text-foreground transition-colors py-2"
+              >
+                Downloads
+              </button>
+            )}
             <button
               onClick={() => scrollToSection("pricing")}
               className="block w-full text-left text-muted-foreground hover:text-foreground transition-colors py-2"
@@ -207,7 +212,17 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
               FAQ
             </button>
             <div className="pt-4 border-t border-border space-y-2">
-              {user ? (
+              {isWaitlistPage ? (
+                <Button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    scrollToSection("waitlist");
+                  }}
+                  className="w-full gradient-hero text-primary-foreground"
+                >
+                  Join Our Waitlist
+                </Button>
+              ) : user ? (
                 <>
                   <Button
                     onClick={() => navigate("/app")}
@@ -223,16 +238,6 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
                     Sign Out
                   </Button>
                 </>
-              ) : isWaitlistPage ? (
-                <Button
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    scrollToSection("waitlist");
-                  }}
-                  className="w-full gradient-hero text-primary-foreground"
-                >
-                  Join Our Waitlist
-                </Button>
               ) : (
                 <>
                   <Button

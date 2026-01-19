@@ -14,12 +14,19 @@ const ALLOWED_ORIGINS = Deno.env.get("ALLOWED_ORIGINS")
 
 // Get CORS headers based on request origin
 function getCorsHeaders(requestOrigin?: string | null): Record<string, string> {
-  const origin = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin) 
-    ? requestOrigin 
-    : ALLOWED_ORIGINS[0];
-    
+  // If origin is in allowed list, use it
+  if (requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin)) {
+    return {
+      "Access-Control-Allow-Origin": requestOrigin,
+      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    };
+  }
+  
+  // If no origin or not in list, allow all origins (for development/testing)
+  // In production, ALLOWED_ORIGINS should be set with your domain
   return {
-    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   };
@@ -168,9 +175,15 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("Missing Supabase configuration");
+      console.error("Missing Supabase configuration", {
+        hasUrl: !!supabaseUrl,
+        hasServiceKey: !!supabaseServiceKey,
+      });
       return new Response(
-        JSON.stringify({ error: "Server configuration error" }),
+        JSON.stringify({ 
+          error: "Server configuration error",
+          details: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in Edge Function secrets"
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, ...corsHeadersWithOrigin, "Content-Type": "application/json" },
@@ -199,9 +212,19 @@ serve(async (req) => {
         );
       }
 
-      console.error("Error inserting email:", insertError);
+      console.error("Error inserting email:", {
+        message: insertError.message,
+        code: insertError.code,
+        details: insertError.details,
+        hint: insertError.hint,
+      });
       return new Response(
-        JSON.stringify({ error: "Failed to register email" }),
+        JSON.stringify({ 
+          error: "Failed to register email",
+          details: insertError.message,
+          code: insertError.code,
+          hint: insertError.hint || "Check if waitlist table exists and SUPABASE_SERVICE_ROLE_KEY is set"
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, ...corsHeadersWithOrigin, "Content-Type": "application/json" },
@@ -220,7 +243,10 @@ serve(async (req) => {
   } catch (error) {
     console.error("Unexpected error in waitlist function:", error);
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred" }),
+      JSON.stringify({ 
+        error: "An unexpected error occurred",
+        details: error instanceof Error ? error.message : String(error)
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, ...corsHeadersWithOrigin, "Content-Type": "application/json" },

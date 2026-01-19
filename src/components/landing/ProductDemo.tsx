@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Search, Mail, Phone, Building2, Briefcase, Clock, Star, Folder, Plus, ChevronDown } from "lucide-react";
+import { Search, Mail, Phone, Building2, Briefcase, Clock, Star, Folder, Plus, ChevronDown, MapPin } from "lucide-react";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 
-const demoContacts = [
+// Company-based query results
+const companyContacts = [
   {
     name: "Sarah Chen",
     role: "Engineering Lead",
@@ -14,22 +15,96 @@ const demoContacts = [
     folder: { name: "Engineering", color: "#3b82f6" },
   },
   {
-    name: "Marcus Johnson",
-    role: "Senior Designer",
-    company: "Design Studio",
-    email: "m.johnson@designstudio.com",
+    name: "David Park",
+    role: "VP of Product",
+    company: "TechCorp",
+    email: "d.park@techcorp.com",
     phone: "+1 (555) 234-5678",
     lastContacted: "1 week ago",
+    isClient: true,
+    folder: { name: "Product", color: "#10b981" },
+  },
+  {
+    name: "Lisa Wang",
+    role: "Head of Sales",
+    company: "TechCorp",
+    email: "l.wang@techcorp.com",
+    phone: "+1 (555) 345-6789",
+    lastContacted: "3 days ago",
     isClient: false,
+    folder: { name: "Sales", color: "#f59e0b" },
+  },
+];
+
+// Time-based query results (recent meetings)
+const timeBasedContacts = [
+  {
+    name: "Michael Torres",
+    role: "Senior Developer",
+    company: "Cloud Systems",
+    email: "m.torres@cloudsystems.com",
+    phone: "+1 (555) 456-7890",
+    lastContacted: "Yesterday",
+    meetingTime: "Met 2 days ago",
+    isClient: true,
+    folder: { name: "Engineering", color: "#3b82f6" },
+  },
+  {
+    name: "Jessica Kim",
+    role: "Design Director",
+    company: "Creative Agency",
+    email: "j.kim@creativeagency.com",
+    phone: "+1 (555) 567-8901",
+    lastContacted: "3 days ago",
+    meetingTime: "Met last week",
+    isClient: true,
     folder: { name: "Design", color: "#8b5cf6" },
   },
   {
-    name: "Emily Rodriguez",
-    role: "Product Manager",
-    company: "Innovate Labs",
-    email: "e.rodriguez@innovatelabs.com",
-    phone: "+1 (555) 345-6789",
-    lastContacted: "3 days ago",
+    name: "Robert Chen",
+    role: "Marketing Manager",
+    company: "Growth Labs",
+    email: "r.chen@growthlabs.com",
+    phone: "+1 (555) 678-9012",
+    lastContacted: "5 days ago",
+    meetingTime: "Met last week",
+    isClient: false,
+    folder: { name: "Marketing", color: "#ec4899" },
+  },
+];
+
+// Location-based query results
+const locationContacts = [
+  {
+    name: "Amanda Foster",
+    role: "Regional Manager",
+    company: "West Coast Operations",
+    email: "a.foster@westcoastops.com",
+    phone: "+1 (415) 555-0123",
+    lastContacted: "1 week ago",
+    location: "San Francisco, CA",
+    isClient: true,
+    folder: { name: "Operations", color: "#06b6d4" },
+  },
+  {
+    name: "James Liu",
+    role: "Software Engineer",
+    company: "TechStart SF",
+    email: "j.liu@techstartsf.com",
+    phone: "+1 (415) 555-0234",
+    lastContacted: "4 days ago",
+    location: "San Francisco, CA",
+    isClient: false,
+    folder: { name: "Engineering", color: "#3b82f6" },
+  },
+  {
+    name: "Maria Garcia",
+    role: "Product Lead",
+    company: "Bay Area Innovations",
+    email: "m.garcia@bayareainnovations.com",
+    phone: "+1 (415) 555-0345",
+    lastContacted: "2 weeks ago",
+    location: "San Francisco, CA",
     isClient: true,
     folder: { name: "Product", color: "#10b981" },
   },
@@ -37,15 +112,29 @@ const demoContacts = [
 
 const searchQueries = [
   "who do I know at TechCorp",
-  "engineers in San Francisco",
-  "product managers",
+  "who did I meet with last week",
+  "contacts in San Francisco",
 ];
+
+const getContactsForQuery = (queryIndex: number) => {
+  switch (queryIndex) {
+    case 0: // Company query
+      return companyContacts;
+    case 1: // Time-based query
+      return timeBasedContacts;
+    case 2: // Location query
+      return locationContacts;
+    default:
+      return companyContacts;
+  }
+};
 
 export const ProductDemo = () => {
   const [currentQuery, setCurrentQuery] = useState("");
   const [queryIndex, setQueryIndex] = useState(0);
   const [isTyping, setIsTyping] = useState(true);
   const [showResults, setShowResults] = useState(false);
+  const [currentContacts, setCurrentContacts] = useState(companyContacts);
 
   useEffect(() => {
     const query = searchQueries[queryIndex];
@@ -58,6 +147,8 @@ export const ProductDemo = () => {
           charIndex++;
         } else {
           clearInterval(typingInterval);
+          // Update contacts for current query
+          setCurrentContacts(getContactsForQuery(queryIndex));
           setShowResults(true);
           setTimeout(() => {
             setIsTyping(false);
@@ -71,7 +162,9 @@ export const ProductDemo = () => {
       const resetTimeout = setTimeout(() => {
         setShowResults(false);
         setCurrentQuery("");
-        setQueryIndex((prev) => (prev + 1) % searchQueries.length);
+        const nextIndex = (queryIndex + 1) % searchQueries.length;
+        setQueryIndex(nextIndex);
+        setCurrentContacts(getContactsForQuery(nextIndex));
         setIsTyping(true);
       }, 500);
 
@@ -144,11 +237,11 @@ export const ProductDemo = () => {
               <div className="flex-1 p-6 sm:p-8">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4">
                     <WhoNowLogo size="sm" showText={true} />
                     <div className="border-l border-border pl-4 hidden lg:block">
                       <p className="text-sm text-muted-foreground">
-                        {demoContacts.length} contacts
+                        {currentContacts.length} contacts
                       </p>
                     </div>
                   </div>
@@ -177,7 +270,7 @@ export const ProductDemo = () => {
 
                 {/* Results */}
                 <div className={`grid md:grid-cols-2 lg:grid-cols-3 gap-4 transition-all duration-300 ${showResults ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
-                  {demoContacts.map((contact, index) => (
+                  {currentContacts.map((contact, index) => (
                     <div
                       key={contact.name}
                       className="group relative p-6 rounded-2xl border border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30 transition-all duration-300 cursor-pointer animate-slide-up"
@@ -220,12 +313,33 @@ export const ProductDemo = () => {
                             <Briefcase className="h-3.5 w-3.5" />
                             {contact.role}
                           </p>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <Clock className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">
-                              {contact.lastContacted}
-                            </span>
-                          </div>
+                          {(contact.meetingTime || contact.location) && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              {contact.meetingTime ? (
+                                <>
+                                  <Clock className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs text-muted-foreground">
+                                    {contact.meetingTime}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <MapPin className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs text-muted-foreground">
+                                    {contact.location}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {!contact.meetingTime && !contact.location && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">
+                                {contact.lastContacted}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
 

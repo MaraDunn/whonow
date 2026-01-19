@@ -31,22 +31,43 @@ export const WaitlistHeroSection = () => {
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      if (!supabaseUrl) {
-        throw new Error("Supabase URL not configured");
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      // Debug: Log config status
+      console.log("🔍 Waitlist Config Check:", {
+        hasUrl: !!supabaseUrl,
+        hasKey: !!supabaseAnonKey,
+        urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : "❌ MISSING",
+        keyPreview: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : "❌ MISSING",
+        keyLength: supabaseAnonKey?.length || 0,
+      });
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        const errorMsg = `Supabase configuration missing. URL: ${supabaseUrl ? '✓' : '✗'}, Key: ${supabaseAnonKey ? '✓' : '✗'}`;
+        console.error("❌", errorMsg);
+        throw new Error(errorMsg);
       }
 
       const response = await fetch(`${supabaseUrl}/functions/v1/waitlist`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
         },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        // If response is not JSON, get text instead
+        const text = await response.text();
+        throw new Error(`Server error: ${text || response.statusText}`);
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to join waitlist");
+        throw new Error(data.error || `Failed to join waitlist (${response.status})`);
       }
 
       setIsSuccess(true);
