@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build:waitlist"
+  command = "VITE_APP_LAUNCH_MODE=waitlist npm run build"
   publish = "dist"
 
 [[redirects]]
