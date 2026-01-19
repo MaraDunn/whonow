@@ -7,6 +7,29 @@
   # Note: VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY should be set in Netlify UI
   # (Site settings → Environment variables) for security, but can be added here if needed
 
+# Block common exploit paths and bot scanners (return 404 before catch-all)
+# These are clearly exploit attempts and should be blocked explicitly
+[[redirects]]
+  from = "/wp-*"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.php"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/xmlrpc.php*"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/index.php*"
+  to = "/404.html"
+  status = 404
+
+# Catch-all redirect for SPA routing (must be last)
 [[redirects]]
   from = "/*"
   to = "/index.html"
