@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Menu, X, ChevronDown, User, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
@@ -27,6 +27,8 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
   const { user, signOut } = useAuth();
   const { profile } = useProfile(user?.id);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isWaitlistPage = location.pathname === "/waitlist";
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -141,6 +143,13 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
+            ) : isWaitlistPage ? (
+              <Button 
+                onClick={() => scrollToSection("waitlist")} 
+                className="gradient-hero text-primary-foreground"
+              >
+                Join Our Waitlist
+              </Button>
             ) : (
               <>
                 <Button variant="ghost" onClick={onSignIn}>
@@ -214,6 +223,16 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
                     Sign Out
                   </Button>
                 </>
+              ) : isWaitlistPage ? (
+                <Button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    scrollToSection("waitlist");
+                  }}
+                  className="w-full gradient-hero text-primary-foreground"
+                >
+                  Join Our Waitlist
+                </Button>
               ) : (
                 <>
                   <Button
