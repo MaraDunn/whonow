@@ -10,6 +10,13 @@ export const LAUNCH_MODE = import.meta.env.VITE_APP_LAUNCH_MODE || "live";
 export const IS_WAITLIST_MODE = LAUNCH_MODE === "waitlist";
 export const IS_LIVE_MODE = LAUNCH_MODE === "live";
 
+// Debug: Log launch mode (remove after verification)
+if (typeof window !== "undefined") {
+  console.log("[LaunchMode] VITE_APP_LAUNCH_MODE:", import.meta.env.VITE_APP_LAUNCH_MODE);
+  console.log("[LaunchMode] LAUNCH_MODE:", LAUNCH_MODE);
+  console.log("[LaunchMode] IS_WAITLIST_MODE:", IS_WAITLIST_MODE);
+}
+
 /**
  * Detect if the app is running in a desktop/native environment
  * (Tauri desktop app or future native mobile apps)
