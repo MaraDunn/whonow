@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .env
 src-tauri/target/
+
+# Local Netlify folder
+.netlify

@@ -1,6 +1,92 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { getCorsHeaders, isValidEmail, checkRateLimit, rateLimitExceededResponse } from "../_shared/security.ts";
+
+// CORS configuration - allowed origins from environment or defaults to localhost
+const DEFAULT_ORIGINS = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+
+const ALLOWED_ORIGINS = Deno.env.get("ALLOWED_ORIGINS")
+  ? Deno.env.get("ALLOWED_ORIGINS")!.split(",").map(o => o.trim())
+  : DEFAULT_ORIGINS;
+
+// Get CORS headers based on request origin
+function getCorsHeaders(requestOrigin?: string | null): Record<string, string> {
+  const origin = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin) 
+    ? requestOrigin 
+    : ALLOWED_ORIGINS[0];
+    
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  };
+}
+
+// Validate email format
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 254;
+}
+
+// Rate limiting state type
+interface RateLimitState {
+  count: number;
+  resetTime: number;
+}
+
+// Simple in-memory rate limiter
+const rateLimitStore = new Map<string, RateLimitState>();
+
+function checkRateLimit(
+  identifier: string,
+  maxRequests: number,
+  windowMs: number
+): { allowed: boolean; remaining: number; resetIn: number } {
+  const now = Date.now();
+  const state = rateLimitStore.get(identifier);
+  
+  if (!state || now > state.resetTime) {
+    // New window
+    rateLimitStore.set(identifier, { count: 1, resetTime: now + windowMs });
+    return { allowed: true, remaining: maxRequests - 1, resetIn: windowMs };
+  }
+  
+  if (state.count >= maxRequests) {
+    return { 
+      allowed: false, 
+      remaining: 0, 
+      resetIn: state.resetTime - now 
+    };
+  }
+  
+  state.count++;
+  return { 
+    allowed: true, 
+    remaining: maxRequests - state.count, 
+    resetIn: state.resetTime - now 
+  };
+}
+
+// Create rate limit exceeded response
+function rateLimitExceededResponse(resetIn: number, origin?: string | null): Response {
+  return new Response(
+    JSON.stringify({ 
+      error: "Rate limit exceeded. Please try again later.",
+      retryAfter: Math.ceil(resetIn / 1000)
+    }),
+    { 
+      status: 429, 
+      headers: { 
+        ...getCorsHeaders(origin), 
+        "Content-Type": "application/json",
+        "Retry-After": String(Math.ceil(resetIn / 1000))
+      } 
+    }
+  );
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
