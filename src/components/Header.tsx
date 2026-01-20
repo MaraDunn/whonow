@@ -14,6 +14,7 @@ import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
 import { toast } from "sonner";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useNavigate } from "react-router-dom";
 import {
   Tooltip,
   TooltipContent,
@@ -44,6 +45,7 @@ export function Header({
   const slack = useSlackIntegration();
   const teams = useTeamsIntegration();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -51,6 +53,7 @@ export function Header({
       toast.error("Failed to sign out. Please try again.");
     } else {
       toast.success("Signed out successfully");
+      navigate("/auth");
     }
   };
 

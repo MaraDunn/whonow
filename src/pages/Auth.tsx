@@ -37,7 +37,7 @@ const Auth = () => {
   // Redirect if already authenticated
   useEffect(() => {
     if (!loading && user) {
-      navigate("/");
+      navigate("/app");
     }
   }, [user, loading, navigate]);
 
@@ -80,7 +80,7 @@ const Auth = () => {
       }
     } else {
       toast.success("Welcome back!");
-      navigate("/");
+      navigate("/app");
     }
   };
 
@@ -100,7 +100,7 @@ const Auth = () => {
       }
     } else {
       toast.success("Account created! Setting up your workspace...");
-      navigate("/");
+      navigate("/app");
     }
   };
 

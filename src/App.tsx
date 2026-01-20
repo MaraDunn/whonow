@@ -14,6 +14,7 @@ import Waitlist from "./pages/Waitlist";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
+import Auth from "./pages/Auth";
 
 const queryClient = new QueryClient();
 
@@ -31,10 +32,9 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!user) {
-    // In desktop/native apps, don't redirect to landing page - stay on /app
-    // The Index page will handle showing auth UI
+    // In desktop/native apps, redirect to /auth so users can sign back in
     if (isNative) {
-      return <>{children}</>;
+      return <Navigate to="/auth" replace />;
     }
     return <Navigate to="/" replace />;
   }
@@ -122,8 +122,7 @@ const AppRoutes = () => {
               />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
-              {/* Redirect old /auth route to landing */}
-              <Route path="/auth" element={<Navigate to="/" replace />} />
+              <Route path="/auth" element={<Auth />} />
               <Route path="*" element={<NotFound />} />
             </>
           )}
