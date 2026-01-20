@@ -223,10 +223,10 @@ const ROLE_VOCABULARY = new Set([
   "cfo", "chief financial officer", "coo", "chief operating officer",
   "vp", "vice president", "v.p.", "vice pres",
   "pm", "product manager", "project manager", "program manager", "product owner", "po",
-  "director", "dir", "manager", "mgr", "mgmt", "lead", "senior", "sr", "junior", "jr", "intern", "associate", "assoc",
+  "director", "dir", "manager", "mgr", "mgmt", "management", "lead", "senior", "sr", "junior", "jr", "intern", "associate", "assoc",
   "analyst", "consultant", "specialist", "spec", "coordinator", "coord", "assistant", "asst",
   "founder", "partner", "president", "head", "chief", "officer", "exec",
-  "developer", "dev", "engineer", "programmer", "coder", "designer", "architect",
+  "developer", "dev", "engineer", "programmer", "coder", "designer", "designers", "architect",
   "account exec", "ae", "sales rep", "accountant", "lawyer", "attorney", "counsel"
 ]);
 
@@ -1260,11 +1260,20 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
                        "finance", "accounting", "fpa", "fp&a", "legal", 
                        "operations", "ops", "support", "it", "information technology", "tech", "product", "design", 
                        "research", "admin", "administration"];
-        if (depts.includes(termLower)) {
+        // "management" is a role/title, not a department
+        const roleTerms = ["management", "manager", "mgr", "mgmt", "director", "lead", "head", "vp", "vice president",
+                          "ceo", "cto", "cfo", "coo", "president", "exec", "executive", "founder", "partner",
+                          "designer", "designers", "developer", "developers", "engineer", "engineers"];
+        if (roleTerms.includes(termLower)) {
+          if (!entities.roles.includes(termLower)) {
+            entities.roles.push(termLower);
+          }
+        } else if (depts.includes(termLower)) {
           if (!entities.departments.includes(termLower)) {
             entities.departments.push(termLower);
           }
         } else {
+          // Default to role for other terms in ROLE_VOCABULARY
           if (!entities.roles.includes(termLower)) {
             entities.roles.push(termLower);
           }
@@ -2609,9 +2618,24 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
   // Generate explanation
   const explanation = parsed.interpretation || "Deterministic query parsing";
 
+  // Set semantic_hint for ranking when we have keywords but no structured filters
+  // This allows semantic matching to work even when entity extraction fails
+  let semantic_hint: string | undefined = undefined;
+  if (parsed.keywords.length > 0 && !hasStructuredFilters) {
+    // Use keywords as semantic hint for plain language queries
+    semantic_hint = parsed.keywords.join(" ");
+  } else if (parsed.searchTerms.length > 0 && !hasStructuredFilters) {
+    // Fallback to searchTerms if keywords are empty
+    semantic_hint = parsed.searchTerms.join(" ");
+  } else if (parsed.originalQuery && !hasStructuredFilters) {
+    // Last resort: use original query for semantic matching
+    semantic_hint = parsed.originalQuery;
+  }
+
   return {
     intent,
     filters,
+    semantic_hint,
     confidence: finalConfidence,
     explanation,
   };
@@ -2619,12 +2643,77 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
 
 /**
  * Parse search query into canonical SearchQuery schema
- * This is the new primary function that outputs the canonical schema
+ * Simplified version - extracts time ranges, responsibilities, and simple names
+ * LLM handles complex entity extraction (company, role, location, etc.)
  */
 export function parseSearchQueryToSchema(query: string): SearchQuery {
-  // First parse using existing deterministic parser
-  const parsed = parseSearchQuery(query);
+  // Extract time range (this works well with regex)
+  const timeRange = extractTimeRange(query);
   
-  // Convert to canonical schema
-  return convertToSearchQuery(parsed);
+  // Extract responsibility (this works well)
+  const responsibilityResult = extractResponsibility(query);
+  
+  // Create minimal SearchQuery - LLM will enhance it with entities
+  const filters: SearchQuery["filters"] = {};
+  
+  // Add time range if found
+  if (timeRange) {
+    filters.date_range = {
+      from: timeRange.start.toISOString(),
+      to: timeRange.end.toISOString(),
+    };
+  }
+  
+  // Add responsibility filters if found
+  if (responsibilityResult.match) {
+    const responsibility = responsibilityResult.match;
+    if (responsibility.filters.departments && responsibility.filters.departments.length > 0) {
+      // Map first department to job_title (simplified)
+      filters.job_title = responsibility.filters.departments[0];
+    }
+    if (responsibility.filters.roles && responsibility.filters.roles.length > 0) {
+      filters.job_title = responsibility.filters.roles[0];
+    }
+    if (responsibility.filters.tags && responsibility.filters.tags.length > 0) {
+      filters.tags = responsibility.filters.tags;
+    }
+  }
+  
+  // Simple name extraction: if query is 1-3 words and looks like a name, extract it
+  // This handles simple queries like "james", "john smith", etc.
+  const normalized = normalizeQuery(query);
+  const words = normalized.split(/\s+/).filter(w => w.length > 0);
+  
+  // If query is 1-3 words, no time/responsibility patterns, and looks like a name
+  // (not a question word, not a common verb), treat it as a name
+  if (words.length >= 1 && words.length <= 3 && !timeRange && !responsibilityResult.match && !filters.name) {
+    // Check if it looks like a name (not a question word, not a common verb)
+    const questionWords = ["who", "what", "where", "when", "why", "how", "do", "does", "did", "i", "you", "we", "they"];
+    const commonVerbs = ["find", "show", "get", "search", "look", "list", "display", "know", "knows"];
+    const firstWord = words[0].toLowerCase();
+    
+    // Also check original query to see if it starts with capital (more likely a name)
+    const originalWords = query.trim().split(/\s+/);
+    const originalFirstWord = originalWords[0] || "";
+    const startsWithCapital = originalFirstWord.length > 0 && originalFirstWord[0] === originalFirstWord[0].toUpperCase();
+    
+    if (!questionWords.includes(firstWord) && !commonVerbs.includes(firstWord)) {
+      // If it starts with capital OR is a single word (likely a name), extract it
+      if (startsWithCapital || words.length === 1) {
+        // Use original query capitalization for the name
+        filters.name = originalWords.slice(0, words.length).join(" ");
+      }
+    }
+  }
+  
+  // Create minimal query - LLM will enhance with entities
+  return {
+    intent: "search_contacts",
+    filters,
+    semantic_hint: query, // Use original query for semantic matching
+    confidence: filters.name ? 0.7 : 0.5, // Higher confidence if we extracted a name
+    explanation: filters.name 
+      ? `Searching for contacts named "${filters.name}"`
+      : `Searching contacts${timeRange ? " with time filter" : ""}${responsibilityResult.match ? " for responsibility" : ""}`,
+  };
 }

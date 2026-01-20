@@ -25,9 +25,12 @@ const FIELD_WEIGHTS = {
   businessType: 3, // Business type (lower weight)
 };
 
-// Minimum score threshold for results
-const MIN_SCORE_THRESHOLD = 5; // Increased for better precision
+// Maximum results to return
 const MAX_RESULTS = 10; // Reduced from 15 to show fewer, more relevant results
+
+// Minimum score threshold for search results
+// Contacts must score at least this to be included (prevents irrelevant results)
+const MIN_SCORE_THRESHOLD = 2.0; // Require meaningful match, not just filter pass
 
 interface ScoredContact {
   contact: Contact;
@@ -236,6 +239,50 @@ function roleMatches(contactRole: string, searchRole: string): boolean {
       return contactWords.some(cw => 
         cw === "operations" || cw === "operation" || cw.startsWith("operat")
       );
+    }
+    
+    // Check "management" -> "manager" matching
+    if (searchWord === "management" || searchWord === "mgmt") {
+      return contactWords.some(cw => 
+        cw === "manager" || cw === "managers" || cw.includes("manager") || cw.includes("mgmt")
+      );
+    }
+    
+    // Check "manager" -> "management" matching
+    if (searchWord === "manager" || searchWord === "mgr") {
+      return contactWords.some(cw => 
+        cw === "management" || cw.includes("manager") || cw.includes("mgmt")
+      );
+    }
+    
+    // Check plural/singular matching for common role words
+    // "designers" should match "designer", "engineers" should match "engineer", etc.
+    const rolePlurals: Record<string, string[]> = {
+      "designers": ["designer", "design"],
+      "designer": ["designers", "design"],
+      "engineers": ["engineer", "engineering"],
+      "engineer": ["engineers", "engineering"],
+      "developers": ["developer", "dev", "development"],
+      "developer": ["developers", "dev", "development"],
+      "managers": ["manager", "management", "mgmt"],
+      "directors": ["director", "dir"],
+      "director": ["directors", "dir"],
+    };
+    
+    if (rolePlurals[searchWord]) {
+      const matches = rolePlurals[searchWord].some(plural => 
+        contactWords.some(cw => cw === plural || cw.includes(plural) || plural.includes(cw))
+      );
+      if (matches) return true;
+    }
+    
+    // Also check reverse - if contact word is in the plural map
+    for (const [plural, singulars] of Object.entries(rolePlurals)) {
+      if (contactWords.some(cw => cw === plural || cw.includes(plural))) {
+        if (singulars.some(s => s === searchWord || searchWord.includes(s) || s.includes(searchWord))) {
+          return true;
+        }
+      }
     }
     
     return false;
@@ -672,7 +719,7 @@ export function searchContacts(
     minScore?: number;
   } = {}
 ): Contact[] {
-  const { maxResults = MAX_RESULTS, minScore = MIN_SCORE_THRESHOLD } = options;
+  const { maxResults = MAX_RESULTS } = options;
   
   if (!searchTerms.length) return contacts.slice(0, maxResults);
   
@@ -764,12 +811,7 @@ export function searchWithParsedQuery(
   
   console.log('[SEARCH DEBUG] searchWithParsedQuery - Search terms:', searchTerms);
   
-  // Adjust threshold for numeric queries (phone searches) or short queries
-  const shortestTerm = searchTerms.length > 0 ? Math.min(...searchTerms.map(t => t.length)) : 0;
-  const isNumericQuery = searchTerms.length > 0 && searchTerms.every(t => /^\d+$/.test(t));
-  const adjustedMinScore = (shortestTerm <= 3 || isNumericQuery) 
-    ? Math.max(1, MIN_SCORE_THRESHOLD - 3) 
-    : MIN_SCORE_THRESHOLD;
+  // No minimum score threshold - trust LLM-extracted filters
   
   const hasAnyFilter = hasCompanyFilter || hasRoleFilter || hasBusinessFilter || hasTimeFilter || 
                        hasLocationFilter || hasRelationshipFilter || hasInteractionFilter ||
@@ -1185,7 +1227,7 @@ export function searchWithParsedQuery(
       // This ensures time-based queries return results even if search terms don't match
       // The search terms can boost the score further, but passing time filter is enough to include
       if (hasTimeFilter && result.score === 0) {
-        result.score = MIN_SCORE_THRESHOLD; // Give minimum score to pass threshold
+        result.score = 1; // Base score to include filtered contacts
         result.matchedFields.push("time");
       }
       
@@ -1422,6 +1464,16 @@ export async function executeSearchQuery(
 ): Promise<Contact[]> {
   const { maxResults = MAX_RESULTS, originalQuery } = options;
   const { filters, semantic_hint } = searchQuery;
+  
+  console.log('[SEARCH DEBUG] executeSearchQuery - Starting search');
+  console.log('[SEARCH DEBUG] executeSearchQuery - Contacts count:', contacts.length);
+  console.log('[SEARCH DEBUG] executeSearchQuery - SearchQuery:', JSON.stringify(searchQuery, null, 2));
+  
+  // Early return if no contacts
+  if (contacts.length === 0) {
+    console.log('[SEARCH DEBUG] executeSearchQuery - No contacts provided');
+    return [];
+  }
 
   // Build search terms from filters and semantic hint
   const searchTerms: string[] = [];
@@ -1490,12 +1542,17 @@ export async function executeSearchQuery(
 
   if (filters.job_title) {
     const searchRole = filters.job_title.toLowerCase();
+    console.log('[SEARCH DEBUG] executeSearchQuery - Filtering by role:', searchRole);
+    const beforeFilter = filteredContacts.length;
     filteredContacts = filteredContacts.filter(contact => {
       const contactRole = (contact.role || "").toLowerCase();
       // More flexible role matching - check if search role contains contact role or vice versa
       // This handles "ops directors" matching "Operations Director" or "Director of Operations"
       const roleMatchesResult = roleMatches(contactRole, searchRole);
-      if (roleMatchesResult) return true;
+      if (roleMatchesResult) {
+        console.log('[SEARCH DEBUG] executeSearchQuery - Role match:', contactRole, 'matches', searchRole);
+        return true;
+      }
       
       // Also check if any word from search role appears in contact role
       const searchRoleWords = searchRole.split(/\s+/).filter(w => w.length >= 2);
@@ -1505,8 +1562,13 @@ export async function executeSearchQuery(
           contactWord.includes(searchWord) || searchWord.includes(contactWord)
         )
       );
-      return hasMatchingWord;
+      if (hasMatchingWord) {
+        console.log('[SEARCH DEBUG] executeSearchQuery - Role word match:', contactRole, 'contains word from', searchRole);
+        return true;
+      }
+      return false;
     });
+    console.log('[SEARCH DEBUG] executeSearchQuery - Role filter:', beforeFilter, '->', filteredContacts.length, 'contacts');
   }
 
   if (filters.name) {
@@ -1567,10 +1629,61 @@ export async function executeSearchQuery(
   // Check if we have entity filters
   const hasEntityFilters = !!(filters.company || filters.job_title || filters.name || filters.location);
   
+  console.log('[SEARCH DEBUG] executeSearchQuery - After filtering:', {
+    hasEntityFilters,
+    searchTermsCount: searchTerms.length,
+    filteredContactsCount: filteredContacts.length,
+    originalContactsCount: contacts.length
+  });
+  
   // If we have entity filters but no search terms, we should return all filtered contacts
   // (they've already been filtered by the entity criteria)
   if (hasEntityFilters && searchTerms.length === 0) {
     console.log('[SEARCH DEBUG] executeSearchQuery - Entity filters only, no search terms. Filtered contacts:', filteredContacts.length);
+    
+    // CRITICAL: If entity filters resulted in 0 contacts, try more lenient matching
+    if (filteredContacts.length === 0) {
+      console.log('[SEARCH DEBUG] executeSearchQuery - Entity filters too strict, trying lenient matching');
+      // Try lenient matching - check if any contact partially matches
+      filteredContacts = contacts.filter(contact => {
+        if (filters.company) {
+          const contactCompany = (contact.company || "").toLowerCase();
+          const searchCompany = filters.company.toLowerCase();
+          if (contactCompany.includes(searchCompany) || searchCompany.includes(contactCompany)) {
+            return true;
+          }
+        }
+        if (filters.job_title) {
+          const contactRole = (contact.role || "").toLowerCase();
+          const searchRole = filters.job_title.toLowerCase();
+          if (contactRole.includes(searchRole) || searchRole.includes(contactRole)) {
+            return true;
+          }
+        }
+        if (filters.name) {
+          const contactName = (contact.name || "").toLowerCase();
+          const searchName = filters.name.toLowerCase();
+          if (contactName.includes(searchName)) {
+            return true;
+          }
+        }
+        if (filters.location) {
+          const contactLocation = [
+            contact.address || "",
+            contact.city || "",
+            contact.state || "",
+            contact.country || "",
+          ].join(" ").toLowerCase();
+          const searchLocation = filters.location.toLowerCase();
+          if (contactLocation.includes(searchLocation)) {
+            return true;
+          }
+        }
+        return false;
+      });
+      console.log('[SEARCH DEBUG] executeSearchQuery - After lenient matching:', filteredContacts.length, 'contacts');
+    }
+    
     // Return filtered contacts directly, sorted by semantic score if available
     if (semanticScores.size > 0) {
       return filteredContacts
@@ -1608,18 +1721,22 @@ export async function executeSearchQuery(
       result.score = (keywordScore * KEYWORD_WEIGHT) + (normalizedSemanticScore * SEMANTIC_WEIGHT);
       
       // If we have semantic score but no keyword score, still give some points
-      if (keywordScore === 0 && semanticScoreValue > 0.3) {
+      // But require higher semantic similarity (0.4 instead of 0.3) to be more selective
+      if (keywordScore === 0 && semanticScoreValue > 0.4) {
         result.score = Math.max(result.score, normalizedSemanticScore * 0.5);
       }
       
-      // If we have entity filters and the contact passed the filter, give minimum score
-      if (hasEntityFilters && result.score === 0) {
-        result.score = MIN_SCORE_THRESHOLD;
+      // If we have entity filters and the contact passed the filter, give a small boost
+      // But only if there's some actual match (keyword or semantic)
+      // Don't give free points just for passing filters - require actual relevance
+      if (hasEntityFilters && (keywordScore > 0 || semanticScoreValue > 0.3)) {
+        // Small boost for matching entity filters (0.5 points)
+        result.score += 0.5;
       }
 
       return result;
     })
-    .filter(s => s.score >= MIN_SCORE_THRESHOLD)
+    .filter(s => s.score >= MIN_SCORE_THRESHOLD) // Require meaningful match
     .sort((a, b) => {
       // Sort by score, but if scores are equal, prefer contacts with higher semantic scores
       if (Math.abs(a.score - b.score) < 0.1) {
@@ -1639,13 +1756,104 @@ export async function executeSearchQuery(
     location: filters.location 
   });
 
-  // If we have entity filters but no results, try a more lenient search
-  if (scored.length === 0 && hasEntityFilters && searchTerms.length === 0) {
-    console.log('[SEARCH DEBUG] executeSearchQuery - No results with entity filters, returning filtered contacts as fallback');
-    // Fallback: return filtered contacts even if they don't meet score threshold
-    // This handles cases where role matching might be too strict
-    return filteredContacts.slice(0, maxResults);
+  // If we have entity filters but no scored results, try a more lenient threshold
+  // But still require some minimum relevance (not just any filtered contact)
+  if (scored.length === 0 && hasEntityFilters && filteredContacts.length > 0) {
+    console.log('[SEARCH DEBUG] executeSearchQuery - No results with strict threshold, trying lenient scoring for filtered contacts');
+    // Re-score with lower threshold, but still require some match
+    const LENIENT_THRESHOLD = 0.5; // Much lower, but not zero
+    const lenientScored = filteredContacts
+      .map(contact => {
+        const result = scoreContact(contact, searchTerms);
+        const keywordScore = result.score;
+        const semanticScoreValue = semanticScores.get(contact.id) || 0;
+        result.semanticScore = semanticScoreValue;
+        
+        const SEMANTIC_SCORE_SCALE = 20;
+        const normalizedSemanticScore = semanticScoreValue * SEMANTIC_SCORE_SCALE;
+        const KEYWORD_WEIGHT = 0.6;
+        const SEMANTIC_WEIGHT = 0.4;
+        result.score = (keywordScore * KEYWORD_WEIGHT) + (normalizedSemanticScore * SEMANTIC_WEIGHT);
+        
+        // Give small boost for matching entity filters
+        if (keywordScore > 0 || semanticScoreValue > 0.2) {
+          result.score += 0.5;
+        }
+        
+        return result;
+      })
+      .filter(s => s.score >= LENIENT_THRESHOLD)
+      .sort((a, b) => {
+        if (Math.abs(a.score - b.score) < 0.1) {
+          return (b.semanticScore || 0) - (a.semanticScore || 0);
+        }
+        return b.score - a.score;
+      });
+    
+    if (lenientScored.length > 0) {
+      console.log('[SEARCH DEBUG] executeSearchQuery - Found', lenientScored.length, 'results with lenient threshold');
+      return lenientScored.slice(0, maxResults).map(s => s.contact);
+    }
   }
 
-  return scored.slice(0, maxResults).map(s => s.contact);
+  // If we have no entity filters and no results, but we have search terms,
+  // try a more lenient threshold (for plain language queries without entity extraction)
+  if (scored.length === 0 && !hasEntityFilters && searchTerms.length > 0) {
+    console.log('[SEARCH DEBUG] executeSearchQuery - No results with search terms, trying lenient threshold');
+    const lenientScored = filteredContacts
+      .map(contact => {
+        const result = scoreContact(contact, searchTerms);
+        const keywordScore = result.score;
+        const semanticScoreValue = semanticScores.get(contact.id) || 0;
+        result.semanticScore = semanticScoreValue;
+        
+        const SEMANTIC_SCORE_SCALE = 20;
+        const normalizedSemanticScore = semanticScoreValue * SEMANTIC_SCORE_SCALE;
+        const KEYWORD_WEIGHT = 0.6;
+        const SEMANTIC_WEIGHT = 0.4;
+        result.score = (keywordScore * KEYWORD_WEIGHT) + (normalizedSemanticScore * SEMANTIC_WEIGHT);
+        
+        // More lenient: accept semantic matches even with low keyword scores
+        if (keywordScore === 0 && semanticScoreValue > 0.2) {
+          result.score = Math.max(result.score, normalizedSemanticScore * 0.5);
+        }
+        
+        return result;
+      })
+      .filter(s => s.score > 0) // Trust LLM - include any contacts with score > 0
+      .sort((a, b) => {
+        if (Math.abs(a.score - b.score) < 0.1) {
+          return (b.semanticScore || 0) - (a.semanticScore || 0);
+        }
+        return b.score - a.score;
+      });
+    
+    if (lenientScored.length > 0) {
+      console.log('[SEARCH DEBUG] executeSearchQuery - Found', lenientScored.length, 'results with lenient threshold');
+      return lenientScored.slice(0, maxResults).map(s => s.contact);
+    }
+  }
+
+  // Return scored results, or if no results but we have search terms, return top filtered contacts
+  if (scored.length > 0) {
+    return scored.slice(0, maxResults).map(s => s.contact);
+  }
+  
+  // Fallback: if we have search terms but no scored results, return filtered contacts sorted by semantic score
+  if (searchTerms.length > 0 && filteredContacts.length > 0) {
+    if (semanticScores.size > 0) {
+      return filteredContacts
+        .map(contact => ({
+          contact,
+          semanticScore: semanticScores.get(contact.id) || 0
+        }))
+        .sort((a, b) => b.semanticScore - a.semanticScore)
+        .slice(0, maxResults)
+        .map(s => s.contact);
+    }
+    return filteredContacts.slice(0, maxResults);
+  }
+  
+  // Last resort: return empty array
+  return [];
 }

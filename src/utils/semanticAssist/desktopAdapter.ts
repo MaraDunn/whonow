@@ -1,10 +1,12 @@
 /**
  * Desktop Semantic Assist Adapter
  * Uses local LLM (Ollama/llama.cpp) for semantic enhancement
+ * Falls back to unified WASM LLM adapter if Ollama unavailable
  * Strict JSON schema validation, confidence gating
  */
 
 import { SearchQuery } from "@/types/searchQuery";
+import { semanticAssistUnified } from "./unifiedLLMAdapter";
 
 let ollamaAvailable: boolean | null = null;
 let ollamaCheckPromise: Promise<boolean> | null = null;
@@ -199,26 +201,43 @@ function validateSearchQuery(obj: any): obj is SearchQuery {
 
 /**
  * Semantic assist for desktop platform
- * Uses local LLM to refine query understanding
+ * Priority: Ollama → Unified WASM LLM → Deterministic
  */
 export async function semanticAssistDesktop(
   query: string,
   deterministicQuery: SearchQuery
 ): Promise<SearchQuery | null> {
   try {
-    const enhanced = await callLocalLLM(query, deterministicQuery);
-    if (!enhanced) {
-      return null; // Fallback to deterministic
+    // Try Ollama first (if available)
+    const ollamaEnhanced = await callLocalLLM(query, deterministicQuery);
+    if (ollamaEnhanced) {
+      // Additional validation: ensure confidence improved or stayed same
+      if (ollamaEnhanced.confidence >= deterministicQuery.confidence) {
+        return ollamaEnhanced;
+      }
     }
 
-    // Additional validation: ensure confidence improved or stayed same
-    if (enhanced.confidence < deterministicQuery.confidence) {
-      return null; // Reject if confidence decreased
+    // Fallback to unified WASM LLM adapter
+    const unifiedEnhanced = await semanticAssistUnified(query, deterministicQuery);
+    if (unifiedEnhanced) {
+      return unifiedEnhanced;
     }
 
-    return enhanced;
+    // Last resort: return deterministic query
+    return deterministicQuery;
   } catch (error) {
     console.warn("Desktop semantic assist failed:", error);
-    return null; // Fallback to deterministic
+    
+    // Try unified adapter as fallback even on error
+    try {
+      const unifiedEnhanced = await semanticAssistUnified(query, deterministicQuery);
+      if (unifiedEnhanced) {
+        return unifiedEnhanced;
+      }
+    } catch (unifiedError) {
+      console.warn("Unified adapter fallback also failed:", unifiedError);
+    }
+    
+    return deterministicQuery;
   }
 }
