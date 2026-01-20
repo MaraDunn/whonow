@@ -40,7 +40,6 @@ const IndexContent = () => {
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<"quick" | "full">("full");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
@@ -489,9 +488,8 @@ const IndexContent = () => {
     setEditingContact(null);
   };
 
-  const handleOpenAddDialog = (mode: "quick" | "full" = "full") => {
+  const handleOpenAddDialog = () => {
     setEditingContact(null);
-    setDialogMode(mode);
     setDialogOpen(true);
   };
 
@@ -949,7 +947,6 @@ const IndexContent = () => {
                 presetKeywords={keywords}
                 folders={folders}
                 defaultFolderId={selectedFolderId}
-                initialMode={dialogMode}
                 hasCompany={!!company}
               />
 

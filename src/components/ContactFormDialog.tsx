@@ -32,14 +32,14 @@ import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { generateAutoKeywords } from "@/utils/autoKeywords";
 import { toast } from "sonner";
 import { formatName, formatPhoneNumber } from "@/utils/formatContact";
-import { parseContactUnified } from "@/utils/unifiedContactParser";
 import { lookupBusinessAtAddress } from "@/utils/businessLookup";
 import { DuplicateContactDialog } from "@/components/DuplicateContactDialog";
 import { useContacts } from "@/hooks/useContacts";
+import { useRecentlyUsedKeywords } from "@/hooks/useRecentlyUsedKeywords";
 
 // Moved outside to prevent re-creation on every render (which causes input focus loss)
 interface CollapsibleSectionProps {
-  title: string;
+  title: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
@@ -49,7 +49,7 @@ function CollapsibleSection({ title, open: isOpen, onOpenChange: setOpen, childr
   return (
     <Collapsible open={isOpen} onOpenChange={setOpen}>
       <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-        <span>{title}</span>
+        {title}
         {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-3 pt-2">
@@ -67,7 +67,6 @@ interface ContactFormDialogProps {
   presetKeywords?: string[];
   folders?: Folder[];
   defaultFolderId?: string | null;
-  initialMode?: "quick" | "full";
   hasCompany?: boolean;
   checkDuplicates?: boolean; // Whether to check for duplicates before saving
 }
@@ -80,14 +79,9 @@ export function ContactFormDialog({
   presetKeywords = [], 
   folders = [], 
   defaultFolderId,
-  initialMode = "full",
   hasCompany = false,
   checkDuplicates = true,
 }: ContactFormDialogProps) {
-  const [mode, setMode] = useState<"quick" | "full">(initialMode);
-  const [quickInput, setQuickInput] = useState("");
-  const [isParsing, setIsParsing] = useState(false);
-  
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -122,13 +116,13 @@ export function ContactFormDialog({
   const [detectedBusinessName, setDetectedBusinessName] = useState<string | undefined>(undefined);
   const [detectedBusinessType, setDetectedBusinessType] = useState<string | undefined>(undefined);
   
-  const [contactOpen, setContactOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
-  const [keywordsOpen, setKeywordsOpen] = useState(false);
+  const [keywordsOpen, setKeywordsOpen] = useState(true); // Open by default to make keywords more visible
   const [addressOpen, setAddressOpen] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadAvatar, uploading } = useAvatarUpload();
+  const { recentKeywords, addKeywords } = useRecentlyUsedKeywords();
 
   const isEditing = !!contact;
   
@@ -138,7 +132,6 @@ export function ContactFormDialog({
 
   useEffect(() => {
     if (contact) {
-      setMode("full");
       setName(contact.name);
       setEmail(contact.email);
       setPhone(contact.phone);
@@ -161,13 +154,11 @@ export function ContactFormDialog({
       setBusinessType(contact.businessType);
     } else {
       resetForm();
-      setMode(initialMode);
       setFolderId(defaultFolderId || undefined);
     }
-  }, [contact, open, defaultFolderId, initialMode]);
+  }, [contact, open, defaultFolderId]);
 
   const resetForm = () => {
-    setQuickInput("");
     setName("");
     setEmail("");
     setPhone("");
@@ -192,9 +183,8 @@ export function ContactFormDialog({
     setDetectedBusinessName(undefined);
     setDetectedBusinessType(undefined);
     setIsLookingUpBusiness(false);
-    setContactOpen(false);
     setWorkOpen(false);
-    setKeywordsOpen(false);
+    setKeywordsOpen(true); // Keep keywords open by default
     setAddressOpen(false);
   };
 
@@ -242,37 +232,6 @@ export function ContactFormDialog({
     }
   };
 
-  const handleQuickParse = async () => {
-    if (!quickInput.trim()) {
-      toast.error("Please enter some contact information");
-      return;
-    }
-
-    setIsParsing(true);
-    try {
-      const parsed = await parseContactUnified(quickInput);
-      
-      // Apply parsed data to form fields
-      setName(parsed.name || "");
-      setEmail(parsed.email || "");
-      setPhone(parsed.phone || "");
-      setCompany(parsed.company || "");
-      setRole(parsed.role || "");
-      setDescription(parsed.description || "");
-      
-      if (parsed.suggestedKeywords?.length > 0) {
-        setAutoTags(parsed.suggestedKeywords);
-      }
-      
-      setMode("full");
-      toast.success("Contact info extracted! Review and save.");
-    } catch (error) {
-      console.error("Parse error:", error);
-      toast.error("Failed to extract contact info. Try entering details manually.");
-    } finally {
-      setIsParsing(false);
-    }
-  };
 
   // Lookup business when address is entered
   useEffect(() => {
@@ -481,6 +440,10 @@ export function ContactFormDialog({
     }
 
     // No duplicates found, proceed with save
+    // Track keywords for recently used
+    if (allKeywords.length > 0) {
+      addKeywords(allKeywords);
+    }
     onSave(contactData);
     resetForm();
     onOpenChange(false);
@@ -503,6 +466,10 @@ export function ContactFormDialog({
 
   const handleSaveAnyway = () => {
     if (pendingContact) {
+      // Track keywords for recently used
+      if (pendingContact.tags && pendingContact.tags.length > 0) {
+        addKeywords(pendingContact.tags);
+      }
       onSave(pendingContact);
       setDuplicateDialogOpen(false);
       setFoundDuplicates([]);
@@ -516,9 +483,9 @@ export function ContactFormDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg md:max-w-2xl max-h-[90vh] w-[calc(100vw-2rem)] sm:w-full flex flex-col overflow-hidden">
-        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2">
-          <DialogTitle className="font-display text-lg sm:text-xl">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] w-[calc(100vw-2rem)] sm:w-full flex flex-col overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <DialogTitle className="font-display text-xl">
             {getDialogTitle()}
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -526,115 +493,28 @@ export function ContactFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 pr-2 sm:pr-4">
-          {/* Mode Toggle - only show for new contacts */}
-          {!isEditing && (
-            <div className="flex gap-2 mb-4">
-              <Button
-                type="button"
-                variant={mode === "quick" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMode("quick")}
-                className={mode === "quick" ? "gradient-hero text-primary-foreground" : ""}
-              >
-                <Zap className="h-3.5 w-3.5 mr-1.5" />
-                Quick Add
-              </Button>
-              <Button
-                type="button"
-                variant={mode === "full" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMode("full")}
-                className={mode === "full" ? "gradient-hero text-primary-foreground" : ""}
-              >
-                Full Form
-              </Button>
-            </div>
-          )}
-
-          {/* Quick Add Mode */}
-          {mode === "quick" && !isEditing && (
-            <div className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="quickInput">Paste or type contact info</Label>
-                <Textarea
-                  id="quickInput"
-                  value={quickInput}
-                  onChange={(e) => setQuickInput(e.target.value)}
-                  placeholder="e.g. John Smith john@acme.com Marketing Manager at Acme Inc - handles our ad campaigns"
-                  rows={4}
-                  className="resize-none"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Smart parse will extract name, email, phone, company, role, and keywords automatically.
-                </p>
-              </div>
-              
-              {/* Use Current Location Button */}
-              {navigator.geolocation && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGetCurrentLocation}
-                  disabled={isGettingLocation}
-                  className="w-full"
-                >
-                  {isGettingLocation ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Getting location...
-                    </>
-                  ) : (
-                    <>
-                      <Navigation className="h-4 w-4 mr-2" />
-                      Use Current Location
-                    </>
-                  )}
-                </Button>
-              )}
-              
-              <Button
-                type="button"
-                onClick={handleQuickParse}
-                disabled={!quickInput.trim() || isParsing}
-                className="w-full gradient-hero text-primary-foreground"
-              >
-                {isParsing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Parsing with AI...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-4 w-4 mr-2" />
-                    Smart Parse
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
-
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-6">
           {/* Full Form Mode */}
-          {(mode === "full" || isEditing) && (
-            <div className="space-y-4 mt-4">
-              {/* Avatar Upload */}
-              <div className="flex flex-col items-center gap-3">
+          {(
+            <div className="space-y-4 pb-4">
+              {/* Avatar and Essential Fields - Inline Layout */}
+              <div className="flex items-start gap-2">
+                {/* Avatar */}
                 <div 
-                  className="relative cursor-pointer group"
+                  className="relative cursor-pointer group shrink-0"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Avatar className="h-20 w-20 border-2 border-border">
+                  <Avatar className="h-16 w-16 border border-border">
                     <AvatarImage src={avatar} alt={name || "Avatar"} />
-                    <AvatarFallback className="text-lg bg-muted">
+                    <AvatarFallback className="text-sm bg-muted">
                       {name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
                     </AvatarFallback>
                   </Avatar>
                   <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
                     {uploading ? (
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     ) : (
-                      <Camera className="h-6 w-6 text-muted-foreground" />
+                      <Camera className="h-4 w-4 text-muted-foreground" />
                     )}
                   </div>
                 </div>
@@ -646,31 +526,205 @@ export function ContactFormDialog({
                   onChange={handleFileChange}
                   disabled={uploading}
                 />
-                <span className="text-xs text-muted-foreground">Click to upload photo</span>
+                
+                {/* Essential Fields Grid */}
+                <div className="flex-1 grid grid-cols-2 gap-1.5 min-w-0">
+                  {/* Name - Full width */}
+                  <div className="space-y-0.5 col-span-2">
+                    <Label htmlFor="name" className="text-[10px] leading-tight">Name *</Label>
+                    <Input
+                      id="name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="John Doe"
+                      required
+                      className="h-6 text-xs py-0.5 px-2"
+                    />
+                  </div>
+                  
+                  {/* Phone */}
+                  <div className="space-y-0.5">
+                    <Label htmlFor="phone" className="text-[10px] leading-tight">Phone</Label>
+                    <Input
+                      id="phone"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+1 (555) 000-0000"
+                      className="h-6 text-xs py-0.5 px-2"
+                    />
+                  </div>
+                  
+                  {/* Email */}
+                  <div className="space-y-0.5">
+                    <Label htmlFor="email" className="text-[10px] leading-tight">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="john@example.com"
+                      className="h-6 text-xs py-0.5 px-2"
+                    />
+                  </div>
+                  
+                  {/* Company */}
+                  <div className="space-y-0.5">
+                    <Label htmlFor="company" className="text-[10px] leading-tight">Company</Label>
+                    <Input
+                      id="company"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      placeholder="Acme Inc"
+                      className="h-6 text-xs py-0.5 px-2"
+                    />
+                  </div>
+                  
+                  {/* Role */}
+                  <div className="space-y-0.5">
+                    <Label htmlFor="role" className="text-[10px] leading-tight">Role</Label>
+                    <Input
+                      id="role"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      placeholder="Marketing Manager"
+                      className="h-6 text-xs py-0.5 px-2"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Essential Fields */}
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+              {/* Description */}
+              <div className="space-y-0.5">
+                <Label htmlFor="description" className="text-[10px] leading-tight">Description</Label>
                 <Textarea
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What do they handle? e.g. 'Handles all marketing campaigns'"
-                  rows={2}
+                  placeholder="What do they handle?"
+                  rows={1}
+                  className="min-h-[1.75rem] resize-none text-xs py-1"
                 />
               </div>
+
+              {/* Keywords - Made more visible and prominent */}
+              <CollapsibleSection 
+                title={
+                  <span className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-primary" />
+                    <span>Keywords</span>
+                    <span className="text-xs font-normal text-muted-foreground">(Quickest way to enrich contacts)</span>
+                  </span>
+                } 
+                open={keywordsOpen} 
+                onOpenChange={setKeywordsOpen}
+              >
+                <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-3">
+                  {/* Auto-generated keywords */}
+                  {autoTags.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium text-foreground">Suggested keywords:</span>
+                      <div className="flex flex-wrap gap-2">
+                        {autoTags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className="cursor-pointer border-dashed hover:bg-destructive/10"
+                            onClick={() => removeAutoTag(tag)}
+                          >
+                            {tag}
+                            <X className="h-3 w-3 ml-1.5" />
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Preset keywords */}
+                  {presetKeywords.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium text-foreground">Quick add:</span>
+                      <div className="flex flex-wrap gap-2">
+                        {presetKeywords.map((preset) => {
+                          const isSelected = tags.includes(preset);
+                          return (
+                            <Badge
+                              key={preset}
+                              variant={isSelected ? "default" : "outline"}
+                              className={`cursor-pointer transition-colors ${
+                                isSelected
+                                  ? "bg-primary text-primary-foreground"
+                                  : "hover:bg-accent hover:text-accent-foreground"
+                              }`}
+                              onClick={() => togglePresetTag(preset)}
+                            >
+                              {isSelected && <Check className="h-3 w-3 mr-1" />}
+                              {preset}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Recently used keywords */}
+                  {recentKeywords.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium text-foreground">Recently used:</span>
+                      <div className="flex flex-wrap gap-2">
+                        {recentKeywords
+                          .filter((keyword) => !presetKeywords.includes(keyword))
+                          .slice(0, 10)
+                          .map((keyword) => {
+                            const isSelected = tags.includes(keyword);
+                            return (
+                              <Badge
+                                key={keyword}
+                                variant={isSelected ? "default" : "outline"}
+                                className={`cursor-pointer transition-colors ${
+                                  isSelected
+                                    ? "bg-primary text-primary-foreground"
+                                    : "hover:bg-accent hover:text-accent-foreground border-muted-foreground/30"
+                                }`}
+                                onClick={() => togglePresetTag(keyword)}
+                              >
+                                {isSelected && <Check className="h-3 w-3 mr-1" />}
+                                {keyword}
+                              </Badge>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <Input
+                    id="tags"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleAddTag}
+                    placeholder="Type custom keywords and press Enter..."
+                    className="bg-background"
+                  />
+                  
+                  {tags.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium text-foreground">Your keywords:</span>
+                      <div className="flex flex-wrap gap-2">
+                        {tags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="secondary"
+                            className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                            onClick={() => removeTag(tag)}
+                          >
+                            {tag}
+                            <X className="h-3 w-3 ml-1.5" />
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CollapsibleSection>
 
               {/* Share with company toggle - only for org users */}
               {hasCompany && (
@@ -700,53 +754,12 @@ export function ContactFormDialog({
                 </div>
               )}
 
-              {/* Contact Details - Collapsible */}
-              <CollapsibleSection title="Contact Details" open={contactOpen} onOpenChange={setContactOpen}>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="john@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-              </CollapsibleSection>
-
-              {/* Work Info - Collapsible */}
-              <CollapsibleSection title="Work Info" open={workOpen} onOpenChange={setWorkOpen}>
-                <div className="space-y-2">
-                  <Label htmlFor="company">Company</Label>
-                  <Input
-                    id="company"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    placeholder="Acme Inc"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Input
-                    id="role"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    placeholder="Marketing Manager"
-                  />
-                </div>
+              {/* Additional Info - Collapsible */}
+              <CollapsibleSection title="Additional Info" open={workOpen} onOpenChange={setWorkOpen}>
                 {/* Folder Selector */}
                 {folders.length > 0 && (
                   <div className="space-y-2">
-                    <Label htmlFor="folder">Folder</Label>
+                    <Label htmlFor="folder" className="text-sm font-medium">Folder</Label>
                     <Select value={folderId || "none"} onValueChange={(val) => setFolderId(val === "none" ? undefined : val)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a folder..." />
@@ -771,7 +784,7 @@ export function ContactFormDialog({
               <CollapsibleSection title="Address" open={addressOpen} onOpenChange={setAddressOpen}>
                 {/* Use Current Location Button */}
                 {navigator.geolocation && (
-                  <div className="mb-3 space-y-1.5">
+                  <div className="mb-3">
                     <Button
                       type="button"
                       variant="outline"
@@ -792,14 +805,14 @@ export function ContactFormDialog({
                         </>
                       )}
                     </Button>
-                    <p className="text-xs text-muted-foreground px-1">
+                    <p className="text-xs text-muted-foreground mt-2 px-1">
                       Your browser will ask for location permission. If denied, you can still enter the address manually.
                     </p>
                   </div>
                 )}
                 
                 <div className="space-y-2">
-                  <Label htmlFor="address">Street Address</Label>
+                  <Label htmlFor="address" className="text-sm font-medium">Street Address</Label>
                   <Input
                     id="address"
                     value={address}
@@ -807,9 +820,9 @@ export function ContactFormDialog({
                     placeholder="123 Main St"
                   />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
+                    <Label htmlFor="city" className="text-sm font-medium">City</Label>
                     <Input
                       id="city"
                       value={city}
@@ -818,7 +831,7 @@ export function ContactFormDialog({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
+                    <Label htmlFor="state" className="text-sm font-medium">State</Label>
                     <Input
                       id="state"
                       value={state}
@@ -827,9 +840,9 @@ export function ContactFormDialog({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label htmlFor="zipCode">ZIP Code</Label>
+                    <Label htmlFor="zipCode" className="text-sm font-medium">ZIP Code</Label>
                     <Input
                       id="zipCode"
                       value={zipCode}
@@ -838,7 +851,7 @@ export function ContactFormDialog({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="country">Country</Label>
+                    <Label htmlFor="country" className="text-sm font-medium">Country</Label>
                     <Input
                       id="country"
                       value={country}
@@ -860,8 +873,8 @@ export function ContactFormDialog({
                 {(isLookingUpBusiness || detectedBusinessName || businessName) && (
                   <div className="mt-3 space-y-2">
                     {isLookingUpBusiness && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         <span>Looking up business at this address...</span>
                       </div>
                     )}
@@ -967,89 +980,17 @@ export function ContactFormDialog({
                 )}
               </CollapsibleSection>
 
-              {/* Keywords - Collapsible */}
-              <CollapsibleSection title="Keywords" open={keywordsOpen} onOpenChange={setKeywordsOpen}>
-                {/* Auto-generated keywords */}
-                {autoTags.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="text-xs text-muted-foreground">Suggested keywords:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {autoTags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="outline"
-                          className="cursor-pointer border-dashed hover:bg-destructive/10"
-                          onClick={() => removeAutoTag(tag)}
-                        >
-                          {tag}
-                          <X className="h-3 w-3 ml-1" />
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Preset keywords */}
-                {presetKeywords.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {presetKeywords.map((preset) => {
-                      const isSelected = tags.includes(preset);
-                      return (
-                        <Badge
-                          key={preset}
-                          variant={isSelected ? "default" : "outline"}
-                          className={`cursor-pointer transition-colors ${
-                            isSelected
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-accent hover:text-accent-foreground"
-                          }`}
-                          onClick={() => togglePresetTag(preset)}
-                        >
-                          {isSelected && <Check className="h-3 w-3 mr-1" />}
-                          {preset}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                )}
-                
-                <Input
-                  id="tags"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleAddTag}
-                  placeholder="Type custom keywords and press Enter..."
-                />
-                
-                {tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
-                        onClick={() => removeTag(tag)}
-                      >
-                        {tag}
-                        <X className="h-3 w-3 ml-1" />
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </CollapsibleSection>
             </div>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-border mt-4 shrink-0">
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-border mt-4 shrink-0 px-6 pb-6">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Cancel
           </Button>
-          {(mode === "full" || isEditing) && (
-            <Button type="submit" className="gradient-hero text-primary-foreground w-full sm:w-auto">
-              {isEditing ? "Save Changes" : "Add Contact"}
-            </Button>
-          )}
+          <Button type="submit" className="gradient-hero text-primary-foreground w-full sm:w-auto">
+            {isEditing ? "Save Changes" : "Add Contact"}
+          </Button>
         </form>
       </DialogContent>
     </Dialog>

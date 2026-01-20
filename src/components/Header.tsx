@@ -1,4 +1,4 @@
-import { Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, Sparkles, MessageSquare, Video } from "lucide-react";
+import { Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, MessageSquare, Video } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +25,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 
 interface HeaderProps {
   contactCount: number;
-  onOpenAddDialog: (mode?: "quick" | "full") => void;
+  onOpenAddDialog: () => void;
   onOpenProfile: () => void;
   onOpenSettings: () => void;
   onOpenImport: (tab?: string) => void;
@@ -129,13 +129,9 @@ export function Header({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52 sm:w-56 bg-popover max-w-[calc(100vw-2rem)]">
-              <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenAddDialog("quick")}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Quick Add
-              </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenAddDialog("full")}>
+              <DropdownMenuItem className="cursor-pointer" onClick={onOpenAddDialog}>
                 <Plus className="mr-2 h-4 w-4" />
-                Full Form
+                Add Contact
               </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer" onClick={() => onOpenImport("scan")}>
