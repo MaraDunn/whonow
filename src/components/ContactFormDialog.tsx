@@ -3,6 +3,7 @@ import { X, Check, Camera, Loader2, Zap, ChevronDown, ChevronUp, Building2, User
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -31,7 +32,7 @@ import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { generateAutoKeywords } from "@/utils/autoKeywords";
 import { toast } from "sonner";
 import { formatName, formatPhoneNumber } from "@/utils/formatContact";
-import { parseContactText } from "@/utils/contactTextParser";
+import { parseContactUnified } from "@/utils/unifiedContactParser";
 import { lookupBusinessAtAddress } from "@/utils/businessLookup";
 import { DuplicateContactDialog } from "@/components/DuplicateContactDialog";
 import { useContacts } from "@/hooks/useContacts";
@@ -85,6 +86,7 @@ export function ContactFormDialog({
 }: ContactFormDialogProps) {
   const [mode, setMode] = useState<"quick" | "full">(initialMode);
   const [quickInput, setQuickInput] = useState("");
+  const [isParsing, setIsParsing] = useState(false);
   
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -240,14 +242,15 @@ export function ContactFormDialog({
     }
   };
 
-  const handleQuickParse = () => {
+  const handleQuickParse = async () => {
     if (!quickInput.trim()) {
       toast.error("Please enter some contact information");
       return;
     }
 
+    setIsParsing(true);
     try {
-      const parsed = parseContactText(quickInput);
+      const parsed = await parseContactUnified(quickInput);
       
       // Apply parsed data to form fields
       setName(parsed.name || "");
@@ -266,6 +269,8 @@ export function ContactFormDialog({
     } catch (error) {
       console.error("Parse error:", error);
       toast.error("Failed to extract contact info. Try entering details manually.");
+    } finally {
+      setIsParsing(false);
     }
   };
 
@@ -516,6 +521,9 @@ export function ContactFormDialog({
           <DialogTitle className="font-display text-lg sm:text-xl">
             {getDialogTitle()}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEditing ? "Edit contact information" : "Add a new contact to your address book"}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 pr-2 sm:pr-4">
@@ -589,11 +597,20 @@ export function ContactFormDialog({
               <Button
                 type="button"
                 onClick={handleQuickParse}
-                disabled={!quickInput.trim()}
+                disabled={!quickInput.trim() || isParsing}
                 className="w-full gradient-hero text-primary-foreground"
               >
-                <Zap className="h-4 w-4 mr-2" />
-                Smart Parse
+                {isParsing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Parsing with AI...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Smart Parse
+                  </>
+                )}
               </Button>
             </div>
           )}

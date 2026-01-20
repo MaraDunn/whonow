@@ -6,7 +6,7 @@
 import { SearchQuery } from "@/types/searchQuery";
 
 const DB_NAME = "llm_cache";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Updated to match contactLLMCache version
 const QUERY_STORE = "parsed_queries";
 const MODEL_STORE = "llm_models";
 const MODEL_VERSION_KEY = "model_version";
@@ -42,6 +42,11 @@ async function getDB(): Promise<IDBDatabase> {
 
       if (!database.objectStoreNames.contains(MODEL_STORE)) {
         database.createObjectStore(MODEL_STORE);
+      }
+      
+      // Add parsed_contacts store if upgrading from version 1 to 2
+      if (!database.objectStoreNames.contains("parsed_contacts")) {
+        database.createObjectStore("parsed_contacts");
       }
     };
   });

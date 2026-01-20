@@ -18,6 +18,29 @@ let modelLoading: Promise<any> | null = null;
 let modelLoadFailed = false; // Track if model loading has permanently failed (in-memory cache)
 
 /**
+ * Get the currently loaded LLM model instance (if available)
+ * Allows other modules to reuse the same model instance
+ */
+export function getLoadedModel(): any {
+  return llmModel;
+}
+
+/**
+ * Check if model is currently loading
+ */
+export function isModelLoading(): boolean {
+  return modelLoading !== null;
+}
+
+/**
+ * Ensure the model is loaded (trigger loading if not already loaded)
+ * Returns the model instance or null if loading fails
+ */
+export async function ensureModelLoaded(): Promise<any> {
+  return await loadLLMModel();
+}
+
+/**
  * List of alternative models to try if primary fails
  * Ordered by preference (smallest/fastest first)
  */

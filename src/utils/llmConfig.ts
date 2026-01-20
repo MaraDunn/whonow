@@ -44,6 +44,12 @@ export function getLLMConfig(): LLMConfig {
 /**
  * Check if LLM parsing is enabled
  * Can be disabled via feature flag
+ * 
+ * Note: LLM parsing may fail in browser environments due to:
+ * - CORS restrictions from Hugging Face
+ * - Network/firewall restrictions
+ * - Browser security settings
+ * The system will automatically fallback to deterministic parsing if LLM fails.
  */
 export function isLLMParsingEnabled(): boolean {
   // Enable by default, can be disabled with VITE_ENABLE_LLM_PARSING=false
@@ -52,5 +58,7 @@ export function isLLMParsingEnabled(): boolean {
   if (envValue === "false") return false;
   if (envValue === "true") return true;
   // Default: enabled (will fallback to deterministic if model fails to load)
+  // This is the recommended setting - LLM adds value when it works,
+  // but deterministic parsing works reliably in all environments
   return true;
 }
