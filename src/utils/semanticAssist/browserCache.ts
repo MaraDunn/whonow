@@ -120,12 +120,13 @@ export async function cacheQueryEmbedding(
   embedding: number[]
 ): Promise<void> {
   try {
+    // Compute hash BEFORE creating transaction to avoid transaction timeout
+    const queryHash = await hashQuery(query);
+    
     const database = await getDB();
     const transaction = database.transaction([EMBEDDING_STORE], "readwrite");
     const store = transaction.objectStore(EMBEDDING_STORE);
 
-    // Use query hash as key to avoid storing duplicate queries
-    const queryHash = await hashQuery(query);
     await new Promise<void>((resolve, reject) => {
       const request = store.put(embedding, queryHash);
       request.onsuccess = () => resolve();
@@ -143,11 +144,13 @@ export async function getCachedQueryEmbedding(
   query: string
 ): Promise<number[] | null> {
   try {
+    // Compute hash BEFORE creating transaction to avoid transaction timeout
+    const queryHash = await hashQuery(query);
+    
     const database = await getDB();
     const transaction = database.transaction([EMBEDDING_STORE], "readonly");
     const store = transaction.objectStore(EMBEDDING_STORE);
 
-    const queryHash = await hashQuery(query);
     return await new Promise<number[] | null>((resolve, reject) => {
       const request = store.get(queryHash);
       request.onsuccess = () => resolve(request.result);

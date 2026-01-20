@@ -101,44 +101,72 @@ function fuzzyMatch(text: string, searchTerm: string): boolean {
 /**
  * Check if company name matches with word boundaries
  * Returns true if the search company matches the contact company at word boundaries
+ * Handles variations like "tech solutions inc" vs "Tech Solutions Inc" or "Tech Solutions, Inc."
  */
 function companyMatches(contactCompany: string, searchCompany: string): boolean {
-  console.log('[SEARCH DEBUG] companyMatches - contactCompany:', contactCompany, 'searchCompany:', searchCompany);
-  if (!contactCompany || !searchCompany) {
-    console.log('[SEARCH DEBUG] companyMatches - One is empty, returning false');
-    return false;
-  }
+  if (!contactCompany || !searchCompany) return false;
   
-  const contactLower = contactCompany.toLowerCase().trim();
-  const searchLower = searchCompany.toLowerCase().trim();
+  // Normalize: lowercase, trim, remove punctuation
+  const normalize = (str: string): string => {
+    return str
+      .toLowerCase()
+      .trim()
+      .replace(/[.,;:!?]/g, '') // Remove punctuation
+      .replace(/\s+/g, ' '); // Normalize whitespace
+  };
   
-  console.log('[SEARCH DEBUG] companyMatches - Normalized - contact:', contactLower, 'search:', searchLower);
+  const contactLower = normalize(contactCompany);
+  const searchLower = normalize(searchCompany);
   
-  // Exact match
-  if (contactLower === searchLower) {
-    console.log('[SEARCH DEBUG] companyMatches - Exact match found');
-    return true;
-  }
+  // Exact match after normalization
+  if (contactLower === searchLower) return true;
   
   // Check if search company is contained in contact company (substring match)
-  // This handles cases like "quantum solutions" matching "Quantum Solutions Inc"
-  if (contactLower.includes(searchLower)) {
-    console.log('[SEARCH DEBUG] companyMatches - Substring match found (search in contact)');
-    return true;
-  }
+  // This handles cases like "tech solutions inc" matching "Tech Solutions Inc" or "Tech Solutions, Inc."
+  if (contactLower.includes(searchLower)) return true;
   
-  // Word boundary match - check if all words in search company appear in contact company
+  // Also check reverse - contact in search (handles partial queries)
+  if (searchLower.includes(contactLower)) return true;
+  
+  // Word boundary match - check if all significant words in search company appear in contact company
   const searchWords = searchLower.split(/\s+/).filter(w => w.length >= 2);
   if (searchWords.length === 0) return false;
   
-  const contactWords = new Set(contactLower.split(/\s+/));
+  const contactWords = contactLower.split(/\s+/);
+  const contactWordsSet = new Set(contactWords);
   
-  // All search words must be present in contact company
-  const allWordsMatch = searchWords.every(word => {
+  // Normalize company suffixes for matching (inc, inc., incorporated all match)
+  const normalizeSuffix = (word: string): string => {
+    if (word === 'inc' || word === 'inc.' || word === 'incorporated') return 'inc';
+    if (word === 'llc' || word === 'l.l.c.' || word === 'limited liability company') return 'llc';
+    if (word === 'ltd' || word === 'ltd.' || word === 'limited') return 'ltd';
+    if (word === 'corp' || word === 'corp.' || word === 'corporation') return 'corp';
+    return word;
+  };
+  
+  // All search words must be present in contact company (with suffix normalization)
+  const allWordsMatch = searchWords.every(searchWord => {
+    const normalizedSearch = normalizeSuffix(searchWord);
+    
     // Check for exact word match
-    if (contactWords.has(word)) return true;
-    // Check if word is a prefix of any contact word (e.g., "tech" matches "technologies")
-    return Array.from(contactWords).some(cw => cw.startsWith(word) || word.startsWith(cw));
+    if (contactWordsSet.has(searchWord)) return true;
+    
+    // Check normalized suffix match
+    const hasNormalizedMatch = contactWords.some(cw => normalizeSuffix(cw) === normalizedSearch);
+    if (hasNormalizedMatch) return true;
+    
+    // Check if word is a prefix/suffix of any contact word (e.g., "tech" matches "technologies")
+    const matchesContactWord = contactWords.some(contactWord => {
+      const normalizedContact = normalizeSuffix(contactWord);
+      return contactWord.includes(searchWord) || 
+             searchWord.includes(contactWord) ||
+             normalizedContact.includes(normalizedSearch) ||
+             normalizedSearch.includes(normalizedContact) ||
+             contactWord.startsWith(searchWord) ||
+             searchWord.startsWith(contactWord);
+    });
+    
+    return matchesContactWord;
   });
   
   if (allWordsMatch) return true;
@@ -155,6 +183,7 @@ function companyMatches(contactCompany: string, searchCompany: string): boolean 
 /**
  * Check if role matches with word boundaries
  * Returns true if the search role matches the contact role at word boundaries
+ * Handles plurals, synonyms, and word order variations
  */
 function roleMatches(contactRole: string, searchRole: string): boolean {
   if (!contactRole || !searchRole) return false;
@@ -165,19 +194,66 @@ function roleMatches(contactRole: string, searchRole: string): boolean {
   // Exact match
   if (contactLower === searchLower) return true;
   
+  // Normalize plurals and common variations
+  const normalizeWord = (word: string): string => {
+    // Remove trailing 's' for plural matching (but keep if it's part of the word like "ops")
+    if (word.endsWith('s') && word.length > 3 && word !== 'ops') {
+      return word.slice(0, -1);
+    }
+    return word;
+  };
+  
   // Word boundary match - check if all words in search role appear in contact role
   const searchWords = searchLower.split(/\s+/).filter(w => w.length >= 2);
-  const contactWords = new Set(contactLower.split(/\s+/));
+  const contactWords = contactLower.split(/\s+/);
+  const contactWordsSet = new Set(contactWords);
+  const contactWordsNormalized = contactWords.map(normalizeWord);
+  const contactWordsNormalizedSet = new Set(contactWordsNormalized);
   
-  // All search words must be present in contact role
-  const allWordsMatch = searchWords.every(word => {
+  // All search words must be present in contact role (with normalization)
+  const allWordsMatch = searchWords.every(searchWord => {
+    const normalizedSearch = normalizeWord(searchWord);
+    
     // Check for exact word match
-    if (contactWords.has(word)) return true;
-    // Check if word is a prefix of any contact word (e.g., "engineer" matches "engineering")
-    return Array.from(contactWords).some(cw => cw.startsWith(word) || word.startsWith(cw));
+    if (contactWordsSet.has(searchWord)) return true;
+    if (contactWordsNormalizedSet.has(normalizedSearch)) return true;
+    
+    // Check if word is a prefix/suffix of any contact word (e.g., "engineer" matches "engineering")
+    const matchesContactWord = contactWords.some(contactWord => {
+      const normalizedContact = normalizeWord(contactWord);
+      return contactWord.includes(searchWord) || 
+             searchWord.includes(contactWord) ||
+             normalizedContact.includes(normalizedSearch) ||
+             normalizedSearch.includes(normalizedContact) ||
+             contactWord.startsWith(searchWord) ||
+             searchWord.startsWith(contactWord);
+    });
+    
+    if (matchesContactWord) return true;
+    
+    // Check synonym expansion (e.g., "ops" should match "operations")
+    if (searchWord === "ops" || searchWord === "op") {
+      return contactWords.some(cw => 
+        cw === "operations" || cw === "operation" || cw.startsWith("operat")
+      );
+    }
+    
+    return false;
   });
   
   if (allWordsMatch) return true;
+  
+  // Check if contact role contains search role as substring (flexible matching)
+  if (contactLower.includes(searchLower) || searchLower.includes(contactLower)) {
+    // But require at least one significant word match (not just "of", "the", etc.)
+    const significantWords = searchWords.filter(w => w.length >= 3);
+    if (significantWords.length > 0) {
+      const hasSignificantMatch = significantWords.some(sw => 
+        contactLower.includes(sw) || contactWords.some(cw => cw.includes(sw) || sw.includes(cw))
+      );
+      if (hasSignificantMatch) return true;
+    }
+  }
   
   // Check if contact role starts with search role (e.g., "Software" matches "Software Engineer")
   if (contactLower.startsWith(searchLower)) return true;
@@ -1398,18 +1474,38 @@ export async function executeSearchQuery(
 
   // Apply deterministic filters first to reduce dataset before scoring
   if (filters.company) {
-    const searchCompany = filters.company.toLowerCase();
+    const searchCompany = filters.company.toLowerCase().trim();
+    console.log('[SEARCH DEBUG] executeSearchQuery - Filtering by company:', searchCompany);
+    const beforeFilter = filteredContacts.length;
     filteredContacts = filteredContacts.filter(contact => {
-      const contactCompany = (contact.company || "").toLowerCase();
-      return companyMatches(contactCompany, searchCompany);
+      const contactCompany = (contact.company || "").toLowerCase().trim();
+      const matches = companyMatches(contactCompany, searchCompany);
+      if (matches) {
+        console.log('[SEARCH DEBUG] executeSearchQuery - Company match:', contactCompany, 'matches', searchCompany);
+      }
+      return matches;
     });
+    console.log('[SEARCH DEBUG] executeSearchQuery - Company filter:', beforeFilter, '->', filteredContacts.length, 'contacts');
   }
 
   if (filters.job_title) {
     const searchRole = filters.job_title.toLowerCase();
     filteredContacts = filteredContacts.filter(contact => {
       const contactRole = (contact.role || "").toLowerCase();
-      return roleMatches(contactRole, searchRole);
+      // More flexible role matching - check if search role contains contact role or vice versa
+      // This handles "ops directors" matching "Operations Director" or "Director of Operations"
+      const roleMatchesResult = roleMatches(contactRole, searchRole);
+      if (roleMatchesResult) return true;
+      
+      // Also check if any word from search role appears in contact role
+      const searchRoleWords = searchRole.split(/\s+/).filter(w => w.length >= 2);
+      const contactRoleWords = contactRole.split(/\s+/);
+      const hasMatchingWord = searchRoleWords.some(searchWord => 
+        contactRoleWords.some(contactWord => 
+          contactWord.includes(searchWord) || searchWord.includes(contactWord)
+        )
+      );
+      return hasMatchingWord;
     });
   }
 
@@ -1468,6 +1564,27 @@ export async function executeSearchQuery(
     });
   }
 
+  // Check if we have entity filters
+  const hasEntityFilters = !!(filters.company || filters.job_title || filters.name || filters.location);
+  
+  // If we have entity filters but no search terms, we should return all filtered contacts
+  // (they've already been filtered by the entity criteria)
+  if (hasEntityFilters && searchTerms.length === 0) {
+    console.log('[SEARCH DEBUG] executeSearchQuery - Entity filters only, no search terms. Filtered contacts:', filteredContacts.length);
+    // Return filtered contacts directly, sorted by semantic score if available
+    if (semanticScores.size > 0) {
+      return filteredContacts
+        .map(contact => ({
+          contact,
+          semanticScore: semanticScores.get(contact.id) || 0
+        }))
+        .sort((a, b) => b.semanticScore - a.semanticScore)
+        .slice(0, maxResults)
+        .map(s => s.contact);
+    }
+    return filteredContacts.slice(0, maxResults);
+  }
+
   // Now score only the filtered contacts (much smaller set)
   const scored = filteredContacts
     .map(contact => {
@@ -1489,16 +1606,46 @@ export async function executeSearchQuery(
       const SEMANTIC_WEIGHT = 0.4;
       
       result.score = (keywordScore * KEYWORD_WEIGHT) + (normalizedSemanticScore * SEMANTIC_WEIGHT);
-
-      // Give base score if filters matched but no search terms
-      if (searchTerms.length === 0 && result.score === 0) {
+      
+      // If we have semantic score but no keyword score, still give some points
+      if (keywordScore === 0 && semanticScoreValue > 0.3) {
+        result.score = Math.max(result.score, normalizedSemanticScore * 0.5);
+      }
+      
+      // If we have entity filters and the contact passed the filter, give minimum score
+      if (hasEntityFilters && result.score === 0) {
         result.score = MIN_SCORE_THRESHOLD;
       }
 
       return result;
     })
     .filter(s => s.score >= MIN_SCORE_THRESHOLD)
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => {
+      // Sort by score, but if scores are equal, prefer contacts with higher semantic scores
+      if (Math.abs(a.score - b.score) < 0.1) {
+        const aSemantic = a.semanticScore || 0;
+        const bSemantic = b.semanticScore || 0;
+        return bSemantic - aSemantic;
+      }
+      return b.score - a.score;
+    });
+
+  console.log('[SEARCH DEBUG] executeSearchQuery - Scored contacts:', scored.length, 'out of', filteredContacts.length, 'filtered');
+  console.log('[SEARCH DEBUG] executeSearchQuery - Search terms:', searchTerms);
+  console.log('[SEARCH DEBUG] executeSearchQuery - Entity filters:', { 
+    company: filters.company, 
+    job_title: filters.job_title, 
+    name: filters.name, 
+    location: filters.location 
+  });
+
+  // If we have entity filters but no results, try a more lenient search
+  if (scored.length === 0 && hasEntityFilters && searchTerms.length === 0) {
+    console.log('[SEARCH DEBUG] executeSearchQuery - No results with entity filters, returning filtered contacts as fallback');
+    // Fallback: return filtered contacts even if they don't meet score threshold
+    // This handles cases where role matching might be too strict
+    return filteredContacts.slice(0, maxResults);
+  }
 
   return scored.slice(0, maxResults).map(s => s.contact);
 }

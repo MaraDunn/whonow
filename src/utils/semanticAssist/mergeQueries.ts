@@ -34,10 +34,18 @@ export function mergeQueries(
   }
 
   // Only fill missing fields from semantic (don't override deterministic)
+  // IMPORTANT: Never add location from semantic if deterministic doesn't have it
+  // Locations should only be extracted when explicitly mentioned in the query
   merged.filters = {
     ...semantic.filters,
     ...deterministic.filters, // Deterministic overrides semantic
   };
+  
+  // Remove location from semantic if deterministic doesn't have it
+  // This prevents LLM from inferring locations that weren't in the query
+  if (!deterministic.filters.location && semantic.filters.location) {
+    delete merged.filters.location;
+  }
 
   // Use higher confidence
   merged.confidence = Math.max(deterministic.confidence, semantic.confidence);

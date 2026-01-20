@@ -904,34 +904,13 @@ function extractRelationships(words: string[]): string[] {
 
 /**
  * Extract locations from query
+ * Only extracts locations when explicitly mentioned with location prepositions or as standalone location keywords
  */
 function extractLocations(words: string[]): string[] {
   const locations: string[] = [];
   const normalized = words.join(" ").toLowerCase();
   
-  // Check for location synonyms
-  for (const [canonical, synonyms] of Object.entries(LOCATION_SYNONYMS)) {
-    for (const synonym of synonyms) {
-      if (normalized.includes(synonym)) {
-        if (!locations.includes(canonical)) {
-          locations.push(canonical);
-        }
-        break;
-      }
-    }
-  }
-  
-  // Check for location keywords (office, conference, etc.)
-  for (const word of words) {
-    const lower = word.toLowerCase();
-    if (LOCATION_KEYWORDS.has(lower)) {
-      if (!locations.includes(lower)) {
-        locations.push(lower);
-      }
-    }
-  }
-  
-  // Check for "in [Location]" or "at [Location]" patterns
+  // Check for "in [Location]" or "at [Location]" patterns first (most reliable)
   for (let i = 0; i < words.length; i++) {
     const word = words[i].toLowerCase();
     if (ENTITY_PREPOSITIONS.location.has(word) && words[i + 1]) {
@@ -943,9 +922,62 @@ function extractLocations(words: string[]): string[] {
       }
       if (locationWords.length > 0) {
         const location = locationWords.join(" ");
-        if (!locations.includes(location.toLowerCase())) {
-          locations.push(location.toLowerCase());
+        const locationLower = location.toLowerCase();
+        
+        // Verify it's actually a known location
+        let isKnownLocation = false;
+        for (const [canonical, synonyms] of Object.entries(LOCATION_SYNONYMS)) {
+          if (synonyms.some(s => s === locationLower || locationLower.includes(s))) {
+            if (!locations.includes(canonical)) {
+              locations.push(canonical);
+            }
+            isKnownLocation = true;
+            break;
+          }
         }
+        
+        // If not a known location but follows location preposition, add it anyway
+        if (!isKnownLocation && !locations.includes(locationLower)) {
+          locations.push(locationLower);
+        }
+      }
+    }
+  }
+  
+  // Only check for location synonyms if they appear as standalone words/phrases
+  // Use word boundaries to avoid false matches (e.g., "new york" shouldn't match "new yorker")
+  if (locations.length === 0) {
+    for (const [canonical, synonyms] of Object.entries(LOCATION_SYNONYMS)) {
+      for (const synonym of synonyms) {
+        // Use word boundary regex to ensure exact match, not substring
+        const regex = new RegExp(`\\b${synonym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (regex.test(normalized)) {
+          // Additional check: make sure it's not part of a larger phrase that's not a location
+          // For example, "new york" in "new yorker" should not match
+          const synonymIndex = normalized.indexOf(synonym);
+          if (synonymIndex !== -1) {
+            const before = normalized.substring(Math.max(0, synonymIndex - 1), synonymIndex);
+            const after = normalized.substring(synonymIndex + synonym.length, synonymIndex + synonym.length + 1);
+            // Check if it's surrounded by word boundaries (space, start, end, or punctuation)
+            const isWordBoundary = (before === '' || before === ' ' || /[^a-z]/.test(before)) &&
+                                   (after === '' || after === ' ' || /[^a-z]/.test(after));
+            
+            if (isWordBoundary && !locations.includes(canonical)) {
+              locations.push(canonical);
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+  
+  // Check for location keywords (office, conference, etc.) - these are standalone keywords
+  for (const word of words) {
+    const lower = word.toLowerCase();
+    if (LOCATION_KEYWORDS.has(lower)) {
+      if (!locations.includes(lower)) {
+        locations.push(lower);
       }
     }
   }
@@ -1175,8 +1207,46 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
   }
   
   // Extract roles and departments from vocabulary (with synonym expansion)
+  // First, check for multi-word role patterns (e.g., "ops director", "operations director")
+  for (let i = 0; i < words.length - 1; i++) {
+    const word1 = words[i].toLowerCase();
+    const word2 = words[i + 1].toLowerCase();
+    
+    // Expand synonyms for first word
+    const expanded1 = expandQueryTerms(word1);
+    
+    // Check if we have a department/role + title pattern
+    for (const expanded of expanded1) {
+      const expandedLower = expanded.toLowerCase();
+      // Check if first word is a department and second is a role/title
+      const depts = ["ops", "operations", "hr", "human resources", "sales", "marketing", "engineering", "dev", "finance", "legal", "support", "it", "tech", "product", "design", "research", "admin"];
+      // Handle both singular and plural titles
+      const titleBase = word2.replace(/s$/, ""); // Remove trailing 's' for plural
+      const titles = ["director", "manager", "lead", "head", "vp", "vice president", "president", "exec", "executive"];
+      
+      if (depts.includes(expandedLower) && (titles.includes(word2) || titles.includes(titleBase))) {
+        // Found a pattern like "ops director" or "operations directors"
+        const rolePhrase = `${expanded} ${words[i + 1]}`;
+        if (!entities.roles.includes(rolePhrase)) {
+          entities.roles.push(rolePhrase);
+        }
+        // Also add the department separately
+        if (!entities.departments.includes(expandedLower)) {
+          entities.departments.push(expandedLower);
+        }
+        // Mark both words as processed to avoid duplicate extraction
+        break;
+      }
+    }
+  }
+  
+  // Then extract individual roles and departments
   for (const word of words) {
     const lower = word.toLowerCase();
+    
+    // Skip if already part of a multi-word role
+    const isPartOfMultiWord = entities.roles.some(r => r.toLowerCase().includes(lower));
+    if (isPartOfMultiWord) continue;
     
     // Expand synonyms first
     const expanded = expandQueryTerms(lower);
@@ -1188,7 +1258,7 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
         const depts = ["hr", "human resources", "people ops", "sales", "business development", "bd", "revenue",
                        "marketing", "growth", "demand gen", "engineering", "dev", "development", "software",
                        "finance", "accounting", "fpa", "fp&a", "legal", 
-                       "operations", "support", "it", "information technology", "tech", "product", "design", 
+                       "operations", "ops", "support", "it", "information technology", "tech", "product", "design", 
                        "research", "admin", "administration"];
         if (depts.includes(termLower)) {
           if (!entities.departments.includes(termLower)) {
@@ -1809,22 +1879,59 @@ function generateInterpretation(parsed: Omit<ParsedQuery, "interpretation">): st
     }
   }
   
-  if (parsed.keywords.length > 0) {
-    parts.push(`containing "${parsed.keywords.join(" ")}"`);
+  // Only show keywords if we don't have specific entity filters
+  // This prevents confusing interpretations like "with role ops directors, containing 'know ops operations directors'"
+  const hasEntityFilters = parsed.entities.companies.length > 0 || 
+                          parsed.entities.roles.length > 0 || 
+                          parsed.entities.departments.length > 0 ||
+                          parsed.entities.locations.length > 0 ||
+                          parsed.entities.names.length > 0;
+  
+  if (parsed.keywords.length > 0 && !hasEntityFilters) {
+    // Only show keywords if they're meaningful (not query structure words)
+    const meaningfulKeywords = parsed.keywords.filter(k => k.length >= 3);
+    if (meaningfulKeywords.length > 0) {
+      parts.push(`containing "${meaningfulKeywords.join(" ")}"`);
+    }
   }
   
-  return parts.length > 0 ? `Searching contacts ${parts.join(", ")}` : "Searching all contacts";
+  if (parts.length === 0) {
+    return "Searching all contacts";
+  }
+  
+  return `Searching contacts ${parts.join(", ")}`;
 }
 
 /**
  * Extract meaningful keywords from query
+ * Excludes query structure words, entities already extracted, and stop words
  */
 function extractKeywords(words: string[]): string[] {
+  // Extended list of query structure words to filter out
+  const queryStructureWords = new Set([
+    "know", "knows", "knew", "known", "knowing",
+    "do", "does", "did", "done", "doing",
+    "i", "you", "we", "they", "he", "she", "it",
+    "any", "anyone", "someone", "somebody", "anybody",
+    "who", "what", "where", "when", "why", "how",
+    "is", "are", "was", "were", "been", "being",
+    "have", "has", "had", "having",
+    "can", "could", "should", "would", "will", "shall",
+    "find", "finds", "found", "finding",
+    "show", "shows", "showed", "shown", "showing",
+    "get", "gets", "got", "getting",
+    "search", "searches", "searched", "searching",
+    "look", "looks", "looked", "looking",
+    "tell", "tells", "told", "telling",
+    "see", "sees", "saw", "seen", "seeing",
+  ]);
+  
   return words
     .map(w => w.toLowerCase())
     .filter(w => {
       if (w.length < 2) return false;
       if (STOP_WORDS.has(w)) return false;
+      if (queryStructureWords.has(w)) return false;
       if (ACTION_KEYWORDS[w]) return false;
       if (ENTITY_PREPOSITIONS.company.has(w)) return false;
       if (ENTITY_PREPOSITIONS.location.has(w)) return false;
@@ -1853,12 +1960,23 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   // Try multiple specific patterns in order of specificity
   
   // Pattern 1: "who do I know at [company]" - most specific
+  // Improved regex to capture company names including suffixes like "inc", "llc", etc.
   let match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
   console.log('[SEARCH DEBUG] Pattern 1 match:', match);
   if (match && match[1]) {
     console.log('[SEARCH DEBUG] Pattern 1 captured:', match[1]);
     const company = cleanCompanyName(match[1]);
     console.log('[SEARCH DEBUG] Pattern 1 cleaned company:', company);
+    if (company) return company;
+  }
+  
+  // Pattern 1b: More specific pattern that handles "at tech solutions inc" better
+  match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*(?:\s+(?:inc|llc|ltd|corp|company|co)\.?)?)(?:\s*\?|$)/i);
+  console.log('[SEARCH DEBUG] Pattern 1b match:', match);
+  if (match && match[1]) {
+    console.log('[SEARCH DEBUG] Pattern 1b captured:', match[1]);
+    const company = cleanCompanyName(match[1]);
+    console.log('[SEARCH DEBUG] Pattern 1b cleaned company:', company);
     if (company) return company;
   }
   
@@ -1891,12 +2009,24 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   // Pattern 5: Generic "at [company]" - find "at" and extract what follows
   // This is a fallback that should catch most cases
   // Look for "at" as a word boundary (not part of another word)
+  // Improved regex to capture multi-word company names including suffixes
   const atMatch = query.match(/\b(at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
   console.log('[SEARCH DEBUG] Pattern 5 (generic at) match:', atMatch);
   if (atMatch && atMatch[2]) {
     console.log('[SEARCH DEBUG] Pattern 5 captured:', atMatch[2]);
     const company = cleanCompanyName(atMatch[2]);
     console.log('[SEARCH DEBUG] Pattern 5 cleaned company:', company);
+    if (company) return company;
+  }
+  
+  // Pattern 5b: More specific "at [company]" with better word boundary handling
+  // This handles "at tech solutions inc" more reliably
+  const atMatch2 = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*(?:\s+(?:inc|llc|ltd|corp|company|co))?\.?)(?:\s*\?|$)/i);
+  console.log('[SEARCH DEBUG] Pattern 5b (enhanced at) match:', atMatch2);
+  if (atMatch2 && atMatch2[1]) {
+    console.log('[SEARCH DEBUG] Pattern 5b captured:', atMatch2[1]);
+    const company = cleanCompanyName(atMatch2[1]);
+    console.log('[SEARCH DEBUG] Pattern 5b cleaned company:', company);
     if (company) return company;
   }
   
@@ -1961,6 +2091,8 @@ function cleanCompanyName(rawCompany: string): string | null {
     }
     
     // Keep everything else (likely part of company name)
+    // Note: "solutions", "technologies", etc. are in COMPANY_SUFFIXES but they're also valid company name words
+    // So we keep them here - they'll be handled properly in matching
     console.log('[SEARCH DEBUG] cleanCompanyName - Keeping word:', word);
     filtered.push(word);
   }
@@ -1970,6 +2102,20 @@ function cleanCompanyName(rawCompany: string): string | null {
   
   const result = filtered.join(" ").trim();
   console.log('[SEARCH DEBUG] cleanCompanyName - Final result:', result);
+  
+  // Final validation: make sure we have at least one meaningful word (not just suffixes)
+  const meaningfulWords = filtered.filter(w => {
+    const wLower = w.toLowerCase();
+    // Count as meaningful if it's not just a company suffix
+    // But allow suffixes as part of the name (e.g., "Tech Solutions Inc" is valid)
+    return w.length >= 2;
+  });
+  
+  if (meaningfulWords.length === 0) {
+    console.log('[SEARCH DEBUG] cleanCompanyName - No meaningful words, returning null');
+    return null;
+  }
+  
   return result || null;
 }
 
@@ -2025,6 +2171,16 @@ export function parseSearchQuery(query: string): ParsedQuery {
   // Special case: If still no company was found and query contains "at [words]", try direct extraction
   // This handles queries like "who do I know at quantum solutions?" where the question structure
   // might prevent normal extraction
+  // Also try extracting from the full query text, not just remaining words
+  if (entities.companies.length === 0) {
+    // Try extracting from the full normalized query
+    const fullQueryCompany = extractCompanyFromQuestionPatterns(normalized);
+    if (fullQueryCompany && !entities.companies.includes(fullQueryCompany)) {
+      entities.companies.unshift(fullQueryCompany);
+    }
+  }
+  
+  // Final fallback: If still no company found, try one more time with the original query
   if (entities.companies.length === 0) {
     // Look for "at" in the full normalized query (not just remainingWords)
     const allWords = normalized.split(" ").filter(Boolean);
@@ -2204,14 +2360,29 @@ export function parseSearchQuery(query: string): ParsedQuery {
   // Extract negated entities
   const negatedEntities = extractNegations(remainingWords);
   
-  // Extract keywords (with query expansion)
+  // Extract keywords (NO synonym expansion - only use for text search)
+  // Synonym expansion should only be used for entity extraction, not keyword matching
   const rawKeywords = extractKeywords(remainingWords);
+  
+  // Filter out keywords that are already extracted as entities
+  // This prevents duplicate matching and over-filtering
   const keywords: string[] = [];
   for (const keyword of rawKeywords) {
-    // Expand synonyms
-    const expanded = expandQueryTerms(keyword);
-    keywords.push(...expanded);
+    const keywordLower = keyword.toLowerCase();
+    
+    // Skip if already extracted as an entity
+    const isEntity = 
+      entities.names.some(n => n.toLowerCase().includes(keywordLower) || keywordLower.includes(n.toLowerCase())) ||
+      entities.companies.some(c => c.toLowerCase().includes(keywordLower) || keywordLower.includes(c.toLowerCase())) ||
+      entities.roles.some(r => r.toLowerCase().includes(keywordLower) || keywordLower.includes(r.toLowerCase())) ||
+      entities.departments.some(d => d.toLowerCase().includes(keywordLower) || keywordLower.includes(d.toLowerCase())) ||
+      entities.locations.some(l => l.toLowerCase().includes(keywordLower) || keywordLower.includes(l.toLowerCase()));
+    
+    if (!isEntity) {
+      keywords.push(keyword);
+    }
   }
+  
   // Remove duplicates and keep original order
   const uniqueKeywords = Array.from(new Set(keywords));
   
@@ -2309,14 +2480,9 @@ export function parseSearchQuery(query: string): ParsedQuery {
   }
   
   // Build search terms (unique, meaningful terms for text search)
-  const searchTerms = [...new Set([
-    ...uniqueKeywords,
-    ...entities.names.map(n => n.toLowerCase()),
-    ...entities.roles,
-    ...entities.departments,
-    // Don't include companies, locations, relationships in general search terms
-    // They're handled as filters
-  ])].filter(t => t.length >= 2);
+  // Only include keywords - entities are handled as filters, not search terms
+  // This prevents over-filtering when entities are already extracted
+  const searchTerms = uniqueKeywords.filter(t => t.length >= 2);
   
   const parsed: Omit<ParsedQuery, "interpretation"> = {
     intent,

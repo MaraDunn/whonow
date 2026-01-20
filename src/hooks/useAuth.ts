@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { IS_WAITLIST_MODE } from "@/utils/launchMode";
+import { IS_WAITLIST_MODE_EFFECTIVE } from "@/utils/launchMode";
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -29,8 +29,8 @@ export const useAuth = () => {
   }, []);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
-    // Block sign-ups in waitlist mode
-    if (IS_WAITLIST_MODE) {
+    // Block sign-ups in waitlist mode (unless in dev mode)
+    if (IS_WAITLIST_MODE_EFFECTIVE) {
       return {
         error: {
           message: "Sign-ups are currently disabled. Join our waitlist instead.",
@@ -54,8 +54,8 @@ export const useAuth = () => {
   };
 
   const signIn = async (email: string, password: string) => {
-    // Block sign-ins in waitlist mode
-    if (IS_WAITLIST_MODE) {
+    // Block sign-ins in waitlist mode (unless in dev mode)
+    if (IS_WAITLIST_MODE_EFFECTIVE) {
       return {
         error: {
           message: "Sign-ins are currently disabled. Join our waitlist instead.",

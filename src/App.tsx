@@ -7,7 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { ThemeProvider } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandingTheme } from "@/components/BrandingTheme";
-import { IS_WAITLIST_MODE, isDesktopOrNativeApp } from "@/utils/launchMode";
+import { IS_WAITLIST_MODE_EFFECTIVE, isDesktopOrNativeApp } from "@/utils/launchMode";
 import Index from "./pages/Index";
 import Landing from "./pages/Landing";
 import Waitlist from "./pages/Waitlist";
@@ -43,10 +43,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 // Waitlist mode route guard - redirects non-public routes to home
+// Respects development mode (bypasses restrictions in dev)
 const WaitlistRouteGuard = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   
-  if (IS_WAITLIST_MODE) {
+  if (IS_WAITLIST_MODE_EFFECTIVE) {
     // Public routes allowed in waitlist mode
     const publicRoutes = ["/", "/waitlist", "/privacy", "/terms"];
     const isPublicRoute = publicRoutes.includes(location.pathname);
@@ -81,7 +82,7 @@ const DesktopAppRootRedirect = () => {
   }, []);
   
   // In desktop/native apps, redirect root path to /app
-  if (isNative && !IS_WAITLIST_MODE) {
+  if (isNative && !IS_WAITLIST_MODE_EFFECTIVE) {
     console.log('[DesktopAppRootRedirect] Redirecting to /app');
     return <Navigate to="/app" replace />;
   }
@@ -97,7 +98,7 @@ const AppRoutes = () => {
       <BrandingTheme />
       <WaitlistRouteGuard>
         <Routes>
-          {IS_WAITLIST_MODE ? (
+          {IS_WAITLIST_MODE_EFFECTIVE ? (
             <>
               <Route path="/" element={<Waitlist />} />
               <Route path="/waitlist" element={<Waitlist />} />
