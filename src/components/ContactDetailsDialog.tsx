@@ -143,10 +143,13 @@ export function ContactDetailsDialog({
   const [keywordsOpen, setKeywordsOpen] = useState(false);
   const [addressOpen, setAddressOpen] = useState(false);
 
-  // Check Slack connection status when dialog opens
+  // Check Slack connection status when dialog opens (non-blocking)
   useEffect(() => {
     if (open) {
-      slack.getStatus();
+      // Don't await - let it run in background without blocking UI
+      slack.getStatus().catch(() => {
+        // Silently handle errors - status check shouldn't block dialog
+      });
       setIsEditing(false);
       if (contact) {
         initializeForm(contact);
@@ -195,9 +198,10 @@ export function ContactDetailsDialog({
     setEditedContact(contactData);
   };
 
-  // Business lookup effect
+  // Business lookup effect - only run in edit mode and with debounce
   useEffect(() => {
-    if (businessName) return;
+    // Only run business lookup in edit mode and when not already set
+    if (!isEditing || businessName) return;
     
     const hasAddress = address.trim() || city.trim() || state.trim() || zipCode.trim();
     const hasCoordinates = latitude !== undefined && longitude !== undefined;
@@ -208,6 +212,7 @@ export function ContactDetailsDialog({
       return;
     }
     
+    // Increased debounce time to avoid unnecessary lookups while user is typing
     const timeoutId = setTimeout(async () => {
       setIsLookingUpBusiness(true);
       try {
@@ -242,10 +247,10 @@ export function ContactDetailsDialog({
       } finally {
         setIsLookingUpBusiness(false);
       }
-    }, 1000);
+    }, 2000); // Increased to 2s debounce - only lookup after user stops typing
     
     return () => clearTimeout(timeoutId);
-  }, [address, city, state, zipCode, country, latitude, longitude, businessName]);
+  }, [address, city, state, zipCode, country, latitude, longitude, businessName, isEditing]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -189,9 +189,16 @@ export const useContacts = () => {
 
       if (error) throw error;
       // Filter out contacts with "my-profile" tag (profile contact cards)
-      return (data as DbContact[])
-        .map(mapDbToContact)
-        .filter((contact) => !contact.tags?.includes("my-profile"));
+      // Optimize: filter during map to avoid second pass
+      const contacts: ContactWithMeta[] = [];
+      for (const dbContact of data as DbContact[]) {
+        const contact = mapDbToContact(dbContact);
+        // Only add if not a profile contact
+        if (!contact.tags?.includes("my-profile")) {
+          contacts.push(contact);
+        }
+      }
+      return contacts;
     },
     enabled: !!user,
   });

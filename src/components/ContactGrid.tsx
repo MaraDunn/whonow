@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
 import { DraggableContactCard } from "./DraggableContactCard";
@@ -71,13 +71,33 @@ export function ContactGrid({
   // Track which contact is expanded in compact mode
   const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
 
-  // Create a map for quick folder lookup
-  const folderMap = new Map(folders.map(f => [f.id, f]));
+  // Memoize folder map for quick lookup - only recreate when folders change
+  const folderMap = useMemo(() => 
+    new Map(folders.map(f => [f.id, f])),
+    [folders]
+  );
 
-  const handleToggleExpand = (contactId: string) => {
+  const handleToggleExpand = useCallback((contactId: string) => {
     setExpandedContactId(prev => prev === contactId ? null : contactId);
-  };
+  }, []);
 
+  // Memoize grid classes - only recalculate when compact mode changes
+  // MUST be before early return to follow Rules of Hooks
+  const gridClasses = useMemo(() => 
+    isCompactMode
+      ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3"
+      : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6",
+    [isCompactMode]
+  );
+
+  // Memoize selection checks - only recalculate when contacts or selection changes
+  // MUST be before early return to follow Rules of Hooks
+  const allSelected = useMemo(() => 
+    contacts.length > 0 && contacts.every(c => selectedContactIds.has(c.id)),
+    [contacts, selectedContactIds]
+  );
+
+  // Early return AFTER all hooks
   if (contacts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
@@ -101,15 +121,6 @@ export function ContactGrid({
       </div>
     );
   }
-
-  // Responsive grid classes - only apply compact layout on mobile/tablet
-  const gridClasses = isCompactMode
-    ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3"
-    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6";
-
-  const allSelected = contacts.length > 0 && contacts.every(c => selectedContactIds.has(c.id));
-  const someSelected = contacts.some(c => selectedContactIds.has(c.id));
-  const selectedCount = selectedContactIds.size;
 
   return (
     <div>
@@ -148,6 +159,7 @@ export function ContactGrid({
             showOwnershipBadge={showOwnershipBadge}
             onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
             onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
+            hasClientAccess={hasClientAccess}
             compact={isCompactMode}
             isExpanded={expandedContactId === contact.id}
             onToggleExpand={() => handleToggleExpand(contact.id)}

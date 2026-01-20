@@ -1,11 +1,12 @@
 /**
  * Deterministic Contact Search Engine
- * Weighted full-text search with indexing - NO AI/LLM
+ * Weighted full-text search with indexing + semantic similarity
  */
 
 import { Contact } from "@/types/contact";
 import { ParsedQuery } from "./searchQueryParser";
 import { SearchQuery } from "@/types/searchQuery";
+import { getContactEmbedding, getContactEmbeddings } from "./contactEmbeddings";
 
 // Field weights for scoring
 const FIELD_WEIGHTS = {
@@ -33,6 +34,7 @@ interface ScoredContact {
   score: number;
   matchedFields: string[];
   matchedTerms: string[];
+  semanticScore?: number; // Optional semantic similarity score (0-1)
 }
 
 interface SearchIndex {
@@ -428,6 +430,159 @@ function scoreContact(
   }
   
   return result;
+}
+
+/**
+ * Compute cosine similarity between two embeddings
+ * Both embeddings should be normalized (which they are from the model)
+ */
+function cosineSimilarity(embedding1: number[], embedding2: number[]): number {
+  if (embedding1.length !== embedding2.length) {
+    return 0;
+  }
+
+  let dotProduct = 0;
+  for (let i = 0; i < embedding1.length; i++) {
+    dotProduct += embedding1[i] * embedding2[i];
+  }
+
+  // Since embeddings are normalized, cosine similarity is just the dot product
+  // Clamp to [0, 1] range (though it should already be in that range)
+  return Math.max(0, Math.min(1, dotProduct));
+}
+
+// Cache for query embedding model (shared instance)
+let queryEmbeddingModel: any = null;
+let queryModelLoading: Promise<any> | null = null;
+
+/**
+ * Load query embedding model (lazy, cached)
+ */
+async function loadQueryEmbeddingModel(): Promise<any> {
+  if (queryEmbeddingModel) return queryEmbeddingModel;
+  if (queryModelLoading) return queryModelLoading;
+
+  queryModelLoading = (async () => {
+    try {
+      const { pipeline } = await import("@xenova/transformers");
+      
+      queryEmbeddingModel = await pipeline(
+        "feature-extraction",
+        "Xenova/all-MiniLM-L6-v2",
+        {
+          quantized: true,
+        }
+      );
+
+      return queryEmbeddingModel;
+    } catch (error) {
+      console.warn("Failed to load query embedding model:", error);
+      return null;
+    } finally {
+      queryModelLoading = null;
+    }
+  })();
+
+  return queryModelLoading;
+}
+
+/**
+ * Generate query embedding from text
+ * Uses cached model and checks query embedding cache from semantic assist
+ */
+async function generateQueryEmbedding(queryText: string): Promise<number[] | null> {
+  try {
+    // Check cache from semantic assist browser adapter first
+    const { getCachedQueryEmbedding, cacheQueryEmbedding } = await import("@/utils/semanticAssist/browserCache");
+    const cached = await getCachedQueryEmbedding(queryText);
+    if (cached) {
+      return cached;
+    }
+
+    // Load model (cached)
+    const model = await loadQueryEmbeddingModel();
+    if (!model) return null;
+
+    const output = await model(queryText, {
+      pooling: "mean",
+      normalize: true,
+    });
+
+    // Convert tensor to number array
+    const embedding = Array.from(output.data) as number[];
+
+    // Cache the embedding
+    await cacheQueryEmbedding(queryText, embedding);
+
+    return embedding;
+  } catch (error) {
+    console.warn("Failed to generate query embedding:", error);
+    return null;
+  }
+}
+
+/**
+ * Compute semantic similarity score between query and contact
+ * Returns a score from 0 to 1 (1 = perfect match, 0 = no match)
+ */
+export async function semanticScore(
+  queryText: string,
+  contact: Contact
+): Promise<number> {
+  try {
+    // Generate or get query embedding
+    const queryEmbedding = await generateQueryEmbedding(queryText);
+    if (!queryEmbedding) {
+      return 0;
+    }
+
+    // Get contact embedding (with caching)
+    const contactEmbedding = await getContactEmbedding(contact);
+    if (!contactEmbedding) {
+      return 0;
+    }
+
+    // Compute cosine similarity
+    return cosineSimilarity(queryEmbedding, contactEmbedding);
+  } catch (error) {
+    console.warn("Failed to compute semantic score:", error);
+    return 0;
+  }
+}
+
+/**
+ * Batch compute semantic scores for multiple contacts
+ * More efficient than calling semanticScore individually
+ */
+export async function batchSemanticScores(
+  queryText: string,
+  contacts: Contact[]
+): Promise<Map<string, number>> {
+  const scores = new Map<string, number>();
+
+  try {
+    // Generate query embedding once
+    const queryEmbedding = await generateQueryEmbedding(queryText);
+    if (!queryEmbedding) {
+      return scores; // Return empty map if query embedding fails
+    }
+
+    // Get all contact embeddings in batch
+    const contactEmbeddings = await getContactEmbeddings(contacts);
+
+    // Compute similarities
+    for (const contact of contacts) {
+      const contactEmbedding = contactEmbeddings.get(contact.id);
+      if (contactEmbedding && Array.isArray(contactEmbedding)) {
+        const similarity = cosineSimilarity(queryEmbedding, contactEmbedding as number[]);
+        scores.set(contact.id, similarity);
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to compute batch semantic scores:", error);
+  }
+
+  return scores;
 }
 
 /**
@@ -1182,14 +1337,14 @@ export function quickSearch(contacts: Contact[], query: string): Contact[] {
 /**
  * Execute search using canonical SearchQuery schema
  * This is the new primary execution function
- * Uses semantic_hint only for ranking, never for filtering
+ * Uses hybrid scoring: keyword matching (60%) + semantic similarity (40%)
  */
-export function executeSearchQuery(
+export async function executeSearchQuery(
   contacts: Contact[],
   searchQuery: SearchQuery,
-  options: { maxResults?: number } = {}
-): Contact[] {
-  const { maxResults = MAX_RESULTS } = options;
+  options: { maxResults?: number; originalQuery?: string } = {}
+): Promise<Contact[]> {
+  const { maxResults = MAX_RESULTS, originalQuery } = options;
   const { filters, semantic_hint } = searchQuery;
 
   // Build search terms from filters and semantic hint
@@ -1210,177 +1365,130 @@ export function executeSearchQuery(
     searchTerms.push(...tokenize(semantic_hint));
   }
 
-  // Score contacts with deterministic filtering
-  const scored = contacts
-    .map(contact => {
-      // Apply deterministic filters first
+  // Get query text for semantic matching (use originalQuery if provided, otherwise semantic_hint)
+  const queryTextForSemantic = originalQuery || semantic_hint || "";
+
+  // Compute semantic scores in batch (if we have query text and enough contacts to benefit)
+  // Skip semantic scoring for very short queries or if we have too many contacts (performance)
+  // Use timeout to prevent blocking UI for too long
+  let semanticScores: Map<string, number> = new Map();
+  const shouldUseSemantic = queryTextForSemantic.trim() && 
+                            queryTextForSemantic.length >= 3 && // At least 3 characters
+                            contacts.length <= 500 && // Reduced limit for better performance
+                            contacts.length > 0; // Only if we have contacts
+  
+  if (shouldUseSemantic) {
+    try {
+      // Use Promise.race with reasonable timeout
+      // Don't block for too long, but allow enough time for embeddings to load from cache
+      const semanticPromise = batchSemanticScores(queryTextForSemantic, contacts);
+      const timeoutPromise = new Promise<Map<string, number>>((resolve) => {
+        setTimeout(() => resolve(new Map()), 1000); // 1s timeout - allow cached embeddings to load
+      });
       
-      // Filter by company
-      if (filters.company) {
-        const contactCompany = (contact.company || "").toLowerCase();
-        const searchCompany = filters.company.toLowerCase();
-        if (!companyMatches(contactCompany, searchCompany)) {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
-      }
+      semanticScores = await Promise.race([semanticPromise, timeoutPromise]);
+    } catch (error) {
+      console.warn("Semantic scoring failed, using keyword-only:", error);
+    }
+  }
 
-      // Filter by job_title
-      if (filters.job_title) {
-        const contactRole = (contact.role || "").toLowerCase();
-        const searchRole = filters.job_title.toLowerCase();
-        if (!roleMatches(contactRole, searchRole)) {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
-      }
+  // PERFORMANCE: Filter contacts FIRST, then score only filtered contacts
+  // This avoids processing all 1000+ contacts when we only need 10 results
+  let filteredContacts = contacts;
 
-      // Filter by name
-      if (filters.name) {
-        const contactName = (contact.name || "").toLowerCase();
-        const searchName = filters.name.toLowerCase();
-        if (!contactName.includes(searchName)) {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
-      }
+  // Apply deterministic filters first to reduce dataset before scoring
+  if (filters.company) {
+    const searchCompany = filters.company.toLowerCase();
+    filteredContacts = filteredContacts.filter(contact => {
+      const contactCompany = (contact.company || "").toLowerCase();
+      return companyMatches(contactCompany, searchCompany);
+    });
+  }
 
-      // Filter by location
-      if (filters.location) {
-        const contactLocation = [
-          contact.address || "",
-          contact.city || "",
-          contact.state || "",
-          contact.country || "",
-        ].join(" ").toLowerCase();
-        const searchLocation = filters.location.toLowerCase();
-        if (!contactLocation.includes(searchLocation)) {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
-      }
+  if (filters.job_title) {
+    const searchRole = filters.job_title.toLowerCase();
+    filteredContacts = filteredContacts.filter(contact => {
+      const contactRole = (contact.role || "").toLowerCase();
+      return roleMatches(contactRole, searchRole);
+    });
+  }
 
-      // Filter by relationship_type
-      if (filters.relationship_type) {
-        const isClient = contact.isClient || false;
-        const tags = (contact.tags || []).map(t => t.toLowerCase());
-        
-        let matches = false;
-        if (filters.relationship_type === "client" && isClient) {
-          matches = true;
-        } else if (filters.relationship_type === "vendor" && tags.includes("vendor")) {
-          matches = true;
-        } else if (filters.relationship_type === "met" && tags.some(t => t.includes("met") || t.includes("meet"))) {
-          matches = true;
-        } else if (filters.relationship_type === "worked_with" && tags.some(t => t.includes("work") || t.includes("colleague"))) {
-          matches = true;
-        }
+  if (filters.name) {
+    const searchName = filters.name.toLowerCase();
+    filteredContacts = filteredContacts.filter(contact => {
+      const contactName = (contact.name || "").toLowerCase();
+      return contactName.includes(searchName);
+    });
+  }
 
-        if (!matches) {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
-      }
+  if (filters.location) {
+    const searchLocation = filters.location.toLowerCase();
+    filteredContacts = filteredContacts.filter(contact => {
+      const contactLocation = [
+        contact.address || "",
+        contact.city || "",
+        contact.state || "",
+        contact.country || "",
+      ].join(" ").toLowerCase();
+      return contactLocation.includes(searchLocation);
+    });
+  }
 
-      // Filter by date_range
-      if (filters.date_range) {
-        const contactCreatedAt = contact.createdAt;
-        if (!contactCreatedAt || contactCreatedAt.trim() === '') {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
+  if (filters.relationship_type) {
+    filteredContacts = filteredContacts.filter(contact => {
+      const isClient = contact.isClient || false;
+      const tags = (contact.tags || []).map(t => t.toLowerCase());
+      
+      if (filters.relationship_type === "client" && isClient) return true;
+      if (filters.relationship_type === "vendor" && tags.includes("vendor")) return true;
+      if (filters.relationship_type === "met" && tags.some(t => t.includes("met") || t.includes("meet"))) return true;
+      if (filters.relationship_type === "worked_with" && tags.some(t => t.includes("work") || t.includes("colleague"))) return true;
+      return false;
+    });
+  }
 
-        const createdAt = new Date(contactCreatedAt);
-        if (isNaN(createdAt.getTime())) {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
+  if (filters.date_range) {
+    const fromTime = new Date(filters.date_range.from).getTime();
+    const toTime = new Date(filters.date_range.to).getTime();
+    filteredContacts = filteredContacts.filter(contact => {
+      const contactCreatedAt = contact.createdAt;
+      if (!contactCreatedAt || contactCreatedAt.trim() === '') return false;
+      const createdAt = new Date(contactCreatedAt);
+      if (isNaN(createdAt.getTime())) return false;
+      const createdAtTime = createdAt.getTime();
+      return createdAtTime >= fromTime && createdAtTime <= toTime;
+    });
+  }
 
-        const fromDate = new Date(filters.date_range.from);
-        const toDate = new Date(filters.date_range.to);
-        const createdAtTime = createdAt.getTime();
-        const fromTime = fromDate.getTime();
-        const toTime = toDate.getTime();
+  if (filters.tags && filters.tags.length > 0) {
+    const searchTags = filters.tags.map(t => t.toLowerCase());
+    filteredContacts = filteredContacts.filter(contact => {
+      const contactTags = (contact.tags || []).map(t => t.toLowerCase());
+      return searchTags.some(tag => contactTags.includes(tag));
+    });
+  }
 
-        if (createdAtTime < fromTime || createdAtTime > toTime) {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
-      }
-
-      // Filter by tags
-      if (filters.tags && filters.tags.length > 0) {
-        const contactTags = (contact.tags || []).map(t => t.toLowerCase());
-        const searchTags = filters.tags.map(t => t.toLowerCase());
-        const hasMatchingTag = searchTags.some(tag => contactTags.includes(tag));
-        
-        if (!hasMatchingTag) {
-          return {
-            contact,
-            score: 0,
-            matchedFields: [],
-            matchedTerms: [],
-          };
-        }
-      }
-
-      // Score against search terms (including semantic_hint for ranking)
+  // Now score only the filtered contacts (much smaller set)
+  const scored = filteredContacts
+    .map(contact => {
+      // Score against search terms (keyword matching)
       const result = scoreContact(contact, searchTerms);
+      const keywordScore = result.score;
 
-      // Boost score if semantic_hint matches (for ranking only)
-      if (semantic_hint && result.score > 0) {
-        const hintTerms = tokenize(semantic_hint);
-        const contactText = [
-          contact.name || "",
-          contact.description || "",
-          contact.company || "",
-          contact.role || "",
-        ].join(" ").toLowerCase();
+      // Get semantic score (0-1)
+      const semanticScoreValue = semanticScores.get(contact.id) || 0;
+      result.semanticScore = semanticScoreValue;
 
-        let hintMatches = 0;
-        for (const term of hintTerms) {
-          if (contactText.includes(term)) {
-            hintMatches++;
-          }
-        }
+      // Hybrid scoring: 60% keyword + 40% semantic
+      // Normalize semantic score to keyword score range
+      const SEMANTIC_SCORE_SCALE = 20; // Max semantic contribution
+      const normalizedSemanticScore = semanticScoreValue * SEMANTIC_SCORE_SCALE;
 
-        if (hintMatches > 0) {
-          // Boost score based on semantic hint matches
-          result.score += hintMatches * 2;
-        }
-      }
+      // Combine scores: 60% keyword, 40% semantic
+      const KEYWORD_WEIGHT = 0.6;
+      const SEMANTIC_WEIGHT = 0.4;
+      
+      result.score = (keywordScore * KEYWORD_WEIGHT) + (normalizedSemanticScore * SEMANTIC_WEIGHT);
 
       // Give base score if filters matched but no search terms
       if (searchTerms.length === 0 && result.score === 0) {

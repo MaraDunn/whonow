@@ -145,10 +145,17 @@ const IndexContent = () => {
   }, [contacts, trashedContacts, selectedFolderId, showTrash, ownershipFilter, company]);
 
   // Use accurate counts from database functions (fallback to array length if not available)
-  const fallbackPersonalCount = useMemo(() => 
-    contacts.filter(c => !c.isShared).length, [contacts]);
-  const fallbackSharedCount = useMemo(() => 
-    contacts.filter(c => c.isShared).length, [contacts]);
+  // Only compute fallback if needed (when accurate count is 0 or unavailable)
+  const fallbackPersonalCount = useMemo(() => {
+    if (accuratePersonalCount > 0) return 0; // Don't compute if we have accurate count
+    return contacts.filter(c => !c.isShared).length;
+  }, [contacts, accuratePersonalCount]);
+  
+  const fallbackSharedCount = useMemo(() => {
+    if (accurateSharedCount > 0) return 0; // Don't compute if we have accurate count
+    return contacts.filter(c => c.isShared).length;
+  }, [contacts, accurateSharedCount]);
+  
   const personalContactsCount = accuratePersonalCount > 0 ? accuratePersonalCount : fallbackPersonalCount;
   const sharedContactsCount = accurateSharedCount > 0 ? accurateSharedCount : fallbackSharedCount;
 
@@ -182,7 +189,11 @@ const IndexContent = () => {
   }, [contacts, clientSortOption]);
 
   // Count of clients for sidebar - use accurate count from database function
-  const fallbackClientCount = useMemo(() => contacts.filter(c => c.isClient).length, [contacts]);
+  // Only compute fallback if needed
+  const fallbackClientCount = useMemo(() => {
+    if (accurateClientCount > 0) return 0; // Don't compute if we have accurate count
+    return contacts.filter(c => c.isClient).length;
+  }, [contacts, accurateClientCount]);
   const clientCount = accurateClientCount > 0 ? accurateClientCount : fallbackClientCount;
 
   // Filtered team contacts: filter by selectedTeamFolderId when a team folder is selected
@@ -230,7 +241,8 @@ const IndexContent = () => {
   };
 
   // Selection handlers (defined after filteredContacts)
-  const handleSelectContact = (id: string, selected: boolean) => {
+  // Memoize selection handler to avoid creating new function on every render
+  const handleSelectContact = useCallback((id: string, selected: boolean) => {
     setSelectedContactIds(prev => {
       const next = new Set(prev);
       if (selected) {
@@ -240,7 +252,7 @@ const IndexContent = () => {
       }
       return next;
     });
-  };
+  }, []);
 
   const handleSelectAll = async (selected: boolean) => {
     if (selected) {
@@ -433,16 +445,40 @@ const IndexContent = () => {
     }
   };
 
-  // Calculate contact count per folder
+  // Calculate contact count per folder - memoized to avoid recalculating on every render
+  // This is used by FolderSidebar and only needs to update when contacts change
   const contactCountByFolder = useMemo(() => {
     const counts: Record<string, number> = {};
-    contacts.forEach(c => {
+    // Only iterate through contacts once
+    for (const c of contacts) {
       if (c.folderId) {
         counts[c.folderId] = (counts[c.folderId] || 0) + 1;
       }
-    });
+    }
     return counts;
   }, [contacts]);
+
+  // Memoize update folder handlers to avoid creating new functions on every render
+  // Create a contact lookup map for O(1) access instead of O(n) find()
+  const contactMap = useMemo(() => 
+    new Map(contacts.map(c => [c.id, c])),
+    [contacts]
+  );
+
+  const handleUpdateFolder = useCallback((contactId: string, folderId: string | null) => {
+    const contact = contactMap.get(contactId);
+    if (contact) {
+      updateContact({ ...contact, folderId: folderId || undefined });
+    }
+  }, [contactMap, updateContact]);
+
+  // For team directory - need to check both filteredContacts and filteredTeamContacts
+  const handleUpdateTeamFolder = useCallback((contactId: string, folderId: string | null) => {
+    const contact = (searchQuery ? filteredContacts : filteredTeamContacts).find(c => c.id === contactId);
+    if (contact) {
+      updateContact({ ...contact, folderId: folderId || undefined });
+    }
+  }, [searchQuery, filteredContacts, filteredTeamContacts, updateContact]);
 
   const handleSaveContact = (contactData: Omit<Contact, "id">) => {
     if (editingContact) {
@@ -803,12 +839,7 @@ const IndexContent = () => {
                     onViewContact={handleViewContact}
                     onDeleteContact={deleteContact}
                     folders={teamFolders}
-                    onUpdateFolder={(contactId, folderId) => {
-                      const contact = (searchQuery ? filteredContacts : filteredTeamContacts).find(c => c.id === contactId);
-                      if (contact) {
-                        updateContact({ ...contact, folderId: folderId || undefined });
-                      }
-                    }}
+                    onUpdateFolder={handleUpdateTeamFolder}
                     showOwnershipBadge={!!company}
                     onMarkContacted={updateLastContacted}
                     selectedContactIds={selectedContactIds}
@@ -856,12 +887,7 @@ const IndexContent = () => {
                     onPermanentlyDelete={permanentlyDeleteContact}
                     onEmptyTrash={emptyTrash}
                     folders={folders}
-                    onUpdateFolder={(contactId, folderId) => {
-                      const contact = contacts.find(c => c.id === contactId);
-                      if (contact) {
-                        updateContact({ ...contact, folderId: folderId || undefined });
-                      }
-                    }}
+                    onUpdateFolder={handleUpdateFolder}
                     showOwnershipBadge={!!company}
                     onMarkContacted={updateLastContacted}
                     onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
@@ -891,12 +917,7 @@ const IndexContent = () => {
                   onPermanentlyDelete={permanentlyDeleteContact}
                   onEmptyTrash={emptyTrash}
                   folders={folders}
-                  onUpdateFolder={(contactId, folderId) => {
-                    const contact = contacts.find(c => c.id === contactId);
-                    if (contact) {
-                      updateContact({ ...contact, folderId: folderId || undefined });
-                    }
-                  }}
+                  onUpdateFolder={handleUpdateFolder}
                   showOwnershipBadge={!!company}
                   onMarkContacted={updateLastContacted}
                   onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}

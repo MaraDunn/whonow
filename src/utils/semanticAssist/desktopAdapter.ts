@@ -17,19 +17,24 @@ async function checkOllamaAvailable(): Promise<boolean> {
   if (ollamaCheckPromise) return ollamaCheckPromise;
 
   ollamaCheckPromise = (async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 200); // 200ms timeout for faster failure
+    
     try {
       // Check if Ollama is running locally
       const response = await fetch("http://localhost:11434/api/tags", {
         method: "GET",
-        signal: AbortSignal.timeout(1000), // 1 second timeout
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       if (response.ok) {
         ollamaAvailable = true;
         return true;
       }
     } catch (error) {
-      // Ollama not available or not running
+      // Ollama not available or not running - fail fast
+      clearTimeout(timeoutId);
       ollamaAvailable = false;
       return false;
     } finally {
@@ -57,18 +62,30 @@ async function callLocalLLM(
     }
 
     // Prepare prompt with strict JSON schema requirement
-    const prompt = `You are a search query parser. Parse the following natural language query into a structured search query.
+    const prompt = `You are an intelligent search query parser for a contact management system. Your goal is to understand user intent and extract structured information from natural language queries.
 
 Original query: "${query}"
 
-Deterministic parse result:
+Deterministic parse result (rule-based):
 ${JSON.stringify(deterministicQuery, null, 2)}
 
 Your task:
-1. Refine the query understanding if needed
-2. Fill in missing fields ONLY if you're confident
-3. NEVER override fields that are already set in the deterministic parse
-4. Return ONLY valid JSON matching this exact schema:
+1. Understand the user's intent - what are they really looking for?
+2. Refine the query understanding by filling in missing fields ONLY if you're highly confident
+3. NEVER override fields that are already set in the deterministic parse - those are reliable
+4. Generate a clear, human-readable explanation that shows you understood the query
+5. Set confidence based on how certain you are (0.0 = uncertain, 1.0 = very certain)
+
+Query understanding guidelines:
+- "marketing person" or "someone in marketing" → job_title: "marketing"
+- "who did I meet last week?" → date_range with last week's dates
+- "find contacts at Acme Corp" → company: "Acme Corp"
+- "someone who can help with accounting" → job_title: "accounting" or tags: ["accounting"]
+- "people I haven't talked to in a while" → relationship_type: "met" (implies need for follow-up)
+- "engineers" or "devs" → job_title: "engineer" or "developer"
+- "SF" or "San Francisco" → location: "San Francisco"
+
+Return ONLY valid JSON matching this exact schema:
 {
   "intent": "search_contacts" | "list_recent" | "relationship_lookup",
   "filters": {
@@ -81,12 +98,12 @@ Your task:
     "location": string (optional),
     "tags": string[] (optional)
   },
-  "semantic_hint": string (optional, for ranking only),
-  "confidence": number (0.0-1.0),
-  "explanation": string
+  "semantic_hint": string (optional, original query or refined version for ranking),
+  "confidence": number (0.0-1.0, be conservative - only high confidence if very certain),
+  "explanation": string (human-readable explanation like "Searching for marketing contacts" or "Finding people at Acme Corp")
 }
 
-Return ONLY the JSON object, no other text.`;
+Important: Return ONLY the JSON object, no markdown, no code blocks, no other text.`;
 
     // Call Ollama API
     const response = await fetch("http://localhost:11434/api/generate", {

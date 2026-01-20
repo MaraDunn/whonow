@@ -19,6 +19,7 @@ export interface DraggableContactCardProps {
   showOwnershipBadge?: boolean;
   onMarkContacted?: () => void;
   onToggleClient?: (isClient: boolean) => void;
+  hasClientAccess?: boolean;
   // Mobile/Tablet compact mode props
   compact?: boolean;
   isExpanded?: boolean;
@@ -45,6 +46,7 @@ export function DraggableContactCard({
   showOwnershipBadge = false,
   onMarkContacted,
   onToggleClient,
+  hasClientAccess = false,
   compact = false,
   isExpanded = false,
   onToggleExpand,
@@ -69,6 +71,7 @@ export function DraggableContactCard({
       showOwnershipBadge={showOwnershipBadge}
       onMarkContacted={onMarkContacted}
       onToggleClient={onToggleClient}
+      hasClientAccess={hasClientAccess}
       compact={compact}
       isExpanded={isExpanded}
       onToggleExpand={onToggleExpand}

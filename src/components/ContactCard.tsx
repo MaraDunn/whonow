@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useSubscription } from "@/hooks/useSubscription";
 import { LockedFeatureButton, dialogJustClosed } from "@/components/LockedFeatureButton";
 import {
   Popover,
@@ -42,6 +41,7 @@ interface ContactCardProps {
   showOwnershipBadge?: boolean;
   onMarkContacted?: () => void;
   onToggleClient?: (isClient: boolean) => void;
+  hasClientAccess?: boolean; // Pass from parent to avoid calling useSubscription in every card
   // Mobile/Tablet compact mode props
   compact?: boolean;
   isExpanded?: boolean;
@@ -52,7 +52,7 @@ interface ContactCardProps {
   selectionMode?: boolean;
 }
 
-export function ContactCard({ 
+const ContactCardComponent = function ContactCard({ 
   contact, 
   index, 
   action, 
@@ -68,6 +68,7 @@ export function ContactCard({
   showOwnershipBadge = false,
   onMarkContacted,
   onToggleClient,
+  hasClientAccess = false,
   compact = false,
   isExpanded = false,
   onToggleExpand,
@@ -75,30 +76,42 @@ export function ContactCard({
   onSelect,
   selectionMode = false,
 }: ContactCardProps) {
-  const { canAccessFeature } = useSubscription();
-  const hasClientAccess = canAccessFeature("client_management");
   const [folderPopoverOpen, setFolderPopoverOpen] = React.useState(false);
 
-  const handleFolderChange = (newFolderId: string | null) => {
+  // Memoize folder map for quick lookup
+  const folderMap = React.useMemo(() => 
+    new Map(folders.map(f => [f.id, f])),
+    [folders]
+  );
+
+  const handleFolderChange = React.useCallback((newFolderId: string | null) => {
     if (onUpdateFolder) {
       onUpdateFolder(contact.id, newFolderId);
       const folderName = newFolderId 
-        ? folders.find(f => f.id === newFolderId)?.name || "folder"
+        ? folderMap.get(newFolderId)?.name || "folder"
         : "No folder";
       toast.success(`Moved to ${folderName}`);
       setFolderPopoverOpen(false);
     }
-  };
+  }, [onUpdateFolder, contact.id, folderMap]);
   
-  const initials = contact.name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
+  // Memoize initials calculation
+  const initials = React.useMemo(() => 
+    contact.name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase(),
+    [contact.name]
+  );
 
-  const lastContactedText = formatLastContacted(contact.lastContactedAt);
+  // Memoize last contacted text
+  const lastContactedText = React.useMemo(() => 
+    formatLastContacted(contact.lastContactedAt),
+    [contact.lastContactedAt]
+  );
 
-  const handleAction = (type: ActionType) => {
+  const handleAction = React.useCallback((type: ActionType) => {
     if (!type) return;
     
     switch (type) {
@@ -112,7 +125,7 @@ export function ContactCard({
         window.location.href = `sms:${contact.phone}`;
         break;
     }
-  };
+  }, [contact.email, contact.phone]);
 
   const actionConfig = {
     email: { icon: Mail, label: "Email", color: "bg-primary hover:bg-primary/90" },
@@ -120,7 +133,7 @@ export function ContactCard({
     text: { icon: MessageSquare, label: "Text", color: "bg-blue-600 hover:bg-blue-700" },
   };
 
-  const handleCardClick = (e?: React.MouseEvent) => {
+  const handleCardClick = React.useCallback((e?: React.MouseEvent) => {
     if (isTrashView) return;
     
     // Prevent card click if dialog was just closed
@@ -148,7 +161,7 @@ export function ContactCard({
         onEdit();
       }
     }
-  };
+  }, [isTrashView, compact, onToggleExpand, onView, onEdit]);
 
   // Compact mode for mobile/tablet - collapsed state
   if (compact && !isExpanded) {
@@ -782,4 +795,36 @@ export function ContactCard({
       )}
     </div>
   );
-}
+};
+
+// Memoize ContactCard to prevent unnecessary re-renders when other contacts change
+// Only re-render when this specific contact's props change
+export const ContactCard = React.memo(ContactCardComponent, (prevProps, nextProps) => {
+  // Custom comparison - return true if props are equal (don't re-render)
+  // Return false if props differ (should re-render)
+  
+  // Quick reference check for contact object
+  if (prevProps.contact !== nextProps.contact) {
+    return false; // Contact changed, need to re-render
+  }
+  
+  // Check other props that should trigger re-render
+  if (
+    prevProps.index !== nextProps.index ||
+    prevProps.action !== nextProps.action ||
+    prevProps.isTrashView !== nextProps.isTrashView ||
+    prevProps.folder?.id !== nextProps.folder?.id ||
+    prevProps.folders !== nextProps.folders ||
+    prevProps.showOwnershipBadge !== nextProps.showOwnershipBadge ||
+    prevProps.hasClientAccess !== nextProps.hasClientAccess ||
+    prevProps.compact !== nextProps.compact ||
+    prevProps.isExpanded !== nextProps.isExpanded ||
+    prevProps.isSelected !== nextProps.isSelected ||
+    prevProps.selectionMode !== nextProps.selectionMode
+  ) {
+    return false; // Props changed, need to re-render
+  }
+  
+  // Props are equal, skip re-render
+  return true;
+});

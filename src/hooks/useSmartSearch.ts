@@ -107,41 +107,115 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
   }, [debouncedQuery, deterministicQuery]);
 
   // Step 3: Execute search with final query (deterministic or enhanced)
-  const filteredContacts = useMemo(() => {
-    if (!query.trim()) {
-      return contacts;
+  const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchAbortController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // Cancel previous search if still running
+    if (searchAbortController.current) {
+      searchAbortController.current.abort();
     }
 
-    // Use enhanced query if available, otherwise use deterministic
-    const finalQuery = enhancedQuery || deterministicQuery;
+    if (!query.trim()) {
+      setFilteredContacts(contacts);
+      setIsSearching(false);
+      return;
+    }
+
+    // Use deterministic query immediately - don't wait for enhanced query
+    // Enhanced query can update results later if it completes
+    const finalQuery = deterministicQuery;
     
     if (!finalQuery) {
-      return contacts.slice(0, MAX_RESULTS);
+      setFilteredContacts(contacts.slice(0, MAX_RESULTS));
+      setIsSearching(false);
+      return;
     }
 
-    // Execute search with SearchQuery
-    const results = executeSearchQuery(contacts, finalQuery, { maxResults: MAX_RESULTS });
+    // Create abort controller for this search
+    const abortController = new AbortController();
+    searchAbortController.current = abortController;
 
-    // Fallback: if no results and no filters, try basic search
-    if (results.length === 0) {
-      const hasFilters = !!(
-        finalQuery.filters.company ||
-        finalQuery.filters.job_title ||
-        finalQuery.filters.name ||
-        finalQuery.filters.location ||
-        finalQuery.filters.relationship_type ||
-        finalQuery.filters.date_range ||
-        (finalQuery.filters.tags && finalQuery.filters.tags.length > 0)
-      );
+    // Execute search immediately without waiting for enhanced query
+    setIsSearching(true);
+    
+    // Execute search query - remove timeout race as it was causing incomplete results
+    // Let the search complete properly, it should be fast enough for 1000+ contacts
+    executeSearchQuery(contacts, finalQuery, { 
+      maxResults: MAX_RESULTS,
+      originalQuery: query
+    })
+      .then((results) => {
+        if (abortController.signal.aborted) return;
+        
+        // Fallback: if no results and no filters, try basic search
+        if (results.length === 0) {
+          const hasFilters = !!(
+            finalQuery.filters.company ||
+            finalQuery.filters.job_title ||
+            finalQuery.filters.name ||
+            finalQuery.filters.location ||
+            finalQuery.filters.relationship_type ||
+            finalQuery.filters.date_range ||
+            (finalQuery.filters.tags && finalQuery.filters.tags.length > 0)
+          );
 
-      if (!hasFilters) {
+          if (!hasFilters) {
+            const fallbackTerms = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
+            const fallbackResults = searchContacts(contacts, fallbackTerms, { maxResults: MAX_RESULTS });
+            setFilteredContacts(fallbackResults);
+          } else {
+            setFilteredContacts(results);
+          }
+        } else {
+          setFilteredContacts(results);
+        }
+        setIsSearching(false);
+      })
+      .catch((error) => {
+        if (abortController.signal.aborted) return;
+        
+        console.warn("Search execution failed:", error);
+        // Fallback to basic search on error
         const fallbackTerms = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
-        return searchContacts(contacts, fallbackTerms, { maxResults: MAX_RESULTS });
-      }
+        const fallbackResults = searchContacts(contacts, fallbackTerms, { maxResults: MAX_RESULTS });
+        setFilteredContacts(fallbackResults);
+        setIsSearching(false);
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [contacts, query, deterministicQuery]);
+
+  // Separate effect to update results when enhanced query completes
+  useEffect(() => {
+    if (!enhancedQuery || !query.trim() || enhancedQuery === deterministicQuery) {
+      return;
     }
 
-    return results;
-  }, [contacts, query, deterministicQuery, enhancedQuery]);
+    // Update results with enhanced query scoring (better results)
+    const abortController = new AbortController();
+    
+    executeSearchQuery(contacts, enhancedQuery, { 
+      maxResults: MAX_RESULTS,
+      originalQuery: query
+    })
+      .then((enhancedResults) => {
+        if (abortController.signal.aborted) return;
+        if (enhancedResults.length > 0) {
+          setFilteredContacts(enhancedResults);
+        }
+      })
+      .catch(() => {
+        // Silently fail - we already have results from deterministic query
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [contacts, query, enhancedQuery, deterministicQuery]);
 
   // Build search term
   const searchTerm = useMemo(() => {
@@ -159,7 +233,7 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     contacts: filteredContacts,
     action: legacyParsed?.action || null,
     searchTerm,
-    isLoading: isEnhancing, // Show loading while semantic assist is running
+    isLoading: isEnhancing || isSearching, // Show loading while semantic assist or search is running
     aiIntent: deterministicQuery?.intent || null,
     interpretation: enhancedQuery?.explanation || deterministicQuery?.explanation || null,
   };
