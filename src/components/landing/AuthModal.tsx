@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { z } from "zod";
 import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -273,6 +273,20 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
                       </span>
                     )}
                   </Button>
+                  
+                  <p className="text-xs text-center text-muted-foreground mt-4">
+                    By signing in, you agree to our{" "}
+                    <Link 
+                      to="/privacy" 
+                      className="text-primary hover:underline" 
+                      onClick={() => {
+                        resetForm();
+                        onClose();
+                      }}
+                    >
+                      Privacy Policy
+                    </Link>
+                  </p>
                 </form>
               </TabsContent>
 
@@ -346,6 +360,20 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
                       </span>
                     )}
                   </Button>
+                  
+                  <p className="text-xs text-center text-muted-foreground mt-4">
+                    By creating an account, you agree to our{" "}
+                    <Link 
+                      to="/privacy" 
+                      className="text-primary hover:underline" 
+                      onClick={() => {
+                        resetForm();
+                        onClose();
+                      }}
+                    >
+                      Privacy Policy
+                    </Link>
+                  </p>
                 </form>
               </TabsContent>
             </Tabs>
