@@ -1,6 +1,7 @@
 import { LandingNav } from "@/components/landing/LandingNav";
 import { Footer } from "@/components/landing/Footer";
 import { useNavigate } from "react-router-dom";
+import { IS_WAITLIST_MODE_EFFECTIVE } from "@/utils/launchMode";
 
 const Terms = () => {
   const navigate = useNavigate();
@@ -8,8 +9,16 @@ const Terms = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <LandingNav
-        onSignIn={() => navigate("/", { state: { authModal: "signin" } })}
-        onGetStarted={() => navigate("/", { state: { authModal: "signup" } })}
+        onSignIn={() =>
+          IS_WAITLIST_MODE_EFFECTIVE
+            ? navigate("/#waitlist")
+            : navigate("/", { state: { authModal: "signin" } })
+        }
+        onGetStarted={() =>
+          IS_WAITLIST_MODE_EFFECTIVE
+            ? navigate("/#waitlist")
+            : navigate("/", { state: { authModal: "signup" } })
+        }
       />
 
       <main className="flex-1 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
