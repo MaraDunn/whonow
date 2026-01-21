@@ -37,7 +37,7 @@ export function WhoNowLogo({ size = "md", showText = true, className = "" }: Who
       />
       {showText && (
         <span className={`font-display font-bold ${textSizes[size]}`}>
-          <span className="text-white">{nameParts.first}</span>
+          <span className="text-foreground">{nameParts.first}</span>
           {nameParts.rest && <span className="text-gradient">{nameParts.rest}</span>}
         </span>
       )}
