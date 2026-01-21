@@ -153,8 +153,7 @@ const Privacy = () => {
             </p>
             <p className="text-muted-foreground mt-4">
               <strong>WhoNow</strong><br />
-              Email: privacy@whonow.com<br />
-              (Please update with your actual contact information)
+              Email: privacy@whonow.co
             </p>
           </section>
         </div>
