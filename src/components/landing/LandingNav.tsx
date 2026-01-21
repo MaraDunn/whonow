@@ -44,6 +44,10 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: "smooth" });
+    } else {
+      // If we're not on a page that contains the section, navigate to the
+      // landing page with a hash so it can scroll after render.
+      navigate(`/#${id}`);
     }
     setMobileMenuOpen(false);
   };

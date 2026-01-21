@@ -1,10 +1,16 @@
 import { LandingNav } from "@/components/landing/LandingNav";
 import { Footer } from "@/components/landing/Footer";
+import { useNavigate } from "react-router-dom";
 
 const Privacy = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <LandingNav onSignIn={() => {}} onGetStarted={() => {}} />
+      <LandingNav
+        onSignIn={() => navigate("/", { state: { authModal: "signin" } })}
+        onGetStarted={() => navigate("/", { state: { authModal: "signup" } })}
+      />
 
       <main className="flex-1 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="prose prose-slate dark:prose-invert max-w-none">
