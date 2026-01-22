@@ -48,11 +48,14 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({ title, open: isOpen, onOpenChange: setOpen, children }: CollapsibleSectionProps) {
   return (
     <Collapsible open={isOpen} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-        {title}
+      <CollapsibleTrigger className="flex items-center justify-between w-full py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+        <span className="flex items-center gap-1.5">
+          {!isOpen && <span>&gt;</span>}
+          {title}
+        </span>
         {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-3 pt-2">
+      <CollapsibleContent className="space-y-2 pt-1">
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -117,7 +120,7 @@ export function ContactFormDialog({
   const [detectedBusinessType, setDetectedBusinessType] = useState<string | undefined>(undefined);
   
   const [workOpen, setWorkOpen] = useState(false);
-  const [keywordsOpen, setKeywordsOpen] = useState(true); // Open by default to make keywords more visible
+  const [keywordsOpen, setKeywordsOpen] = useState(true); // Open by default - Keywords are most important
   const [addressOpen, setAddressOpen] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -184,7 +187,7 @@ export function ContactFormDialog({
     setDetectedBusinessType(undefined);
     setIsLookingUpBusiness(false);
     setWorkOpen(false);
-    setKeywordsOpen(true); // Keep keywords open by default
+    setKeywordsOpen(true); // Open by default - Keywords are most important
     setAddressOpen(false);
   };
 
@@ -483,9 +486,9 @@ export function ContactFormDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] w-[calc(100vw-2rem)] sm:w-full flex flex-col overflow-hidden">
-        <DialogHeader className="px-6 pt-6 pb-4">
-          <DialogTitle className="font-display text-xl">
+        <DialogContent className="sm:max-w-2xl w-[calc(100vw-2rem)] sm:w-full flex flex-col p-0 max-h-[calc(100vh-2rem)]">
+        <DialogHeader className="px-6 pt-4 pb-3 shrink-0">
+          <DialogTitle className="font-display text-lg">
             {getDialogTitle()}
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -493,276 +496,109 @@ export function ContactFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-6">
+        <div className="flex-1 overflow-x-hidden px-6">
           {/* Full Form Mode */}
           {(
-            <div className="space-y-4 pb-4">
+            <div className="space-y-3 pb-2">
               {/* Avatar and Essential Fields - Inline Layout */}
-              <div className="flex items-start gap-2">
-                {/* Avatar */}
-                <div 
-                  className="relative cursor-pointer group shrink-0"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Avatar className="h-16 w-16 border border-border">
-                    <AvatarImage src={avatar} alt={name || "Avatar"} />
-                    <AvatarFallback className="text-sm bg-muted">
-                      {name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {uploading ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Camera className="h-4 w-4 text-muted-foreground" />
-                    )}
+              <div className="flex items-start gap-3">
+                {/* Avatar with Shared contact below */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <div 
+                    className="relative cursor-pointer group"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Avatar className="h-16 w-16 border-2 border-border">
+                      <AvatarImage src={avatar} alt={name || "Avatar"} />
+                      <AvatarFallback className="text-sm bg-muted">
+                        {name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {uploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Camera className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
                   </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                    disabled={uploading}
+                  />
+                  
+                  {/* Shared contact toggle - Under avatar */}
+                  {hasCompany && (
+                    <div className="space-y-1">
+                      <Label htmlFor="shared" className="text-xs font-medium">Shared contact?</Label>
+                      <div className="flex items-center">
+                        <Switch
+                          id="shared"
+                          checked={isShared}
+                          onCheckedChange={setIsShared}
+                          aria-label="Share with company"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileChange}
-                  disabled={uploading}
-                />
                 
                 {/* Essential Fields Grid */}
-                <div className="flex-1 grid grid-cols-2 gap-1.5 min-w-0">
-                  {/* Name - Full width */}
-                  <div className="space-y-0.5 col-span-2">
-                    <Label htmlFor="name" className="text-[10px] leading-tight">Name *</Label>
+                <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
+                  {/* Name - Full width in first row */}
+                  <div className="space-y-1 col-span-2">
+                    <Label htmlFor="name" className="text-xs font-medium">Name *</Label>
                     <Input
                       id="name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="John Doe"
                       required
-                      className="h-6 text-xs py-0.5 px-2"
+                      className="h-9 text-sm"
                     />
                   </div>
                   
-                  {/* Phone */}
-                  <div className="space-y-0.5">
-                    <Label htmlFor="phone" className="text-[10px] leading-tight">Phone</Label>
+                  {/* Phone Number */}
+                  <div className="space-y-1">
+                    <Label htmlFor="phone" className="text-xs font-medium">Phone Number</Label>
                     <Input
                       id="phone"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="+1 (555) 000-0000"
-                      className="h-6 text-xs py-0.5 px-2"
+                      className="h-9 text-sm"
                     />
                   </div>
                   
                   {/* Email */}
-                  <div className="space-y-0.5">
-                    <Label htmlFor="email" className="text-[10px] leading-tight">Email</Label>
+                  <div className="space-y-1">
+                    <Label htmlFor="email" className="text-xs font-medium">Email</Label>
                     <Input
                       id="email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="john@example.com"
-                      className="h-6 text-xs py-0.5 px-2"
+                      className="h-9 text-sm"
                     />
                   </div>
                   
-                  {/* Company */}
-                  <div className="space-y-0.5">
-                    <Label htmlFor="company" className="text-[10px] leading-tight">Company</Label>
-                    <Input
-                      id="company"
-                      value={company}
-                      onChange={(e) => setCompany(e.target.value)}
-                      placeholder="Acme Inc"
-                      className="h-6 text-xs py-0.5 px-2"
-                    />
-                  </div>
-                  
-                  {/* Role */}
-                  <div className="space-y-0.5">
-                    <Label htmlFor="role" className="text-[10px] leading-tight">Role</Label>
-                    <Input
-                      id="role"
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      placeholder="Marketing Manager"
-                      className="h-6 text-xs py-0.5 px-2"
-                    />
-                  </div>
                 </div>
               </div>
-
-              {/* Description */}
-              <div className="space-y-0.5">
-                <Label htmlFor="description" className="text-[10px] leading-tight">Description</Label>
-                <Textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What do they handle?"
-                  rows={1}
-                  className="min-h-[1.75rem] resize-none text-xs py-1"
-                />
-              </div>
-
-              {/* Keywords - Made more visible and prominent */}
-              <CollapsibleSection 
-                title={
-                  <span className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-primary" />
-                    <span>Keywords</span>
-                    <span className="text-xs font-normal text-muted-foreground">(Quickest way to enrich contacts)</span>
-                  </span>
-                } 
-                open={keywordsOpen} 
-                onOpenChange={setKeywordsOpen}
-              >
-                <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-3">
-                  {/* Auto-generated keywords */}
-                  {autoTags.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-foreground">Suggested keywords:</span>
-                      <div className="flex flex-wrap gap-2">
-                        {autoTags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="outline"
-                            className="cursor-pointer border-dashed hover:bg-destructive/10"
-                            onClick={() => removeAutoTag(tag)}
-                          >
-                            {tag}
-                            <X className="h-3 w-3 ml-1.5" />
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Preset keywords */}
-                  {presetKeywords.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-foreground">Quick add:</span>
-                      <div className="flex flex-wrap gap-2">
-                        {presetKeywords.map((preset) => {
-                          const isSelected = tags.includes(preset);
-                          return (
-                            <Badge
-                              key={preset}
-                              variant={isSelected ? "default" : "outline"}
-                              className={`cursor-pointer transition-colors ${
-                                isSelected
-                                  ? "bg-primary text-primary-foreground"
-                                  : "hover:bg-accent hover:text-accent-foreground"
-                              }`}
-                              onClick={() => togglePresetTag(preset)}
-                            >
-                              {isSelected && <Check className="h-3 w-3 mr-1" />}
-                              {preset}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Recently used keywords */}
-                  {recentKeywords.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-foreground">Recently used:</span>
-                      <div className="flex flex-wrap gap-2">
-                        {recentKeywords
-                          .filter((keyword) => !presetKeywords.includes(keyword))
-                          .slice(0, 10)
-                          .map((keyword) => {
-                            const isSelected = tags.includes(keyword);
-                            return (
-                              <Badge
-                                key={keyword}
-                                variant={isSelected ? "default" : "outline"}
-                                className={`cursor-pointer transition-colors ${
-                                  isSelected
-                                    ? "bg-primary text-primary-foreground"
-                                    : "hover:bg-accent hover:text-accent-foreground border-muted-foreground/30"
-                                }`}
-                                onClick={() => togglePresetTag(keyword)}
-                              >
-                                {isSelected && <Check className="h-3 w-3 mr-1" />}
-                                {keyword}
-                              </Badge>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  )}
-                  
-                  <Input
-                    id="tags"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={handleAddTag}
-                    placeholder="Type custom keywords and press Enter..."
-                    className="bg-background"
-                  />
-                  
-                  {tags.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-foreground">Your keywords:</span>
-                      <div className="flex flex-wrap gap-2">
-                        {tags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="secondary"
-                            className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
-                            onClick={() => removeTag(tag)}
-                          >
-                            {tag}
-                            <X className="h-3 w-3 ml-1.5" />
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CollapsibleSection>
-
-              {/* Share with company toggle - only for org users */}
-              {hasCompany && (
-                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border">
-                  <div className="flex items-center gap-3">
-                    {isShared ? (
-                      <Building2 className="h-5 w-5 text-primary" />
-                    ) : (
-                      <UserCircle className="h-5 w-5 text-muted-foreground" />
-                    )}
-                    <div>
-                      <p className="text-sm font-medium">
-                        {isShared ? "Shared with company" : "Personal contact"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {isShared 
-                          ? "Everyone in your company can view this contact" 
-                          : "Only you can see this contact"}
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={isShared}
-                    onCheckedChange={setIsShared}
-                    aria-label="Share with company"
-                  />
-                </div>
-              )}
-
-              {/* Additional Info - Collapsible */}
-              <CollapsibleSection title="Additional Info" open={workOpen} onOpenChange={setWorkOpen}>
-                {/* Folder Selector */}
+              
+              {/* Folder, Company, Role - Third row, all aligned */}
+              <div className="grid grid-cols-3 gap-2">
+                {/* Folder */}
                 {folders.length > 0 && (
-                  <div className="space-y-2">
-                    <Label htmlFor="folder" className="text-sm font-medium">Folder</Label>
+                  <div className="space-y-1">
+                    <Label htmlFor="folder" className="text-xs font-medium">Folder</Label>
                     <Select value={folderId || "none"} onValueChange={(val) => setFolderId(val === "none" ? undefined : val)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a folder..." />
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">No folder</SelectItem>
@@ -778,38 +614,172 @@ export function ContactFormDialog({
                     </Select>
                   </div>
                 )}
-              </CollapsibleSection>
+                
+                {/* Company */}
+                <div className="space-y-1">
+                  <Label htmlFor="company" className="text-xs font-medium">Company</Label>
+                  <Input
+                    id="company"
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    placeholder="Acme Inc"
+                    className="h-9 text-sm"
+                  />
+                </div>
+                
+                {/* Role */}
+                <div className="space-y-1">
+                  <Label htmlFor="role" className="text-xs font-medium">Role</Label>
+                  <Input
+                    id="role"
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    placeholder="Marketing Manager"
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
 
-              {/* Address - Collapsible */}
-              <CollapsibleSection title="Address" open={addressOpen} onOpenChange={setAddressOpen}>
-                {/* Use Current Location Button */}
-                {navigator.geolocation && (
-                  <div className="mb-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleGetCurrentLocation}
-                      disabled={isGettingLocation}
-                      className="w-full"
-                    >
-                      {isGettingLocation ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Getting location...
-                        </>
-                      ) : (
-                        <>
-                          <Navigation className="h-4 w-4 mr-2" />
-                          Use Current Location
-                        </>
-                      )}
-                    </Button>
-                    <p className="text-xs text-muted-foreground mt-2 px-1">
-                      Your browser will ask for location permission. If denied, you can still enter the address manually.
-                    </p>
+              {/* Description - Full width */}
+              <div className="space-y-1">
+                <Label htmlFor="description" className="text-xs font-medium">Description</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="What do they handle?"
+                  rows={2}
+                  className="resize-none text-sm min-h-[2.5rem]"
+                />
+              </div>
+
+              {/* Keywords - Always visible, most important feature */}
+              <div className="space-y-1">
+                <Label htmlFor="tags" className="text-xs font-medium flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 text-primary" />
+                  Keywords
+                </Label>
+                <Textarea
+                  id="tags"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleAddTag}
+                  placeholder="Type keywords separated by commas or press Enter..."
+                  rows={2}
+                  className="resize-none text-sm min-h-[2.5rem]"
+                />
+                {/* Show existing tags as badges */}
+                {(tags.length > 0 || autoTags.length > 0) && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {autoTags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="outline"
+                        className="cursor-pointer border-dashed hover:bg-destructive/10 text-xs"
+                        onClick={() => removeAutoTag(tag)}
+                      >
+                        {tag}
+                        <X className="h-3 w-3 ml-1" />
+                      </Badge>
+                    ))}
+                    {tags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground text-xs"
+                        onClick={() => removeTag(tag)}
+                      >
+                        {tag}
+                        <X className="h-3 w-3 ml-1" />
+                      </Badge>
+                    ))}
                   </div>
                 )}
+                
+                {/* Preset keywords - shown inline */}
+                {presetKeywords.length > 0 && (
+                  <div className="pt-1">
+                    <span className="text-xs text-muted-foreground mb-1.5 block">Quick add:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {presetKeywords.map((preset) => {
+                        const isSelected = tags.includes(preset);
+                        return (
+                          <Badge
+                            key={preset}
+                            variant={isSelected ? "default" : "outline"}
+                            className={`cursor-pointer transition-colors text-xs ${
+                              isSelected
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-accent hover:text-accent-foreground"
+                            }`}
+                            onClick={() => togglePresetTag(preset)}
+                          >
+                            {isSelected && <Check className="h-3 w-3 mr-1" />}
+                            {preset}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Recently used keywords */}
+                {recentKeywords.length > 0 && (
+                  <div className="pt-1">
+                    <span className="text-xs text-muted-foreground mb-1.5 block">Recently used:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {recentKeywords
+                        .filter((keyword) => !presetKeywords.includes(keyword))
+                        .slice(0, 8)
+                        .map((keyword) => {
+                          const isSelected = tags.includes(keyword);
+                          return (
+                            <Badge
+                              key={keyword}
+                              variant={isSelected ? "default" : "outline"}
+                              className={`cursor-pointer transition-colors text-xs ${
+                                isSelected
+                                  ? "bg-primary text-primary-foreground"
+                                  : "hover:bg-accent hover:text-accent-foreground border-muted-foreground/30"
+                              }`}
+                              onClick={() => togglePresetTag(keyword)}
+                            >
+                              {isSelected && <Check className="h-3 w-3 mr-1" />}
+                              {keyword}
+                            </Badge>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Use Current Location Button - Full width, before Address section */}
+              {navigator.geolocation && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isGettingLocation}
+                  className="w-full h-9 text-sm"
+                >
+                  {isGettingLocation ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Getting location...
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="h-4 w-4 mr-2" />
+                      Use Current Location
+                    </>
+                  )}
+                </Button>
+              )}
+              
+              {/* Address - Collapsible, collapsed by default */}
+              <CollapsibleSection title={<>Address</>} open={addressOpen} onOpenChange={setAddressOpen}>
                 
                 <div className="space-y-2">
                   <Label htmlFor="address" className="text-sm font-medium">Street Address</Label>
@@ -984,11 +954,11 @@ export function ContactFormDialog({
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-border mt-4 shrink-0 px-6 pb-6">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
+        <form onSubmit={handleSubmit} className="flex flex-row justify-end gap-2 pt-3 border-t border-border mt-2 shrink-0 px-6 pb-4">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-auto">
             Cancel
           </Button>
-          <Button type="submit" className="gradient-hero text-primary-foreground w-full sm:w-auto">
+          <Button type="submit" className="gradient-hero text-primary-foreground w-auto">
             {isEditing ? "Save Changes" : "Add Contact"}
           </Button>
         </form>
