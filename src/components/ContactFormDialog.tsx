@@ -48,14 +48,14 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({ title, open: isOpen, onOpenChange: setOpen, children }: CollapsibleSectionProps) {
   return (
     <Collapsible open={isOpen} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-        <span className="flex items-center gap-1.5">
+      <CollapsibleTrigger className="flex items-center justify-between w-full py-3 sm:py-1.5 text-base sm:text-sm font-medium text-muted-foreground hover:text-foreground transition-colors touch-manipulation">
+        <span className="flex items-center gap-2 sm:gap-1.5">
           {!isOpen && <span>&gt;</span>}
           {title}
         </span>
-        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {isOpen ? <ChevronUp className="h-5 w-5 sm:h-4 sm:w-4" /> : <ChevronDown className="h-5 w-5 sm:h-4 sm:w-4" />}
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 pt-1">
+      <CollapsibleContent className="space-y-2 pt-2 sm:pt-1">
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -486,9 +486,9 @@ export function ContactFormDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-2xl w-[calc(100vw-2rem)] sm:w-full flex flex-col p-0 max-h-[calc(100vh-2rem)]">
-        <DialogHeader className="px-6 pt-4 pb-3 shrink-0">
-          <DialogTitle className="font-display text-lg">
+        <DialogContent className="sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[calc(100vh-2rem)] flex flex-col p-0 sm:rounded-lg rounded-none border-0 sm:border">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 shrink-0 border-b border-border">
+          <DialogTitle className="font-display text-xl sm:text-lg text-center sm:text-left">
             {getDialogTitle()}
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -496,291 +496,286 @@ export function ContactFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-x-hidden px-6">
-          {/* Full Form Mode */}
-          {(
-            <div className="space-y-3 pb-2">
-              {/* Avatar and Essential Fields - Inline Layout */}
-              <div className="flex items-start gap-3">
-                {/* Avatar with Shared contact below */}
-                <div className="flex flex-col gap-2 shrink-0">
-                  <div 
-                    className="relative cursor-pointer group"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Avatar className="h-16 w-16 border-2 border-border">
-                      <AvatarImage src={avatar} alt={name || "Avatar"} />
-                      <AvatarFallback className="text-sm bg-muted">
-                        {name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {uploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      ) : (
-                        <Camera className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </div>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileChange}
-                    disabled={uploading}
-                  />
-                  
-                  {/* Shared contact toggle - Under avatar */}
-                  {hasCompany && (
-                    <div className="space-y-1">
-                      <Label htmlFor="shared" className="text-xs font-medium">Shared contact?</Label>
-                      <div className="flex items-center">
-                        <Switch
-                          id="shared"
-                          checked={isShared}
-                          onCheckedChange={setIsShared}
-                          aria-label="Share with company"
-                        />
-                      </div>
-                    </div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 sm:py-6">
+          <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-4">
+            {/* Avatar - Centered on mobile, left-aligned on desktop */}
+            <div className="flex flex-col items-center sm:items-start gap-4">
+              <div 
+                className="relative cursor-pointer group"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Avatar className="h-20 w-20 sm:h-16 sm:w-16 border-2 border-border">
+                  <AvatarImage src={avatar} alt={name || "Avatar"} />
+                  <AvatarFallback className="text-base sm:text-sm bg-muted">
+                    {name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {uploading ? (
+                    <Loader2 className="h-5 w-5 sm:h-4 sm:w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Camera className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
                   )}
                 </div>
-                
-                {/* Essential Fields Grid */}
-                <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
-                  {/* Name - Full width in first row */}
-                  <div className="space-y-1 col-span-2">
-                    <Label htmlFor="name" className="text-xs font-medium">Name *</Label>
-                    <Input
-                      id="name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="John Doe"
-                      required
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                  
-                  {/* Phone Number */}
-                  <div className="space-y-1">
-                    <Label htmlFor="phone" className="text-xs font-medium">Phone Number</Label>
-                    <Input
-                      id="phone"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+1 (555) 000-0000"
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                  
-                  {/* Email */}
-                  <div className="space-y-1">
-                    <Label htmlFor="email" className="text-xs font-medium">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="john@example.com"
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                  
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+                disabled={uploading}
+              />
+              
+              {/* Shared contact toggle - Below avatar on mobile */}
+              {hasCompany && (
+                <div className="flex items-center gap-3 sm:gap-2">
+                  <Label htmlFor="shared" className="text-sm sm:text-xs font-medium">Shared contact?</Label>
+                  <Switch
+                    id="shared"
+                    checked={isShared}
+                    onCheckedChange={setIsShared}
+                    aria-label="Share with company"
+                  />
                 </div>
+              )}
+            </div>
+
+            {/* Essential Fields - Stacked on mobile, grid on desktop */}
+            <div className="space-y-4 sm:space-y-3">
+              {/* Name - Full width */}
+              <div className="space-y-2 sm:space-y-1.5">
+                <Label htmlFor="name" className="text-sm sm:text-xs font-medium">Name *</Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="John Doe"
+                  required
+                  className="h-11 sm:h-9 text-base sm:text-sm"
+                />
               </div>
               
-              {/* Folder, Company, Role - Third row, all aligned */}
-              <div className="grid grid-cols-3 gap-2">
-                {/* Folder */}
-                {folders.length > 0 && (
-                  <div className="space-y-1">
-                    <Label htmlFor="folder" className="text-xs font-medium">Folder</Label>
-                    <Select value={folderId || "none"} onValueChange={(val) => setFolderId(val === "none" ? undefined : val)}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No folder</SelectItem>
-                        {folders.map((folder) => (
-                          <SelectItem key={folder.id} value={folder.id}>
-                            <span className="flex items-center gap-2">
-                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: folder.color }} />
-                              {folder.name}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                
-                {/* Company */}
-                <div className="space-y-1">
-                  <Label htmlFor="company" className="text-xs font-medium">Company</Label>
+              {/* Phone and Email - Stacked on mobile, side-by-side on desktop */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
+                <div className="space-y-2 sm:space-y-1.5">
+                  <Label htmlFor="phone" className="text-sm sm:text-xs font-medium">Phone Number</Label>
                   <Input
-                    id="company"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    placeholder="Acme Inc"
-                    className="h-9 text-sm"
+                    id="phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+1 (555) 000-0000"
+                    className="h-11 sm:h-9 text-base sm:text-sm"
                   />
                 </div>
                 
-                {/* Role */}
-                <div className="space-y-1">
-                  <Label htmlFor="role" className="text-xs font-medium">Role</Label>
+                <div className="space-y-2 sm:space-y-1.5">
+                  <Label htmlFor="email" className="text-sm sm:text-xs font-medium">Email</Label>
                   <Input
-                    id="role"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    placeholder="Marketing Manager"
-                    className="h-9 text-sm"
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="john@example.com"
+                    className="h-11 sm:h-9 text-base sm:text-sm"
                   />
                 </div>
               </div>
+            </div>
 
-              {/* Description - Full width */}
-              <div className="space-y-1">
-                <Label htmlFor="description" className="text-xs font-medium">Description</Label>
-                <Textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What do they handle?"
-                  rows={2}
-                  className="resize-none text-sm min-h-[2.5rem]"
+            {/* Folder, Company, Role - Stacked on mobile, grid on desktop */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-3">
+              {/* Folder */}
+              {folders.length > 0 && (
+                <div className="space-y-2 sm:space-y-1.5">
+                  <Label htmlFor="folder" className="text-sm sm:text-xs font-medium">Folder</Label>
+                  <Select value={folderId || "none"} onValueChange={(val) => setFolderId(val === "none" ? undefined : val)}>
+                    <SelectTrigger className="h-11 sm:h-9 text-base sm:text-sm">
+                      <SelectValue placeholder="Select..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No folder</SelectItem>
+                      {folders.map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          <span className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: folder.color }} />
+                            {folder.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              <div className="space-y-2 sm:space-y-1.5">
+                <Label htmlFor="company" className="text-sm sm:text-xs font-medium">Company</Label>
+                <Input
+                  id="company"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="Acme Inc"
+                  className="h-11 sm:h-9 text-base sm:text-sm"
                 />
               </div>
-
-              {/* Keywords - Always visible, most important feature */}
-              <div className="space-y-1">
-                <Label htmlFor="tags" className="text-xs font-medium flex items-center gap-2">
-                  <Zap className="h-3.5 w-3.5 text-primary" />
-                  Keywords
-                </Label>
-                <Textarea
-                  id="tags"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleAddTag}
-                  placeholder="Type keywords separated by commas or press Enter..."
-                  rows={2}
-                  className="resize-none text-sm min-h-[2.5rem]"
+              
+              <div className="space-y-2 sm:space-y-1.5">
+                <Label htmlFor="role" className="text-sm sm:text-xs font-medium">Role</Label>
+                <Input
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="Marketing Manager"
+                  className="h-11 sm:h-9 text-base sm:text-sm"
                 />
-                {/* Show existing tags as badges */}
-                {(tags.length > 0 || autoTags.length > 0) && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {autoTags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="outline"
-                        className="cursor-pointer border-dashed hover:bg-destructive/10 text-xs"
-                        onClick={() => removeAutoTag(tag)}
-                      >
-                        {tag}
-                        <X className="h-3 w-3 ml-1" />
-                      </Badge>
-                    ))}
-                    {tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground text-xs"
-                        onClick={() => removeTag(tag)}
-                      >
-                        {tag}
-                        <X className="h-3 w-3 ml-1" />
-                      </Badge>
-                    ))}
+              </div>
+            </div>
+
+            {/* Description - Full width */}
+            <div className="space-y-2 sm:space-y-1.5">
+              <Label htmlFor="description" className="text-sm sm:text-xs font-medium">Description</Label>
+              <Textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Notes about this contact..."
+                rows={3}
+                className="resize-none text-base sm:text-sm min-h-[4rem] sm:min-h-[2.5rem]"
+              />
+            </div>
+
+            {/* Keywords - Prominently featured with enhanced mobile styling */}
+            <div className="space-y-3 sm:space-y-2 p-4 sm:p-3 rounded-lg bg-primary/5 border border-primary/20">
+              <Label htmlFor="tags" className="text-base sm:text-sm font-semibold flex items-center gap-2 text-foreground">
+                <Zap className="h-5 w-5 sm:h-4 sm:w-4 text-primary" />
+                Keywords
+                <span className="text-xs sm:text-[10px] font-normal text-muted-foreground ml-1">
+                  (Easiest way to enrich your contact)
+                </span>
+              </Label>
+              <Textarea
+                id="tags"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleAddTag}
+                placeholder="Type keywords separated by commas or press Enter..."
+                rows={3}
+                className="resize-none text-base sm:text-sm min-h-[4rem] sm:min-h-[2.5rem] bg-background"
+              />
+              
+              {/* Show existing tags as badges */}
+              {(tags.length > 0 || autoTags.length > 0) && (
+                <div className="flex flex-wrap gap-2 sm:gap-1.5 pt-2">
+                  {autoTags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="outline"
+                      className="cursor-pointer border-dashed hover:bg-destructive/10 text-sm sm:text-xs py-1.5 sm:py-0.5 px-2.5 sm:px-2"
+                      onClick={() => removeAutoTag(tag)}
+                    >
+                      {tag}
+                      <X className="h-4 w-4 sm:h-3 sm:w-3 ml-1.5 sm:ml-1" />
+                    </Badge>
+                  ))}
+                  {tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground text-sm sm:text-xs py-1.5 sm:py-0.5 px-2.5 sm:px-2"
+                      onClick={() => removeTag(tag)}
+                    >
+                      {tag}
+                      <X className="h-4 w-4 sm:h-3 sm:w-3 ml-1.5 sm:ml-1" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              
+              {/* Preset keywords - shown inline */}
+              {presetKeywords.length > 0 && (
+                <div className="pt-2">
+                  <span className="text-sm sm:text-xs text-muted-foreground mb-2 sm:mb-1.5 block font-medium">Quick add:</span>
+                  <div className="flex flex-wrap gap-2 sm:gap-1.5">
+                    {presetKeywords.map((preset) => {
+                      const isSelected = tags.includes(preset);
+                      return (
+                        <Badge
+                          key={preset}
+                          variant={isSelected ? "default" : "outline"}
+                          className={`cursor-pointer transition-colors text-sm sm:text-xs py-1.5 sm:py-0.5 px-3 sm:px-2 ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-accent hover:text-accent-foreground"
+                          }`}
+                          onClick={() => togglePresetTag(preset)}
+                        >
+                          {isSelected && <Check className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />}
+                          {preset}
+                        </Badge>
+                      );
+                    })}
                   </div>
-                )}
-                
-                {/* Preset keywords - shown inline */}
-                {presetKeywords.length > 0 && (
-                  <div className="pt-1">
-                    <span className="text-xs text-muted-foreground mb-1.5 block">Quick add:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {presetKeywords.map((preset) => {
-                        const isSelected = tags.includes(preset);
+                </div>
+              )}
+              
+              {/* Recently used keywords */}
+              {recentKeywords.length > 0 && (
+                <div className="pt-2">
+                  <span className="text-sm sm:text-xs text-muted-foreground mb-2 sm:mb-1.5 block font-medium">Recently used:</span>
+                  <div className="flex flex-wrap gap-2 sm:gap-1.5">
+                    {recentKeywords
+                      .filter((keyword) => !presetKeywords.includes(keyword))
+                      .slice(0, 8)
+                      .map((keyword) => {
+                        const isSelected = tags.includes(keyword);
                         return (
                           <Badge
-                            key={preset}
+                            key={keyword}
                             variant={isSelected ? "default" : "outline"}
-                            className={`cursor-pointer transition-colors text-xs ${
+                            className={`cursor-pointer transition-colors text-sm sm:text-xs py-1.5 sm:py-0.5 px-3 sm:px-2 ${
                               isSelected
                                 ? "bg-primary text-primary-foreground"
-                                : "hover:bg-accent hover:text-accent-foreground"
+                                : "hover:bg-accent hover:text-accent-foreground border-muted-foreground/30"
                             }`}
-                            onClick={() => togglePresetTag(preset)}
+                            onClick={() => togglePresetTag(keyword)}
                           >
-                            {isSelected && <Check className="h-3 w-3 mr-1" />}
-                            {preset}
+                            {isSelected && <Check className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />}
+                            {keyword}
                           </Badge>
                         );
                       })}
-                    </div>
                   </div>
-                )}
-                
-                {/* Recently used keywords */}
-                {recentKeywords.length > 0 && (
-                  <div className="pt-1">
-                    <span className="text-xs text-muted-foreground mb-1.5 block">Recently used:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {recentKeywords
-                        .filter((keyword) => !presetKeywords.includes(keyword))
-                        .slice(0, 8)
-                        .map((keyword) => {
-                          const isSelected = tags.includes(keyword);
-                          return (
-                            <Badge
-                              key={keyword}
-                              variant={isSelected ? "default" : "outline"}
-                              className={`cursor-pointer transition-colors text-xs ${
-                                isSelected
-                                  ? "bg-primary text-primary-foreground"
-                                  : "hover:bg-accent hover:text-accent-foreground border-muted-foreground/30"
-                              }`}
-                              onClick={() => togglePresetTag(keyword)}
-                            >
-                              {isSelected && <Check className="h-3 w-3 mr-1" />}
-                              {keyword}
-                            </Badge>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Use Current Location Button - Full width, before Address section */}
-              {navigator.geolocation && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGetCurrentLocation}
-                  disabled={isGettingLocation}
-                  className="w-full h-9 text-sm"
-                >
-                  {isGettingLocation ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Getting location...
-                    </>
-                  ) : (
-                    <>
-                      <Navigation className="h-4 w-4 mr-2" />
-                      Use Current Location
-                    </>
-                  )}
-                </Button>
+                </div>
               )}
-              
-              {/* Address - Collapsible, collapsed by default */}
-              <CollapsibleSection title={<>Address</>} open={addressOpen} onOpenChange={setAddressOpen}>
-                
+            </div>
+
+            {/* Use Current Location Button - Full width */}
+            {navigator.geolocation && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleGetCurrentLocation}
+                disabled={isGettingLocation}
+                className="w-full h-11 sm:h-9 text-base sm:text-sm"
+              >
+                {isGettingLocation ? (
+                  <>
+                    <Loader2 className="h-5 w-5 sm:h-4 sm:w-4 mr-2 animate-spin" />
+                    Getting location...
+                  </>
+                ) : (
+                  <>
+                    <Navigation className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
+                    Use Current Location
+                  </>
+                )}
+              </Button>
+            )}
+            
+            {/* Address - Collapsible, collapsed by default */}
+            <CollapsibleSection title={<>Address</>} open={addressOpen} onOpenChange={setAddressOpen}>
+              <div className="space-y-4 sm:space-y-3 pt-2">
                 <div className="space-y-2">
                   <Label htmlFor="address" className="text-sm font-medium">Street Address</Label>
                   <Input
@@ -788,9 +783,10 @@ export function ContactFormDialog({
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                     placeholder="123 Main St"
+                    className="h-11 sm:h-9 text-base sm:text-sm"
                   />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="city" className="text-sm font-medium">City</Label>
                     <Input
@@ -798,6 +794,7 @@ export function ContactFormDialog({
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
                       placeholder="San Francisco"
+                      className="h-11 sm:h-9 text-base sm:text-sm"
                     />
                   </div>
                   <div className="space-y-2">
@@ -807,10 +804,11 @@ export function ContactFormDialog({
                       value={state}
                       onChange={(e) => setState(e.target.value)}
                       placeholder="CA"
+                      className="h-11 sm:h-9 text-base sm:text-sm"
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="zipCode" className="text-sm font-medium">ZIP Code</Label>
                     <Input
@@ -818,6 +816,7 @@ export function ContactFormDialog({
                       value={zipCode}
                       onChange={(e) => setZipCode(e.target.value)}
                       placeholder="94102"
+                      className="h-11 sm:h-9 text-base sm:text-sm"
                     />
                   </div>
                   <div className="space-y-2">
@@ -827,12 +826,13 @@ export function ContactFormDialog({
                       value={country}
                       onChange={(e) => setCountry(e.target.value)}
                       placeholder="USA"
+                      className="h-11 sm:h-9 text-base sm:text-sm"
                     />
                   </div>
                 </div>
                 {(latitude !== undefined || longitude !== undefined) && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
-                    <MapPin className="h-3 w-3" />
+                  <div className="flex items-center gap-2 text-sm sm:text-xs text-muted-foreground pt-1">
+                    <MapPin className="h-4 w-4 sm:h-3 sm:w-3" />
                     <span>
                       Coordinates: {latitude?.toFixed(6)}, {longitude?.toFixed(6)}
                     </span>
@@ -850,9 +850,9 @@ export function ContactFormDialog({
                     )}
                     
                     {detectedBusinessName && !businessName && (
-                      <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                      <div className="p-4 sm:p-3 rounded-lg bg-primary/5 border border-primary/20">
                         <div className="flex items-start gap-2 mb-2">
-                          <Building2 className="h-4 w-4 text-primary mt-0.5" />
+                          <Building2 className="h-5 w-5 sm:h-4 sm:w-4 text-primary mt-0.5" />
                           <div className="flex-1">
                             <p className="text-sm font-medium">Business Detected</p>
                             <p className="text-sm mt-1">{detectedBusinessName}</p>
@@ -863,7 +863,7 @@ export function ContactFormDialog({
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-2 mt-2">
+                        <div className="flex gap-2 mt-3 sm:mt-2">
                           <Button
                             type="button"
                             size="sm"
@@ -872,9 +872,9 @@ export function ContactFormDialog({
                               setBusinessName(detectedBusinessName);
                               setBusinessType(detectedBusinessType);
                             }}
-                            className="h-7 text-xs"
+                            className="h-9 sm:h-7 text-sm sm:text-xs flex-1 sm:flex-none"
                           >
-                            <Check className="h-3 w-3 mr-1" />
+                            <Check className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
                             Use This
                           </Button>
                           <Button
@@ -885,9 +885,9 @@ export function ContactFormDialog({
                               setDetectedBusinessName(undefined);
                               setDetectedBusinessType(undefined);
                             }}
-                            className="h-7 text-xs"
+                            className="h-9 sm:h-7 text-sm sm:text-xs flex-1 sm:flex-none"
                           >
-                            <X className="h-3 w-3 mr-1" />
+                            <X className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />
                             Dismiss
                           </Button>
                         </div>
@@ -895,12 +895,12 @@ export function ContactFormDialog({
                     )}
                     
                     {businessName && (
-                      <div className="p-3 rounded-lg bg-secondary/50 border border-border">
+                      <div className="p-4 sm:p-3 rounded-lg bg-secondary/50 border border-border">
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="flex items-start gap-2 flex-1">
-                            <Building2 className="h-4 w-4 text-primary mt-0.5" />
+                            <Building2 className="h-5 w-5 sm:h-4 sm:w-4 text-primary mt-0.5" />
                             <div className="flex-1">
-                              <Label htmlFor="businessName" className="text-xs text-muted-foreground mb-1 block">
+                              <Label htmlFor="businessName" className="text-sm sm:text-xs text-muted-foreground mb-1 block">
                                 Business Name
                               </Label>
                               <Input
@@ -908,11 +908,11 @@ export function ContactFormDialog({
                                 value={businessName}
                                 onChange={(e) => setBusinessName(e.target.value)}
                                 placeholder="Business name"
-                                className="h-8 text-sm"
+                                className="h-10 sm:h-8 text-sm"
                               />
                               {businessType && businessType !== 'unknown' && (
                                 <>
-                                  <Label htmlFor="businessType" className="text-xs text-muted-foreground mb-1 block mt-2">
+                                  <Label htmlFor="businessType" className="text-sm sm:text-xs text-muted-foreground mb-1 block mt-2">
                                     Business Type
                                   </Label>
                                   <Input
@@ -920,7 +920,7 @@ export function ContactFormDialog({
                                     value={businessType}
                                     onChange={(e) => setBusinessType(e.target.value)}
                                     placeholder="Business type"
-                                    className="h-8 text-sm"
+                                    className="h-10 sm:h-8 text-sm"
                                   />
                                 </>
                               )}
@@ -936,32 +936,40 @@ export function ContactFormDialog({
                               setDetectedBusinessName(undefined);
                               setDetectedBusinessType(undefined);
                             }}
-                            className="h-6 w-6 p-0"
+                            className="h-8 w-8 sm:h-6 sm:w-6 p-0"
                           >
-                            <X className="h-3 w-3" />
+                            <X className="h-4 w-4 sm:h-3 sm:w-3" />
                           </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm sm:text-xs text-muted-foreground">
                           {detectedBusinessName === businessName ? "Auto-detected" : "Manually entered"}
                         </p>
                       </div>
                     )}
                   </div>
                 )}
-              </CollapsibleSection>
+              </div>
+            </CollapsibleSection>
 
+            {/* Form buttons - Sticky footer on mobile */}
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-2 pt-4 sm:pt-0 border-t sm:border-t-0 border-border mt-6 sm:mt-0">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => onOpenChange(false)} 
+                className="w-full sm:w-auto h-11 sm:h-9 text-base sm:text-sm"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="gradient-hero text-primary-foreground w-full sm:w-auto h-11 sm:h-9 text-base sm:text-sm"
+              >
+                {isEditing ? "Save Changes" : "Add Contact"}
+              </Button>
             </div>
-          )}
+          </form>
         </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-row justify-end gap-2 pt-3 border-t border-border mt-2 shrink-0 px-6 pb-4">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-auto">
-            Cancel
-          </Button>
-          <Button type="submit" className="gradient-hero text-primary-foreground w-auto">
-            {isEditing ? "Save Changes" : "Add Contact"}
-          </Button>
-        </form>
       </DialogContent>
     </Dialog>
     
