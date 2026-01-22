@@ -50,7 +50,6 @@ function CollapsibleSection({ title, open: isOpen, onOpenChange: setOpen, childr
     <Collapsible open={isOpen} onOpenChange={setOpen}>
       <CollapsibleTrigger className="flex items-center justify-between w-full py-3 sm:py-1.5 text-base sm:text-sm font-medium text-muted-foreground hover:text-foreground transition-colors touch-manipulation">
         <span className="flex items-center gap-2 sm:gap-1.5">
-          {!isOpen && <span>&gt;</span>}
           {title}
         </span>
         {isOpen ? <ChevronUp className="h-5 w-5 sm:h-4 sm:w-4" /> : <ChevronDown className="h-5 w-5 sm:h-4 sm:w-4" />}
