@@ -11,6 +11,7 @@ const QUERY_STORE = "parsed_queries";
 const MODEL_STORE = "llm_models";
 const MODEL_VERSION_KEY = "model_version";
 const MODEL_FAILED_KEY = "model_load_failed";
+const LAST_ERROR_KEY = "last_error";
 
 // Current model version - increment to invalidate cache
 const CURRENT_MODEL_VERSION = 1;
@@ -282,5 +283,155 @@ export async function clearModelLoadFailure(): Promise<void> {
     });
   } catch (error) {
     console.warn("Failed to clear model load failure status:", error);
+  }
+}
+
+/**
+ * Store last error information for diagnostics
+ */
+export async function storeLastError(errorInfo: {
+  errorType: string;
+  message: string;
+  timestamp: number;
+  details?: any;
+}): Promise<void> {
+  try {
+    const database = await getDB();
+    
+    const errorEntry = {
+      ...errorInfo,
+      storedAt: Date.now(),
+    };
+
+    const transaction = database.transaction([MODEL_STORE], "readwrite");
+    const store = transaction.objectStore(MODEL_STORE);
+    await store.put(errorEntry, LAST_ERROR_KEY);
+  } catch (error) {
+    console.warn("Failed to store last error:", error);
+  }
+}
+
+/**
+ * Get last error information
+ */
+export async function getLastError(): Promise<{
+  errorType: string;
+  message: string;
+  timestamp: number;
+  details?: any;
+  storedAt: number;
+} | null> {
+  try {
+    const database = await getDB();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([MODEL_STORE], "readonly");
+      const store = transaction.objectStore(MODEL_STORE);
+      const request = store.get(LAST_ERROR_KEY);
+
+      request.onsuccess = () => {
+        const error = request.result;
+        resolve(error || null);
+      };
+
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.warn("Failed to get last error:", error);
+    return null;
+  }
+}
+
+/**
+ * Clear last error information
+ */
+export async function clearLastError(): Promise<void> {
+  try {
+    const database = await getDB();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([MODEL_STORE], "readwrite");
+      const store = transaction.objectStore(MODEL_STORE);
+      const request = store.delete(LAST_ERROR_KEY);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.warn("Failed to clear last error:", error);
+  }
+}
+
+/**
+ * Get detailed model loading status
+ */
+export async function getModelLoadingStatus(): Promise<{
+  hasFailed: boolean;
+  failedAt: number | null;
+  lastError: {
+    errorType: string;
+    message: string;
+    timestamp: number;
+    details?: any;
+  } | null;
+  canRetry: boolean;
+}> {
+  try {
+    const database = await getDB();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([MODEL_STORE], "readonly");
+      const store = transaction.objectStore(MODEL_STORE);
+      
+      const failureRequest = store.get(MODEL_FAILED_KEY);
+      const errorRequest = store.get(LAST_ERROR_KEY);
+      
+      let failureResult: any = null;
+      let errorResult: any = null;
+      let completed = 0;
+      
+      const checkComplete = () => {
+        completed++;
+        if (completed === 2) {
+          const now = Date.now();
+          const failedAt = failureResult?.failedAt || null;
+          const retryAfterMs = 24 * 60 * 60 * 1000; // 24 hours
+          const canRetry = !failureResult || (failedAt && (now - failedAt > retryAfterMs));
+          
+          resolve({
+            hasFailed: !!failureResult && (!failedAt || (now - failedAt <= retryAfterMs)),
+            failedAt,
+            lastError: errorResult || null,
+            canRetry,
+          });
+        }
+      };
+      
+      failureRequest.onsuccess = () => {
+        failureResult = failureRequest.result;
+        checkComplete();
+      };
+      
+      errorRequest.onsuccess = () => {
+        errorResult = errorRequest.result;
+        checkComplete();
+      };
+      
+      failureRequest.onerror = () => {
+        checkComplete();
+      };
+      
+      errorRequest.onerror = () => {
+        checkComplete();
+      };
+    });
+  } catch (error) {
+    console.warn("Failed to get model loading status:", error);
+    return {
+      hasFailed: false,
+      failedAt: null,
+      lastError: null,
+      canRetry: true,
+    };
   }
 }
