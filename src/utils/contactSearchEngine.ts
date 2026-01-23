@@ -7,6 +7,7 @@ import { Contact } from "@/types/contact";
 import { ParsedQuery } from "./searchQueryParser";
 import { SearchQuery } from "@/types/searchQuery";
 import { getContactEmbedding, getContactEmbeddings } from "./contactEmbeddings";
+import { RESPONSIBILITIES } from "@/data/responsibilities";
 
 // Field weights for scoring
 const FIELD_WEIGHTS = {
@@ -587,17 +588,19 @@ async function loadQueryEmbeddingModel(): Promise<any> {
 
   queryModelLoading = (async () => {
     try {
-      const { pipeline } = await import("@xenova/transformers");
-      
-      queryEmbeddingModel = await pipeline(
-        "feature-extraction",
-        "Xenova/all-MiniLM-L6-v2",
-        {
-          quantized: true,
-        }
-      );
+      // TODO: Re-implement with ONNX Runtime after T5 query parser is working
+      // const { pipeline } = await import("@xenova/transformers");
+      // 
+      // queryEmbeddingModel = await pipeline(
+      //   "feature-extraction",
+      //   "Xenova/all-MiniLM-L6-v2",
+      //   {
+      //     quantized: true,
+      //   }
+      // );
 
-      return queryEmbeddingModel;
+      console.log("[Embeddings] Temporarily disabled - using keyword search only");
+      return null;
     } catch (error) {
       console.warn("Failed to load query embedding model:", error);
       return null;
@@ -802,12 +805,19 @@ export function searchWithParsedQuery(
   const hasNegatedNames = parsedQuery.negatedEntities.names.length > 0;
   
   // Build search terms from parsed query (EXCLUDE structured entities - they're handled separately)
-  const searchTerms = [
+  let searchTerms = [
     ...parsedQuery.keywords,
     ...parsedQuery.entities.names,
     ...parsedQuery.entities.departments,
     // DON'T include companies, roles, locations, relationships in general search terms
   ].filter(Boolean).map(t => t.toLowerCase());
+  
+  // IMPORTANT: If we have responsibility filters, don't use keyword matching
+  // The responsibility filter is precise and should be sufficient
+  if (searchQuery.filters.responsibilities && searchQuery.filters.responsibilities.length > 0) {
+    console.log('[SEARCH DEBUG] Responsibility filter present, clearing keyword search terms');
+    searchTerms = [];
+  }
   
   console.log('[SEARCH DEBUG] searchWithParsedQuery - Search terms:', searchTerms);
   
@@ -1493,6 +1503,13 @@ export async function executeSearchQuery(
     searchTerms.push(...tokenize(semantic_hint));
   }
 
+  // IMPORTANT: If we have responsibility filters, don't use keyword matching
+  // The responsibility filter is precise and should be sufficient
+  if (filters.responsibilities && filters.responsibilities.length > 0) {
+    console.log('[SEARCH DEBUG] Responsibility filter present, clearing keyword search terms');
+    searchTerms.length = 0; // Clear the array
+  }
+
   // Get query text for semantic matching (use originalQuery if provided, otherwise semantic_hint)
   const queryTextForSemantic = originalQuery || semantic_hint || "";
 
@@ -1626,8 +1643,60 @@ export async function executeSearchQuery(
     });
   }
 
+  // Filter by responsibilities
+  if (filters.responsibilities && filters.responsibilities.length > 0) {
+    console.log('[SEARCH DEBUG] Applying responsibility filter:', filters.responsibilities);
+    filteredContacts = filteredContacts.filter(contact => {
+      // Check each responsibility ID
+      return filters.responsibilities!.some(respId => {
+        const resp = RESPONSIBILITIES[respId];
+        if (!resp) return false;
+        
+        let matches = false;
+        
+        // Check departments (role/description)
+        if (resp.filters.departments && resp.filters.departments.length > 0) {
+          const contactRole = (contact.role || "").toLowerCase();
+          const contactDesc = (contact.description || "").toLowerCase();
+          for (const dept of resp.filters.departments) {
+            if (contactRole.includes(dept.toLowerCase()) || 
+                contactDesc.includes(dept.toLowerCase())) {
+              matches = true;
+              break;
+            }
+          }
+        }
+        
+        // Check roles
+        if (!matches && resp.filters.roles && resp.filters.roles.length > 0) {
+          const contactRole = (contact.role || "").toLowerCase();
+          for (const role of resp.filters.roles) {
+            if (contactRole.includes(role.toLowerCase())) {
+              matches = true;
+              break;
+            }
+          }
+        }
+        
+        // Check tags
+        if (!matches && resp.filters.tags && resp.filters.tags.length > 0) {
+          const contactTags = (contact.tags || []).map(t => t.toLowerCase());
+          for (const tag of resp.filters.tags) {
+            if (contactTags.includes(tag.toLowerCase())) {
+              matches = true;
+              break;
+            }
+          }
+        }
+        
+        return matches;
+      });
+    });
+    console.log('[SEARCH DEBUG] After responsibility filter, contacts:', filteredContacts.length);
+  }
+
   // Check if we have entity filters
-  const hasEntityFilters = !!(filters.company || filters.job_title || filters.name || filters.location);
+  const hasEntityFilters = !!(filters.company || filters.job_title || filters.name || filters.location || filters.responsibilities);
   
   console.log('[SEARCH DEBUG] executeSearchQuery - After filtering:', {
     hasEntityFilters,
