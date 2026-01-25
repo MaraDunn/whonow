@@ -136,9 +136,13 @@ async function loadLLMModel(): Promise<any> {
   modelLoading = (async () => {
     try {
       const config = getLLMConfig();
-      // Import transformers - use dynamic import to avoid issues
-      const transformersModule = await import("@xenova/transformers");
-      const { pipeline } = transformersModule;
+      // DEPRECATED: This file is replaced by unifiedLLMAdapter.ts using ONNX Runtime
+      // TODO: Remove this file once unifiedLLMAdapter is stable
+      console.warn("[LLM Parser] This module is deprecated - use unifiedLLMAdapter instead");
+      return null;
+      
+      // const transformersModule = await import("@xenova/transformers");
+      // const { pipeline } = transformersModule;
       
       // Set model cache location if needed
       if (transformersModule.env) {

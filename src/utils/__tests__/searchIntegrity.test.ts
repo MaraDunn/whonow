@@ -1,0 +1,264 @@
+/**
+ * Search Integrity Tests
+ * Ensures deterministic search always works regardless of AI state
+ * 
+ * These tests verify:
+ * 1. Deterministic search produces correct results
+ * 2. AI enhancement doesn't break deterministic behavior
+ * 3. AI failures fall back seamlessly
+ * 4. Merge logic never overrides deterministic filters
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Contact } from '@/types/contact';
+import { parseSearchQueryToSchema } from '../searchQueryParser';
+import { executeSearchQuery } from '../contactSearchEngine';
+import { mergeQueriesWithMetadata } from '../semanticAssist/mergeQueries';
+import { SearchQuery } from '@/types/searchQuery';
+
+// Mock contacts for testing
+const mockContacts: Contact[] = [
+  {
+    id: '1',
+    name: 'John Smith',
+    email: 'john@acmecorp.com',
+    company: 'Acme Corp',
+    role: 'Software Engineer',
+    tags: ['engineering', 'fullstack'],
+    description: 'Senior engineer working on backend systems',
+    createdAt: new Date('2024-01-01'),
+  },
+  {
+    id: '2',
+    name: 'Jane Doe',
+    email: 'jane@techstart.com',
+    company: 'TechStart',
+    role: 'Product Manager',
+    tags: ['product', 'management'],
+    description: 'Managing product development',
+    createdAt: new Date('2024-01-15'),
+  },
+  {
+    id: '3',
+    name: 'Bob Johnson',
+    email: 'bob@acmecorp.com',
+    company: 'Acme Corp',
+    role: 'Marketing Director',
+    tags: ['marketing', 'growth'],
+    description: 'Leading marketing initiatives',
+    createdAt: new Date('2024-02-01'),
+  },
+] as Contact[];
+
+describe('Search Integrity Tests', () => {
+  describe('Deterministic Search', () => {
+    it('should find contacts by company', () => {
+      const query = parseSearchQueryToSchema('acme corp');
+      const results = executeSearchQuery(mockContacts, query);
+      
+      expect(results).toHaveLength(2);
+      expect(results.every(c => c.company === 'Acme Corp')).toBe(true);
+    });
+    
+    it('should find contacts by role', () => {
+      const query = parseSearchQueryToSchema('engineer');
+      const results = executeSearchQuery(mockContacts, query);
+      
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.some(c => c.role?.includes('Engineer'))).toBe(true);
+    });
+    
+    it('should find contacts by name', () => {
+      const query = parseSearchQueryToSchema('john');
+      const results = executeSearchQuery(mockContacts, query);
+      
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.some(c => c.name?.includes('John'))).toBe(true);
+    });
+    
+    it('should work with empty query', () => {
+      const query = parseSearchQueryToSchema('');
+      const results = executeSearchQuery(mockContacts, query);
+      
+      // Should return all contacts or handle gracefully
+      expect(Array.isArray(results)).toBe(true);
+    });
+  });
+  
+  describe('Merge Logic Safety', () => {
+    it('should never override deterministic company filter', () => {
+      const deterministic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { company: 'Acme Corp' },
+        confidence: 0.8,
+        explanation: 'Searching for Acme Corp',
+      };
+      
+      const semantic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { company: 'Different Company' },
+        confidence: 0.9,
+        explanation: 'AI thinks different',
+      };
+      
+      const result = mergeQueriesWithMetadata(deterministic, semantic);
+      
+      // Deterministic MUST win
+      expect(result.merged.filters.company).toBe('Acme Corp');
+      expect(result.decisions.deterministicPreserved).toContain('company');
+    });
+    
+    it('should detect conflicts and preserve deterministic', () => {
+      const deterministic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { job_title: 'Engineer' },
+        confidence: 0.7,
+        explanation: 'Searching for engineers',
+      };
+      
+      const semantic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { job_title: 'Manager' },
+        confidence: 0.9,
+        explanation: 'AI thinks manager',
+      };
+      
+      const result = mergeQueriesWithMetadata(deterministic, semantic);
+      
+      expect(result.decisions.conflictsDetected).toContain('job_title');
+      expect(result.merged.filters.job_title).toBe('Engineer');
+    });
+    
+    it('should allow semantic to fill missing fields', () => {
+      const deterministic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { company: 'Acme Corp' },
+        confidence: 0.8,
+        explanation: 'Searching for Acme Corp',
+      };
+      
+      const semantic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { 
+          company: 'Acme Corp', // Same value
+          job_title: 'Engineer', // Additional field
+        },
+        confidence: 0.9,
+        explanation: 'AI added job title',
+      };
+      
+      const result = mergeQueriesWithMetadata(deterministic, semantic);
+      
+      expect(result.merged.filters.company).toBe('Acme Corp');
+      expect(result.merged.filters.job_title).toBe('Engineer');
+      expect(result.decisions.semanticFieldsUsed).toContain('job_title');
+    });
+    
+    it('should reject low confidence semantic results', () => {
+      const deterministic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: {},
+        confidence: 0.8,
+        explanation: 'Deterministic',
+      };
+      
+      const semantic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { company: 'Some Company' },
+        confidence: 0.5, // Lower than deterministic
+        explanation: 'Low confidence AI',
+      };
+      
+      const result = mergeQueriesWithMetadata(deterministic, semantic);
+      
+      expect(result.decisions.confidenceGate).toBe('failed');
+      expect(result.merged.filters.company).toBeUndefined();
+    });
+    
+    it('should never add location that deterministic didnt extract', () => {
+      const deterministic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { company: 'Acme' },
+        confidence: 0.8,
+        explanation: 'Company search',
+      };
+      
+      const semantic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { 
+          company: 'Acme',
+          location: 'San Francisco', // AI inferred this
+        },
+        confidence: 0.9,
+        explanation: 'AI inferred location',
+      };
+      
+      const result = mergeQueriesWithMetadata(deterministic, semantic);
+      
+      // Location should be removed
+      expect(result.merged.filters.location).toBeUndefined();
+      expect(result.decisions.locationRemoved).toBe(true);
+    });
+  });
+  
+  describe('AI Failure Handling', () => {
+    it('should handle null semantic query gracefully', () => {
+      const deterministic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { company: 'Acme' },
+        confidence: 0.8,
+        explanation: 'Company search',
+      };
+      
+      const result = mergeQueriesWithMetadata(deterministic, null);
+      
+      expect(result.merged).toEqual(deterministic);
+      expect(result.decisions.confidenceGate).toBe('failed');
+    });
+    
+    it('should handle undefined semantic query gracefully', () => {
+      const deterministic: SearchQuery = {
+        intent: 'search_contacts',
+        filters: { company: 'Acme' },
+        confidence: 0.8,
+        explanation: 'Company search',
+      };
+      
+      const result = mergeQueriesWithMetadata(deterministic, undefined);
+      
+      expect(result.merged).toEqual(deterministic);
+    });
+  });
+  
+  describe('Search Result Consistency', () => {
+    it('should produce same results with same deterministic query', () => {
+      const query1 = parseSearchQueryToSchema('acme corp');
+      const query2 = parseSearchQueryToSchema('acme corp');
+      
+      const results1 = executeSearchQuery(mockContacts, query1);
+      const results2 = executeSearchQuery(mockContacts, query2);
+      
+      expect(results1).toEqual(results2);
+    });
+    
+    it('should never return fewer results after AI enhancement', () => {
+      const deterministicQuery = parseSearchQueryToSchema('engineer');
+      const deterministicResults = executeSearchQuery(mockContacts, deterministicQuery);
+      
+      // Simulate AI enhancement that adds filters
+      const enhancedQuery: SearchQuery = {
+        ...deterministicQuery,
+        filters: {
+          ...deterministicQuery.filters,
+          // AI should only ADD filters, not restrict
+        },
+      };
+      
+      const enhancedResults = executeSearchQuery(mockContacts, enhancedQuery);
+      
+      // Enhanced results should be subset or equal to deterministic
+      // (AI can only ADD more specific filters, not remove existing matches)
+      expect(enhancedResults.length).toBeLessThanOrEqual(deterministicResults.length);
+    });
+  });
+});

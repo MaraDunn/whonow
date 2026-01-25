@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { Contact } from "@/types/contact";
 import { parseSearchQuery, ActionType, parseSearchQueryToSchema } from "@/utils/searchQueryParser";
 import { searchWithParsedQuery, searchContacts, executeSearchQuery } from "@/utils/contactSearchEngine";
-import { semanticAssist } from "@/utils/semanticAssist";
+import { enhanceQuery, type AIMetadata } from "@/utils/ai";
 import { SearchQuery } from "@/types/searchQuery";
 
 export type { ActionType };
@@ -13,23 +13,29 @@ interface SmartSearchResult {
   searchTerm: string;
   isLoading: boolean;
   aiIntent: string | null;
-  interpretation: string | null; // Human-readable interpretation of the query
+  interpretation: string | null;
+  aiMetadata?: AIMetadata; // New: AI enhancement metadata
 }
 
 const MAX_RESULTS = 10;
 
 /**
- * Smart search hook with LLM-first approach
- * LLM parsing → search execution → results
+ * Smart search hook with deterministic-first approach
+ * Deterministic parsing → deterministic search → AI enhancement (optional)
+ * 
+ * Key changes from previous version:
+ * - Deterministic search ALWAYS runs first and completes
+ * - AI enhancement is optional and additive
+ * - AI failures never block or delay results
+ * - Respects user preferences (opt-in/opt-out)
  */
 export function useSmartSearch(contacts: Contact[], query: string): SmartSearchResult {
   const [finalQuery, setFinalQuery] = useState<SearchQuery | null>(null);
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
-  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [aiMetadata, setAiMetadata] = useState<AIMetadata | undefined>(undefined);
   const [isSearching, setIsSearching] = useState(false);
   const abortController = useRef<AbortController | null>(null);
 
-  // LLM-first approach: Parse query with LLM, fallback to minimal deterministic
   useEffect(() => {
     // Cancel previous request
     if (abortController.current) {
@@ -38,9 +44,9 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
 
     if (!query.trim()) {
       setFilteredContacts(contacts);
-      setIsEnhancing(false);
       setIsSearching(false);
       setFinalQuery(null);
+      setAiMetadata(undefined);
       return;
     }
 
@@ -48,50 +54,70 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     const controller = new AbortController();
     abortController.current = controller;
 
-    setIsEnhancing(true);
     setIsSearching(true);
 
-    // Step 1: Get minimal deterministic query (for time ranges, responsibilities)
+    // STEP 1: ALWAYS run deterministic parser (REQUIRED)
     const deterministicQuery = parseSearchQueryToSchema(query);
-
-    // Step 2: Apply semantic assist (LLM parsing)
-    semanticAssist(query, deterministicQuery)
-      .then((enhanced) => {
-        if (controller.signal.aborted) return;
-        
-        setFinalQuery(enhanced);
-        setIsEnhancing(false);
-
-        // Step 3: Execute search with enhanced query
-        return executeSearchQuery(contacts, enhanced, { 
-          maxResults: MAX_RESULTS,
-          originalQuery: query
-        });
-      })
-      .then((results) => {
-        if (controller.signal.aborted) return;
-        
-        setFilteredContacts(results.length > 0 ? results : contacts.slice(0, MAX_RESULTS));
-        setIsSearching(false);
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) return;
-        
-        console.warn("Search failed:", error);
-        // Fallback to basic search
-        const fallbackTerms = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
-        const fallbackResults = searchContacts(contacts, fallbackTerms, { maxResults: MAX_RESULTS });
-        setFilteredContacts(fallbackResults);
-        setIsEnhancing(false);
-        setIsSearching(false);
+    
+    // STEP 2: ALWAYS execute deterministic search first (REQUIRED)
+    // This ensures results are IMMEDIATELY available
+    const performSearch = async () => {
+      const deterministicResults = await executeSearchQuery(contacts, deterministicQuery, { 
+        maxResults: MAX_RESULTS,
+        originalQuery: query
       });
+      
+      if (controller.signal.aborted) return;
+      
+      // Show deterministic results immediately
+      setFilteredContacts(deterministicResults.length > 0 ? deterministicResults : contacts.slice(0, MAX_RESULTS));
+      setFinalQuery(deterministicQuery);
+      setIsSearching(false);
+
+      // STEP 3: OPTIONALLY enhance with AI (ADDITIVE ONLY)
+      // This runs in background without blocking the UI
+      try {
+        const enhancement = await enhanceQuery(query, deterministicQuery);
+        
+        if (controller.signal.aborted) return;
+        
+        // Store AI metadata for debugging/monitoring
+        setAiMetadata(enhancement.metadata);
+        
+        // Only update if AI actually enhanced the query
+        if (enhancement.metadata.aiUsed && enhancement.enhanced) {
+          setFinalQuery(enhancement.enhanced);
+          
+          // Re-execute search with AI-enhanced query
+          const enhancedResults = await executeSearchQuery(contacts, enhancement.enhanced, { 
+            maxResults: MAX_RESULTS,
+            originalQuery: query
+          });
+          
+          if (controller.signal.aborted) return;
+          
+          // Update results if AI found better matches
+          if (enhancedResults.length > 0) {
+            setFilteredContacts(enhancedResults);
+          }
+        }
+      } catch (error) {
+        // This should never happen (enhanceQuery never throws),
+        // but handle gracefully just in case
+        if (controller.signal.aborted) return;
+        console.warn("[useSmartSearch] Unexpected AI enhancement error:", error);
+        // Keep deterministic results
+      }
+    };
+    
+    performSearch();
 
     return () => {
       controller.abort();
     };
   }, [contacts, query]);
 
-  // Build search term and extract action
+  // Build search term
   const searchTerm = useMemo(() => {
     if (!query.trim()) return "";
     return query.trim();
@@ -107,8 +133,9 @@ export function useSmartSearch(contacts: Contact[], query: string): SmartSearchR
     contacts: filteredContacts,
     action: legacyParsed?.action || null,
     searchTerm,
-    isLoading: isEnhancing || isSearching,
+    isLoading: isSearching,
     aiIntent: finalQuery?.intent || null,
     interpretation: finalQuery?.explanation || null,
+    aiMetadata, // Expose AI metadata for debugging
   };
 }

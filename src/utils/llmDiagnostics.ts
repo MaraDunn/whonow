@@ -167,24 +167,24 @@ export async function checkHuggingFaceConnectivity(): Promise<DiagnosticResult> 
 }
 
 /**
- * Check if transformers library can be imported
+ * Check if ONNX Runtime can be imported
  */
 export async function checkTransformersImport(): Promise<DiagnosticResult> {
   try {
-    const transformersModule = await import("@xenova/transformers");
+    const ort = await import("onnxruntime-web");
     
-    if (!transformersModule.pipeline) {
+    if (!ort.InferenceSession) {
       return {
         success: false,
-        message: "Transformers module imported but pipeline function not found",
+        message: "ONNX Runtime imported but InferenceSession not found",
       };
     }
     
     return {
       success: true,
-      message: "Transformers library imported successfully",
+      message: "ONNX Runtime library imported successfully",
       details: {
-        version: transformersModule.version || "unknown",
+        version: ort.env.versions?.web || "unknown",
       },
     };
   } catch (error: any) {

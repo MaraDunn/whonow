@@ -62,5 +62,13 @@ export default defineConfig(({ mode }) => {
       // Web builds continue to work as before
       target: process.env.TAURI_PLATFORM ? ["es2021", "chrome100", "safari13"] : undefined,
     },
+    // Optimize dependencies
+    optimizeDeps: {
+      exclude: ['onnxruntime-web'],
+    },
+    // Worker configuration for ONNX Runtime
+    worker: {
+      format: 'es',
+    },
   };
 });

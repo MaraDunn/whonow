@@ -37,7 +37,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [],
+    "resources": ["models/LaMini-Flan-T5-77M-onnx/*"],
     "externalBin": [],
     "copyright": "",
     "category": "Productivity",
@@ -83,7 +83,16 @@
       "removeFile": true,
       "renameFile": true,
       "exists": true,
-      "scope": ["$APPDATA/**", "$DOCUMENT/**", "$DOWNLOAD/**", "$PICTURE/**", "$VIDEO/**", "$MUSIC/**", "$DESKTOP/**"]
+      "scope": [
+        "$APPDATA/**",
+        "$DOCUMENT/**",
+        "$DOWNLOAD/**",
+        "$PICTURE/**",
+        "$VIDEO/**",
+        "$MUSIC/**",
+        "$DESKTOP/**",
+        "$RESOURCE/**"
+      ]
     },
     "http": {
       "all": true,

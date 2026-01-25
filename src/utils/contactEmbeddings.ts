@@ -57,19 +57,20 @@ async function loadEmbeddingModel(): Promise<any> {
 
   modelLoading = (async () => {
     try {
-      // Use @xenova/transformers with WASM backend for browser
-      const { pipeline } = await import("@xenova/transformers");
+      // TODO: Re-implement with ONNX Runtime after T5 query parser is working
+      // const { pipeline } = await import("@xenova/transformers");
+      //
+      // embeddingModel = await pipeline(
+      //   "feature-extraction",
+      //   "Xenova/all-MiniLM-L6-v2",
+      //   {
+      //     quantized: true,
+      //     device: typeof window !== "undefined" ? "wasm" : "cpu",
+      //   }
+      // );
 
-      embeddingModel = await pipeline(
-        "feature-extraction",
-        "Xenova/all-MiniLM-L6-v2",
-        {
-          quantized: true,
-          device: typeof window !== "undefined" ? "wasm" : "cpu",
-        }
-      );
-
-      return embeddingModel;
+      console.log("[Embeddings] Temporarily disabled - using deterministic search only");
+      return null;
     } catch (error) {
       console.warn("Failed to load embedding model:", error);
       return null;

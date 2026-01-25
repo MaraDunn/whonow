@@ -14,7 +14,8 @@ export function detectPlatform(): Platform {
   }
 
   // Check for Tauri (desktop native app)
-  if ((window as any).__TAURI__) {
+  // Tauri v2 uses __TAURI_INTERNALS__, v1 used __TAURI__
+  if ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__) {
     return "desktop";
   }
 
