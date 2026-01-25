@@ -42,6 +42,17 @@
             justify-content: center;
             align-items: center;
             padding: 80px;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        
+        .og-image * {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
         }
         
         /* Animated background gradient */
@@ -121,10 +132,7 @@
         }
         
         .logo-text .gradient {
-            background: linear-gradient(135deg, #3DB8A3 0%, #3AB8D4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #3DB8A3;
         }
         
         .headline {
@@ -137,10 +145,7 @@
         }
         
         .headline .gradient {
-            background: linear-gradient(135deg, #3DB8A3 0%, #3AB8D4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #3DB8A3;
         }
         
         .subheadline {
@@ -281,7 +286,7 @@
 </head>
 <body>
     <div class="preview-container">
-        <div class="og-image" id="ogImage">
+        <div class="og-image" id="ogImage" unselectable="on">
             <div class="content">
                 <div class="logo-section">
                     <img src="" alt="WhoNow Logo" class="logo-image" id="logoImg" />
@@ -294,7 +299,7 @@
                     <span class="gradient">Smart Contacts</span>
                 </h1>
                 <p class="subheadline">
-                    Manage your contacts, clients, and company directory all in one place. Find who, Now.
+                    Don't ask your boss, ask WhoNow.
                 </p>
                 <div class="demo-preview">
                     <div class="demo-card">
@@ -344,9 +349,10 @@
             <ol>
                 <li><strong>Method 1 (Easiest - Chrome/Edge):</strong> 
                     <ol type="a" style="margin-left: 20px; margin-top: 8px;">
+                        <li>Click once on the dark preview above (clears any text selection so it won’t appear in the image)</li>
                         <li>Press <code>F12</code> to open DevTools</li>
                         <li>Click the element selector tool (top left of DevTools)</li>
-                        <li>Click on the dark image preview above</li>
+                        <li>Click on the dark image preview</li>
                         <li>Right-click the <code>&lt;div class="og-image"&gt;</code> element in the Elements panel</li>
                         <li>Select "Capture node screenshot"</li>
                         <li>Image will download automatically!</li>
@@ -371,6 +377,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" 
             onerror="alert('Failed to load html2canvas library. Please check your internet connection.'); console.error('html2canvas failed to load');"></script>
     <script>
+        function clearSelection() {
+            try {
+                var s = window.getSelection();
+                if (s) s.removeAllRanges();
+            } catch (e) {}
+        }
+        
         // Try multiple logo paths
         const logoPaths = [
             './logo-icon.png',
@@ -449,6 +462,7 @@
         });
         
         async function downloadImage() {
+            clearSelection();
             const element = document.getElementById('ogImage');
             if (!element) {
                 alert('Error: Could not find image element. Please refresh the page.');
@@ -498,6 +512,7 @@
                 // Wait a bit for fonts and images to fully load
                 button.textContent = 'Generating image...';
                 await new Promise(resolve => setTimeout(resolve, 1000));
+                clearSelection();
                 
                 const canvas = await html2canvas(element, {
                     width: 1200,
@@ -518,18 +533,24 @@
                         return false;
                     },
                     onclone: (clonedDoc) => {
-                        // Ensure all images in clone are data URLs or hidden
+                        // Clear any selection in the clone so it never appears in the output
+                        try {
+                            const sel = clonedDoc.defaultView && clonedDoc.defaultView.getSelection && clonedDoc.defaultView.getSelection();
+                            if (sel) sel.removeAllRanges();
+                        } catch (e) {}
+                        const clonedElement = clonedDoc.getElementById('ogImage');
+                        if (clonedElement) {
+                            clonedElement.style.fontFamily = "'Space Grotesk', 'Inter', sans-serif";
+                            clonedElement.style.userSelect = 'none';
+                            clonedElement.style.webkitUserSelect = 'none';
+                            clonedElement.setAttribute('unselectable', 'on');
+                        }
                         const clonedImgs = clonedDoc.querySelectorAll('img');
                         clonedImgs.forEach(img => {
                             if (!img.src.startsWith('data:')) {
                                 img.style.display = 'none';
                             }
                         });
-                        // Ensure fonts are loaded in cloned document
-                        const clonedElement = clonedDoc.getElementById('ogImage');
-                        if (clonedElement) {
-                            clonedElement.style.fontFamily = "'Space Grotesk', 'Inter', sans-serif";
-                        }
                     }
                 });
                 
@@ -556,6 +577,7 @@
         }
         
         async function copyToClipboard() {
+            clearSelection();
             const element = document.getElementById('ogImage');
             if (!element || typeof html2canvas === 'undefined') {
                 alert('Error: html2canvas library not loaded. Please check your internet connection.');
@@ -564,7 +586,7 @@
             
             try {
                 await new Promise(resolve => setTimeout(resolve, 500));
-                
+                clearSelection();
                 const canvas = await html2canvas(element, {
                     width: 1200,
                     height: 630,
@@ -592,6 +614,14 @@
                 alert('Error copying image: ' + (error.message || 'Unknown error') + '\n\nPlease use the download button instead.');
             }
         }
+        
+        (function() {
+            var ogEl = document.getElementById('ogImage');
+            if (ogEl) {
+                ogEl.addEventListener('mousedown', clearSelection);
+                ogEl.addEventListener('touchstart', clearSelection);
+            }
+        })();
     </script>
 </body>
 </html>
