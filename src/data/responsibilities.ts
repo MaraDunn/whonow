@@ -16,6 +16,96 @@ export interface Responsibility {
 }
 
 export const RESPONSIBILITIES: Record<string, Responsibility> = {
+  RESP_DESIGN: {
+    id: "RESP_DESIGN",
+    domain: "design",
+    priority: 85,
+    filters: {
+      departments: ["design", "creative", "product design"],
+      roles: ["designer", "graphic designer", "visual designer", "brand designer", "ui designer", "ux designer", "product designer", "creative director"],
+      tags: ["design", "branding", "logo", "visual", "graphics", "ui", "ux", "creative"],
+    },
+  },
+  RESP_ENGINEERING: {
+    id: "RESP_ENGINEERING",
+    domain: "engineering",
+    priority: 85,
+    filters: {
+      departments: ["engineering", "development", "tech"],
+      roles: ["engineer", "developer", "software engineer", "frontend developer", "backend developer", "fullstack developer"],
+      tags: ["coding", "development", "software", "programming", "tech"],
+    },
+  },
+  RESP_MARKETING: {
+    id: "RESP_MARKETING",
+    domain: "marketing",
+    priority: 80,
+    filters: {
+      departments: ["marketing", "growth"],
+      roles: ["marketing manager", "growth marketer", "marketing specialist"],
+      tags: ["marketing", "campaigns", "advertising", "growth"],
+    },
+  },
+  RESP_SALES: {
+    id: "RESP_SALES",
+    domain: "sales",
+    priority: 80,
+    filters: {
+      departments: ["sales", "business development"],
+      roles: ["sales", "account executive", "business development"],
+      tags: ["sales", "revenue", "deals", "clients"],
+    },
+  },
+  RESP_FINANCE: {
+    id: "RESP_FINANCE",
+    domain: "finance",
+    priority: 80,
+    filters: {
+      departments: ["finance", "accounting"],
+      roles: ["accountant", "financial analyst", "controller", "cfo"],
+      tags: ["finance", "accounting", "budget", "financial"],
+    },
+  },
+  RESP_CONTENT: {
+    id: "RESP_CONTENT",
+    domain: "content",
+    priority: 75,
+    filters: {
+      departments: ["content", "marketing"],
+      roles: ["content writer", "copywriter", "editor", "content strategist"],
+      tags: ["writing", "content", "copywriting", "editorial"],
+    },
+  },
+  RESP_SOCIAL_MEDIA: {
+    id: "RESP_SOCIAL_MEDIA",
+    domain: "marketing",
+    priority: 75,
+    filters: {
+      departments: ["marketing", "social media"],
+      roles: ["social media manager", "community manager"],
+      tags: ["social media", "community", "engagement"],
+    },
+  },
+  RESP_OPERATIONS: {
+    id: "RESP_OPERATIONS",
+    domain: "operations",
+    priority: 75,
+    filters: {
+      departments: ["operations", "ops"],
+      roles: ["operations manager", "ops", "project manager"],
+      tags: ["operations", "logistics", "process"],
+    },
+  },
+  RESP_LEGAL: {
+    id: "RESP_LEGAL",
+    domain: "legal",
+    priority: 80,
+    filters: {
+      departments: ["legal"],
+      roles: ["lawyer", "attorney", "legal counsel", "general counsel"],
+      tags: ["legal", "compliance", "contracts", "law"],
+    },
+  },
   RESP_HR_EMPLOYEE_RELATIONS: {
     id: "RESP_HR_EMPLOYEE_RELATIONS",
     domain: "hr",

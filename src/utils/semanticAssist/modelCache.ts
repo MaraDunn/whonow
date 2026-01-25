@@ -14,7 +14,7 @@ const MODEL_FAILED_KEY = "model_load_failed";
 const LAST_ERROR_KEY = "last_error";
 
 // Current model version - increment to invalidate cache
-const CURRENT_MODEL_VERSION = 1;
+const CURRENT_MODEL_VERSION = 2; // Bumped to invalidate transformers.js cache
 
 let db: IDBDatabase | null = null;
 
@@ -86,6 +86,16 @@ export async function getCachedParsedQuery(
           return;
         }
 
+        // Check model version first - invalidate if version mismatch
+        if (cached.version !== CURRENT_MODEL_VERSION) {
+          // Model version changed, invalidate cache
+          const deleteTransaction = database.transaction([QUERY_STORE], "readwrite");
+          const deleteStore = deleteTransaction.objectStore(QUERY_STORE);
+          deleteStore.delete(queryHash);
+          resolve(null);
+          return;
+        }
+
         // Check if cache is expired (24 hours TTL)
         const now = Date.now();
         const cachedAt = cached.cachedAt || 0;
@@ -125,6 +135,7 @@ export async function cacheParsedQuery(
     const cacheEntry = {
       query: parsedQuery,
       cachedAt: Date.now(),
+      version: CURRENT_MODEL_VERSION,
     };
 
     const transaction = database.transaction([QUERY_STORE], "readwrite");

@@ -5,6 +5,113 @@
  */
 
 export const RESPONSIBILITY_ALIASES: Record<string, string> = {
+  // Design & Creative
+  "logo": "RESP_DESIGN",
+  "logo design": "RESP_DESIGN",
+  "make a logo": "RESP_DESIGN",
+  "create a logo": "RESP_DESIGN",
+  "design a logo": "RESP_DESIGN",
+  "brand design": "RESP_DESIGN",
+  "branding": "RESP_DESIGN",
+  "visual design": "RESP_DESIGN",
+  "graphic design": "RESP_DESIGN",
+  "graphics": "RESP_DESIGN",
+  "designer": "RESP_DESIGN",
+  "graphic designer": "RESP_DESIGN",
+  "visual designer": "RESP_DESIGN",
+  "brand designer": "RESP_DESIGN",
+  "ui design": "RESP_DESIGN",
+  "ux design": "RESP_DESIGN",
+  "product design": "RESP_DESIGN",
+  "creative director": "RESP_DESIGN",
+  "art director": "RESP_DESIGN",
+  "mockup": "RESP_DESIGN",
+  "wireframe": "RESP_DESIGN",
+  "prototype": "RESP_DESIGN",
+  "illustration": "RESP_DESIGN",
+  "illustrator": "RESP_DESIGN",
+  
+  // Engineering & Development
+  "code": "RESP_ENGINEERING",
+  "coding": "RESP_ENGINEERING",
+  "develop": "RESP_ENGINEERING",
+  "developer": "RESP_ENGINEERING",
+  "engineer": "RESP_ENGINEERING",
+  "engineering": "RESP_ENGINEERING",
+  "software": "RESP_ENGINEERING",
+  "software engineer": "RESP_ENGINEERING",
+  "software developer": "RESP_ENGINEERING",
+  "programmer": "RESP_ENGINEERING",
+  "programming": "RESP_ENGINEERING",
+  "frontend": "RESP_ENGINEERING",
+  "backend": "RESP_ENGINEERING",
+  "fullstack": "RESP_ENGINEERING",
+  "full stack": "RESP_ENGINEERING",
+  "web developer": "RESP_ENGINEERING",
+  "app developer": "RESP_ENGINEERING",
+  
+  // Marketing
+  "marketing": "RESP_MARKETING",
+  "market": "RESP_MARKETING",
+  "advertise": "RESP_MARKETING",
+  "advertising": "RESP_MARKETING",
+  "campaign": "RESP_MARKETING",
+  "campaigns": "RESP_MARKETING",
+  "growth": "RESP_MARKETING",
+  "growth marketing": "RESP_MARKETING",
+  "seo": "RESP_MARKETING",
+  "sem": "RESP_MARKETING",
+  "ads": "RESP_MARKETING",
+  "digital marketing": "RESP_MARKETING",
+  
+  // Sales
+  "sales": "RESP_SALES",
+  "sell": "RESP_SALES",
+  "selling": "RESP_SALES",
+  "business development": "RESP_SALES",
+  "account executive": "RESP_SALES",
+  "revenue": "RESP_SALES",
+  "deals": "RESP_SALES",
+  
+  // Finance
+  "finance": "RESP_FINANCE",
+  "financial": "RESP_FINANCE",
+  "accounting": "RESP_FINANCE",
+  "accountant": "RESP_FINANCE",
+  "budget": "RESP_FINANCE",
+  "budgeting": "RESP_FINANCE",
+  
+  // Content
+  "content": "RESP_CONTENT",
+  "writing": "RESP_CONTENT",
+  "writer": "RESP_CONTENT",
+  "copywriter": "RESP_CONTENT",
+  "copywriting": "RESP_CONTENT",
+  "blog": "RESP_CONTENT",
+  "article": "RESP_CONTENT",
+  "editorial": "RESP_CONTENT",
+  
+  // Social Media
+  "social media": "RESP_SOCIAL_MEDIA",
+  "social": "RESP_SOCIAL_MEDIA",
+  "community": "RESP_SOCIAL_MEDIA",
+  "community manager": "RESP_SOCIAL_MEDIA",
+  
+  // Operations
+  "operations": "RESP_OPERATIONS",
+  "ops": "RESP_OPERATIONS",
+  "operations manager": "RESP_OPERATIONS",
+  "logistics": "RESP_OPERATIONS",
+  
+  // Legal
+  "legal": "RESP_LEGAL",
+  "lawyer": "RESP_LEGAL",
+  "attorney": "RESP_LEGAL",
+  "counsel": "RESP_LEGAL",
+  "legal counsel": "RESP_LEGAL",
+  "compliance": "RESP_LEGAL",
+  "contracts": "RESP_LEGAL",
+  
   // HR Employee Relations
   "internal dispute": "RESP_HR_EMPLOYEE_RELATIONS",
   "workplace conflict": "RESP_HR_EMPLOYEE_RELATIONS",

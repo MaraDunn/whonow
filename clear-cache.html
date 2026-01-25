@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Transformers.js Cache</title>
+</head>
+<body>
+    <h1>Clear Transformers.js Model Cache</h1>
+    <button onclick="clearCache()">Clear Cache</button>
+    <div id="status"></div>
+    
+    <script>
+        async function clearCache() {
+            const status = document.getElementById('status');
+            status.innerHTML = 'Clearing cache...';
+            
+            try {
+                // Clear IndexedDB
+                const dbs = await indexedDB.databases();
+                for (const db of dbs) {
+                    if (db.name.includes('transformers') || db.name.includes('onnx')) {
+                        console.log('Deleting database:', db.name);
+                        await indexedDB.deleteDatabase(db.name);
+                    }
+                }
+                
+                // Clear Cache API
+                const cacheNames = await caches.keys();
+                for (const cacheName of cacheNames) {
+                    if (cacheName.includes('transformers') || cacheName.includes('onnx')) {
+                        console.log('Deleting cache:', cacheName);
+                        await caches.delete(cacheName);
+                    }
+                }
+                
+                status.innerHTML = '✅ Cache cleared! Please refresh your app.';
+            } catch (error) {
+                status.innerHTML = '❌ Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
