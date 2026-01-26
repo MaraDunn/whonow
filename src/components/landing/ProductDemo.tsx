@@ -316,10 +316,12 @@ export const ProductDemo = () => {
             <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-card" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-display font-semibold text-lg text-foreground truncate group-hover:text-primary transition-colors">
+            <div className="min-w-0 min-h-[2.75rem]">
+              <h3 className="font-display font-semibold text-lg text-foreground line-clamp-2 group-hover:text-primary transition-colors" title={contact.name}>
                 {contact.name}
               </h3>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mt-1.5">
               {(contact.isClient ?? false) && (
                 <span
                   className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${

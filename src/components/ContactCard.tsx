@@ -15,6 +15,10 @@ import {
 } from "@/components/ui/popover";
 import { toast } from "sonner";
 
+// Name block min-heights for consistent card layout (two lines each)
+const NAME_BLOCK_MIN_H_DESKTOP = "2.75rem"; // text-lg, two lines
+const NAME_BLOCK_MIN_H_COMPACT = "2rem"; // text-xs, two lines
+
 // Helper to format last contacted time
 function formatLastContacted(lastContactedAt?: string): string | null {
   if (!lastContactedAt) return null;
@@ -42,6 +46,10 @@ interface ContactCardProps {
   onMarkContacted?: () => void;
   onToggleClient?: (isClient: boolean) => void;
   hasClientAccess?: boolean; // Pass from parent to avoid calling useSubscription in every card
+  /** When true, show an "Internal" badge (same-company / team member). Used in All Contacts and Client Directory. */
+  isInternal?: boolean;
+  /** When true, show a "You" badge (this contact is the current user's profile). */
+  isCurrentUser?: boolean;
   // Mobile/Tablet compact mode props
   compact?: boolean;
   isExpanded?: boolean;
@@ -69,6 +77,8 @@ const ContactCardComponent = function ContactCard({
   onMarkContacted,
   onToggleClient,
   hasClientAccess = false,
+  isInternal = false,
+  isCurrentUser = false,
   compact = false,
   isExpanded = false,
   onToggleExpand,
@@ -205,11 +215,19 @@ const ContactCardComponent = function ContactCard({
           {/* Name and Company */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1">
-              <h3 className="font-display font-medium text-xs text-foreground truncate">
-                {contact.name}
-              </h3>
+              <div className="min-w-0 flex-1" style={{ minHeight: NAME_BLOCK_MIN_H_COMPACT }}>
+                <h3 className="font-display font-medium text-xs text-foreground line-clamp-2" title={contact.name}>
+                  {contact.name}
+                </h3>
+              </div>
+              {isCurrentUser && (
+                <User className="h-2.5 w-2.5 text-primary flex-shrink-0" aria-label="You" />
+              )}
               {contact.isClient && (
                 <Star className="h-2.5 w-2.5 text-amber-500 fill-amber-500 flex-shrink-0" />
+              )}
+              {isInternal && (
+                <Building2 className="h-2.5 w-2.5 text-muted-foreground flex-shrink-0" aria-label="Internal" />
               )}
             </div>
             <p className="text-[10px] text-muted-foreground truncate">
@@ -257,13 +275,27 @@ const ContactCardComponent = function ContactCard({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="font-display font-semibold text-base text-foreground">
-                {contact.name}
-              </h3>
+              <div className="min-w-0 flex-1" style={{ minHeight: NAME_BLOCK_MIN_H_COMPACT }}>
+                <h3 className="font-display font-semibold text-base text-foreground line-clamp-2" title={contact.name}>
+                  {contact.name}
+                </h3>
+              </div>
+              {isCurrentUser && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium" title="Your profile">
+                  <User className="h-2.5 w-2.5 shrink-0" />
+                  You
+                </span>
+              )}
               {contact.isClient && (
                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">
                   <Star className="h-2.5 w-2.5 fill-current" />
                   Client
+                </span>
+              )}
+              {isInternal && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium" title="Team member">
+                  <Building2 className="h-2.5 w-2.5 shrink-0" />
+                  Internal
                 </span>
               )}
             </div>
@@ -590,14 +622,28 @@ const ContactCardComponent = function ContactCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-display font-semibold text-lg text-foreground truncate group-hover:text-primary transition-colors">
+          <div className="min-w-0" style={{ minHeight: NAME_BLOCK_MIN_H_DESKTOP }}>
+            <h3 className="font-display font-semibold text-lg text-foreground line-clamp-2 group-hover:text-primary transition-colors" title={contact.name}>
               {contact.name}
             </h3>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap mt-1.5">
+            {isCurrentUser && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium" title="Your profile">
+                <User className="h-3 w-3 shrink-0" />
+                You
+              </span>
+            )}
             {contact.isClient && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">
                 <Star className="h-3 w-3 fill-current" />
                 Client
+              </span>
+            )}
+            {isInternal && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium" title="Team member">
+                <Building2 className="h-3 w-3 shrink-0" />
+                Internal
               </span>
             )}
             {showOwnershipBadge && contact.isShared && (
@@ -823,6 +869,8 @@ export const ContactCard = React.memo(ContactCardComponent, (prevProps, nextProp
     prevProps.folders !== nextProps.folders ||
     prevProps.showOwnershipBadge !== nextProps.showOwnershipBadge ||
     prevProps.hasClientAccess !== nextProps.hasClientAccess ||
+    prevProps.isInternal !== nextProps.isInternal ||
+    prevProps.isCurrentUser !== nextProps.isCurrentUser ||
     prevProps.compact !== nextProps.compact ||
     prevProps.isExpanded !== nextProps.isExpanded ||
     prevProps.isSelected !== nextProps.isSelected ||
