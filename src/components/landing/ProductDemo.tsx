@@ -444,7 +444,7 @@ export const ProductDemo = () => {
               </div>
               <div className="flex-1 mx-4">
                 <div className="bg-background/80 rounded-md px-3 py-1 text-sm text-muted-foreground text-center max-w-xs mx-auto">
-                  app.whonow.com
+                  app.whonow.co
                 </div>
               </div>
             </div>

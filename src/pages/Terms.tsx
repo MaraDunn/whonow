@@ -63,7 +63,8 @@ const Terms = () => {
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4">Contact Us</h2>
             <p className="text-muted-foreground">
-              If you have questions about these terms, please contact us.
+              If you have questions about these terms, please{" "}
+            <a href="mailto:support@whonow.co" className="text-primary hover:underline">contact us</a>.
             </p>
           </section>
         </div>

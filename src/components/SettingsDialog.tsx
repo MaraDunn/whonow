@@ -1104,7 +1104,7 @@ export function SettingsDialog({
                               className="bg-muted"
                             />
                             <p className="text-xs text-muted-foreground">
-                              Contact support to change your organization name
+                              <a href="mailto:support@whonow.co" className="text-primary hover:underline">Contact support</a> to change your organization name
                             </p>
                           </div>
                           <Separator />
@@ -1395,8 +1395,8 @@ export function SettingsDialog({
                       <CardContent className="space-y-4 pt-6">
                         <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
                           <p className="text-sm text-amber-900 dark:text-amber-100">
-                            <strong>Note:</strong> These actions can affect your entire organization. 
-                            Contact support if you need help with organization management.
+                            <strong>Note:</strong> These actions can affect your entire organization.{" "}
+                            <a href="mailto:support@whonow.co" className="text-primary hover:underline">Contact support</a> if you need help with organization management.
                           </p>
                         </div>
                         {isSuperAdmin ? (
