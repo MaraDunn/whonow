@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { useResponsiveView } from "@/hooks/use-mobile";
 
 const VIRTUALIZE_THRESHOLD = 500;
-// Must be at least as tall as one row of contact cards (avatar, name, metadata, phone, padding).
-// Too small causes the next row to be translateY'd too high and overlap.
-const ROW_HEIGHT_ESTIMATE = 300;
+// Match desktop card row height (28rem ≈ 448px) so virtualized rows don't overlap before measurement.
+const ROW_HEIGHT_ESTIMATE = 460;
+const DESKTOP_CARD_MIN_WIDTH_PX = 360;
+const DESKTOP_GRID_GAP_PX = 24;
 
 interface ContactGridProps {
   contacts: Contact[];
@@ -41,6 +42,16 @@ interface ContactGridProps {
   hasClientAccess?: boolean;
   selectionMode?: boolean;
   onToggleSelectionMode?: () => void;
+  /** Set of contact emails (lowercase) that are internal/team members. When provided, cards show an "Internal" badge for those contacts. Omit in Team Directory or Trash. */
+  internalContactEmails?: Set<string>;
+  /** When provided, contacts with contact.companyId === this value also show the Internal badge (company-linked contacts). */
+  internalCompanyId?: string;
+  /** Set of team member user ids — contacts with contact.ownerId in this set (e.g. imported/created by a colleague) show the Internal badge. */
+  internalContactOwnerIds?: Set<string>;
+  /** Current user's email — contacts matching this (or with tags "my-profile") show the "You" badge. */
+  currentUserEmail?: string | null;
+  /** Current user's id — contacts with id matching this show the "You" badge. */
+  currentUserId?: string | null;
   // Pagination: show "Load more" when there are more contacts for the current view
   hasMore?: boolean;
   onLoadMore?: () => void;
@@ -74,11 +85,35 @@ export function ContactGrid({
   hasClientAccess = false,
   selectionMode = false,
   onToggleSelectionMode,
+  internalContactEmails,
+  internalCompanyId,
+  internalContactOwnerIds,
+  currentUserEmail,
+  currentUserId,
   hasMore = false,
   onLoadMore,
   isLoadingMore = false,
 }: ContactGridProps) {
   const responsiveView = useResponsiveView();
+  const isInternalContact = useCallback(
+    (contact: Contact) => {
+      if (!internalContactEmails && !internalCompanyId && !internalContactOwnerIds) return false;
+      const emailMatch =
+        !!internalContactEmails && !!contact.email && internalContactEmails.has(contact.email.toLowerCase().trim());
+      const companyMatch = !!internalCompanyId && !!contact.companyId && contact.companyId === internalCompanyId;
+      const ownerInCompany =
+        !!internalContactOwnerIds && !!contact.ownerId && internalContactOwnerIds.has(contact.ownerId);
+      return emailMatch || companyMatch || ownerInCompany;
+    },
+    [internalContactEmails, internalCompanyId, internalContactOwnerIds]
+  );
+  const isCurrentUserContact = useCallback(
+    (contact: Contact) =>
+      !!(contact.tags && contact.tags.includes("my-profile")) ||
+      (!!currentUserEmail && !!contact.email && contact.email.toLowerCase().trim() === currentUserEmail.toLowerCase().trim()) ||
+      (!!currentUserId && contact.id === currentUserId),
+    [currentUserEmail, currentUserId]
+  );
   const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
   
   // Track which contact is expanded in compact mode
@@ -108,8 +143,8 @@ export function ContactGrid({
   // MUST be before early return to follow Rules of Hooks
   const gridClasses = useMemo(() => 
     isCompactMode
-      ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3"
-      : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6",
+      ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 items-stretch"
+      : "grid w-full min-w-0 gap-4 sm:gap-5 lg:gap-6 items-stretch auto-rows-[28rem] grid-cols-[repeat(auto-fill,minmax(360px,1fr))]",
     [isCompactMode]
   );
 
@@ -121,10 +156,27 @@ export function ContactGrid({
   );
 
   const useVirtualizedList = contacts.length >= VIRTUALIZE_THRESHOLD && !isTrashView;
-  const columns = isCompactMode ? 2 : 4;
-  const rowCount = useVirtualizedList ? Math.ceil(contacts.length / columns) : 0;
   const parentRef = useRef<HTMLDivElement>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Columns per row: compact uses 2; desktop virtualized uses container width so no horizontal scroll.
+  const [virtualizedColumns, setVirtualizedColumns] = useState(4);
+  useEffect(() => {
+    if (!useVirtualizedList || !parentRef.current) return;
+    const el = parentRef.current;
+    const updateColumns = () => {
+      const w = el.clientWidth;
+      const n = Math.floor((w + DESKTOP_GRID_GAP_PX) / (DESKTOP_CARD_MIN_WIDTH_PX + DESKTOP_GRID_GAP_PX));
+      setVirtualizedColumns(Math.max(1, n));
+    };
+    updateColumns();
+    const ro = new ResizeObserver(updateColumns);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [useVirtualizedList]);
+
+  const columns = isCompactMode ? 2 : (useVirtualizedList ? virtualizedColumns : 1);
+  const rowCount = useVirtualizedList ? Math.ceil(contacts.length / columns) : 0;
 
   // Start loading the next page as soon as the user scrolls near the bottom,
   // so more contacts appear without waiting for a click.
@@ -232,7 +284,7 @@ export function ContactGrid({
       {useVirtualizedList ? (
         <div
           ref={parentRef}
-          className="overflow-auto rounded-lg"
+          className="overflow-x-hidden overflow-y-auto rounded-lg"
           style={{ height: "70vh" }}
         >
           <div
@@ -260,34 +312,38 @@ export function ContactGrid({
                     left: 0,
                     width: "100%",
                     transform: `translateY(${virtualRow.start}px)`,
+                    gridTemplateColumns: isCompactMode ? undefined : `repeat(${columns}, minmax(360px, 1fr))`,
                   }}
                 >
                   {rowContacts.map((contact, index) => (
-                    <DraggableContactCard
-                      key={contact.id}
-                      contact={contact}
-                      index={start + index}
-                      action={action}
-                      onEdit={() => onEditContact(contact)}
-                      onView={onViewContact ? () => onViewContact(contact) : undefined}
-                      isTrashView={isTrashView}
-                      onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
-                      onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
-                      onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
-                      folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
-                      folders={folders}
-                      onUpdateFolder={onUpdateFolder}
-                      showOwnershipBadge={showOwnershipBadge}
-                      onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
-                      onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
-                      hasClientAccess={hasClientAccess}
-                      compact={isCompactMode}
-                      isExpanded={expandedContactId === contact.id}
-                      onToggleExpand={() => handleToggleExpand(contact.id)}
-                      isSelected={selectedContactIds.has(contact.id)}
-                      onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
-                      selectionMode={selectionMode}
-                    />
+                    <div key={contact.id} className="min-h-[28rem] h-full overflow-hidden rounded-xl sm:rounded-2xl">
+                      <DraggableContactCard
+                        contact={contact}
+                        index={start + index}
+                        action={action}
+                        onEdit={() => onEditContact(contact)}
+                        onView={onViewContact ? () => onViewContact(contact) : undefined}
+                        isTrashView={isTrashView}
+                        onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
+                        onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
+                        onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
+                        folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
+                        folders={folders}
+                        onUpdateFolder={onUpdateFolder}
+                        showOwnershipBadge={showOwnershipBadge}
+                        onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
+                        onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
+                        hasClientAccess={hasClientAccess}
+                        isInternal={isInternalContact(contact)}
+                        isCurrentUser={isCurrentUserContact(contact)}
+                        compact={isCompactMode}
+                        isExpanded={expandedContactId === contact.id}
+                        onToggleExpand={() => handleToggleExpand(contact.id)}
+                        isSelected={selectedContactIds.has(contact.id)}
+                        onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
+                        selectionMode={selectionMode}
+                      />
+                    </div>
                   ))}
                 </div>
               );
@@ -296,12 +352,13 @@ export function ContactGrid({
           </div>
         </div>
       ) : (
-        <div className={gridClasses}>
+        <div className="min-w-0 overflow-x-hidden w-full">
+          <div className={gridClasses}>
           {contacts.map((contact, index) => (
-            <DraggableContactCard
-              key={contact.id}
-              contact={contact}
-              index={index}
+            <div key={contact.id} className="min-h-[28rem] h-full overflow-hidden rounded-xl sm:rounded-2xl">
+              <DraggableContactCard
+                contact={contact}
+                index={index}
               action={action}
               onEdit={() => onEditContact(contact)}
               onView={onViewContact ? () => onViewContact(contact) : undefined}
@@ -316,14 +373,18 @@ export function ContactGrid({
               onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
               onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
               hasClientAccess={hasClientAccess}
+              isInternal={isInternalContact(contact)}
+              isCurrentUser={isCurrentUserContact(contact)}
               compact={isCompactMode}
               isExpanded={expandedContactId === contact.id}
               onToggleExpand={() => handleToggleExpand(contact.id)}
               isSelected={selectedContactIds.has(contact.id)}
               onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
               selectionMode={selectionMode}
-            />
+              />
+            </div>
           ))}
+          </div>
         </div>
       )}
       {hasMore && onLoadMore && !isTrashView && (

@@ -15,9 +15,11 @@ import {
 } from "@/components/ui/popover";
 import { toast } from "sonner";
 
-// Name block min-heights for consistent card layout (two lines each)
-const NAME_BLOCK_MIN_H_DESKTOP = "2.75rem"; // text-lg, two lines
-const NAME_BLOCK_MIN_H_COMPACT = "2rem"; // text-xs, two lines
+// Name block: fixed height for two lines + room for descenders so badges never overlap
+const NAME_BLOCK_H_DESKTOP = "3.25rem";
+const NAME_BLOCK_H_COMPACT = "2.25rem";
+// Card height: single source of truth; grid row and card use this so cards never overlap
+const CARD_H_DESKTOP = "28rem";
 
 // Helper to format last contacted time
 function formatLastContacted(lastContactedAt?: string): string | null {
@@ -207,7 +209,7 @@ const ContactCardComponent = function ContactCard({
         <div className="flex items-center gap-2">
           {/* Avatar */}
           <div className="relative flex-shrink-0">
-            <div className="w-8 h-8 rounded-md gradient-hero flex items-center justify-center text-primary-foreground font-display font-medium text-xs">
+            <div className="w-8 h-8 rounded-md overflow-hidden gradient-hero flex items-center justify-center text-primary-foreground font-display font-medium text-xs">
               {initials}
             </div>
           </div>
@@ -215,8 +217,8 @@ const ContactCardComponent = function ContactCard({
           {/* Name and Company */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1">
-              <div className="min-w-0 flex-1" style={{ minHeight: NAME_BLOCK_MIN_H_COMPACT }}>
-                <h3 className="font-display font-medium text-xs text-foreground line-clamp-2" title={contact.name}>
+              <div className="min-w-0 flex-1 overflow-hidden" style={{ height: NAME_BLOCK_H_COMPACT }}>
+                <h3 className="font-display font-medium text-xs text-foreground line-clamp-2 break-words" title={contact.name}>
                   {contact.name}
                 </h3>
               </div>
@@ -268,15 +270,15 @@ const ContactCardComponent = function ContactCard({
         {/* Header with collapse */}
         <div className="flex items-center gap-3 mb-3" onClick={(e) => handleCardClick(e)}>
           <div className="relative flex-shrink-0">
-            <div className="w-12 h-12 rounded-lg gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-base">
+            <div className="w-12 h-12 rounded-lg overflow-hidden gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-base">
               {initials}
             </div>
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <div className="min-w-0 flex-1" style={{ minHeight: NAME_BLOCK_MIN_H_COMPACT }}>
-                <h3 className="font-display font-semibold text-base text-foreground line-clamp-2" title={contact.name}>
+              <div className="min-w-0 flex-1 overflow-hidden" style={{ height: NAME_BLOCK_H_COMPACT }}>
+                <h3 className="font-display font-semibold text-base text-foreground line-clamp-2 break-words" title={contact.name}>
                   {contact.name}
                 </h3>
               </div>
@@ -498,19 +500,19 @@ const ContactCardComponent = function ContactCard({
     );
   }
 
-  // Full desktop card
+  // Full desktop card — strictly fits grid cell (CARD_H_DESKTOP); no overlap with other cards or internal overlap
   return (
     <div
       onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
       className={cn(
-        "group relative p-4 sm:p-6 rounded-xl sm:rounded-2xl border transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col",
+        "group relative p-4 sm:p-6 rounded-xl sm:rounded-2xl border transition-all duration-300 cursor-pointer flex flex-col overflow-hidden box-border h-full max-h-full min-h-0",
         selectionMode 
           ? isSelected 
             ? "border-primary bg-primary/5 shadow-md" 
             : "border-border bg-card"
           : "border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30"
       )}
-      style={{ animationDelay: `${index * 50}ms` }}
+      style={{ animationDelay: `${index * 50}ms`, minHeight: CARD_H_DESKTOP }}
     >
       {/* Selection checkbox */}
       {selectionMode && onSelect && (
@@ -611,9 +613,9 @@ const ContactCardComponent = function ContactCard({
           </div>
         ) : null}
       </div>
-      <div className="flex items-start gap-4 flex-1">
+      <div className="flex items-start gap-4 shrink-0">
         <div className="relative flex-shrink-0">
-          <div className="w-14 h-14 rounded-xl gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-lg group-hover:scale-105 transition-transform duration-300">
+          <div className="w-14 h-14 rounded-xl overflow-hidden gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-lg group-hover:scale-105 transition-transform duration-300">
             {initials}
           </div>
           {!isTrashView && (
@@ -621,55 +623,61 @@ const ContactCardComponent = function ContactCard({
           )}
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="min-w-0" style={{ minHeight: NAME_BLOCK_MIN_H_DESKTOP }}>
-            <h3 className="font-display font-semibold text-lg text-foreground line-clamp-2 group-hover:text-primary transition-colors" title={contact.name}>
+        <div className="flex-1 min-w-0 flex flex-col overflow-visible">
+          {/* Name: fixed height, overflow clipped here only */}
+          <div className="w-full min-w-0 shrink-0 overflow-hidden" style={{ height: NAME_BLOCK_H_DESKTOP }}>
+            <h3 className="font-display font-semibold text-lg text-foreground line-clamp-2 break-words leading-snug group-hover:text-primary transition-colors" title={contact.name}>
               {contact.name}
             </h3>
           </div>
-          <div className="flex items-center gap-2 flex-wrap mt-1.5">
-            {isCurrentUser && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium" title="Your profile">
-                <User className="h-3 w-3 shrink-0" />
-                You
-              </span>
-            )}
-            {contact.isClient && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">
-                <Star className="h-3 w-3 fill-current" />
-                Client
-              </span>
-            )}
-            {isInternal && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium" title="Team member">
-                <Building2 className="h-3 w-3 shrink-0" />
-                Internal
-              </span>
-            )}
-            {showOwnershipBadge && contact.isShared && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium">
-                <Users className="h-3 w-3" />
-                Shared
-              </span>
-            )}
-            {showOwnershipBadge && !contact.isShared && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs font-medium">
-                <UserCircle className="h-3 w-3" />
-                Personal
-              </span>
-            )}
-          </div>
-            {contact.role && (
-            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1.5 min-w-0">
+          {contact.role && (
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5 min-w-0 mt-3 shrink-0 overflow-hidden">
               <Briefcase className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{contact.role}</span>
             </p>
           )}
-          {/* Last contacted indicator */}
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <Clock className="h-3 w-3 text-muted-foreground" />
-            <span className={`text-xs ${lastContactedText ? 'text-muted-foreground' : 'text-orange-600 dark:text-orange-400 font-medium'}`}>
-              {lastContactedText || "Never contacted"}
+          {isCurrentUser && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium w-fit mt-3 shrink-0" title="Your profile">
+              <User className="h-3 w-3 shrink-0" />
+              You
+            </span>
+          )}
+          {/* Client, Internal, Shared/Personal, Never contacted — 2x2 grid; never clipped, full text visible */}
+          <div className="shrink-0 mt-3 grid gap-x-2 gap-y-2 w-full min-w-0 items-center overflow-visible" style={{ gridTemplateColumns: "minmax(min-content, 1fr) minmax(min-content, 1fr)" }}>
+            {contact.isClient ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium shrink-0 w-fit">
+                <Star className="h-3 w-3 fill-current shrink-0" />
+                Client
+              </span>
+            ) : (
+              <span className="min-h-[1.75rem]" aria-hidden />
+            )}
+            {isInternal ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium shrink-0 w-fit" title="Team member">
+                <Building2 className="h-3 w-3 shrink-0" />
+                Internal
+              </span>
+            ) : (
+              <span className="min-h-[1.75rem]" aria-hidden />
+            )}
+            {showOwnershipBadge ? (
+              contact.isShared ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium shrink-0 w-fit">
+                  <Users className="h-3 w-3 shrink-0" />
+                  Shared
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs font-medium shrink-0 w-fit">
+                  <UserCircle className="h-3 w-3 shrink-0" />
+                  Personal
+                </span>
+              )
+            ) : (
+              <span className="min-h-[1.75rem]" aria-hidden />
+            )}
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium w-fit min-w-0 ${lastContactedText ? "bg-muted/80 text-muted-foreground" : "bg-orange-500/10 text-orange-600 dark:text-orange-400"}`}>
+              <Clock className="h-3 w-3 shrink-0 flex-shrink-0" />
+              <span className="break-words line-clamp-2">{lastContactedText || "Never contacted"}</span>
             </span>
           </div>
         </div>
@@ -690,9 +698,9 @@ const ContactCardComponent = function ContactCard({
         )}
       </div>
 
-      {/* Contact details - hide in trash view for cleaner layout */}
+      {/* Contact details — flex-1 + overflow-y-auto so card stays fixed height and details scroll when needed */}
       {!isTrashView && (
-        <div className="mt-4 space-y-2.5">
+        <div className="mt-5 space-y-2.5 flex-1 min-h-0 overflow-y-auto">
           {contact.email && (
             <a
               href={`mailto:${contact.email}`}
@@ -732,7 +740,7 @@ const ContactCardComponent = function ContactCard({
 
       {/* Action buttons row - show for non-trash view */}
       {!isTrashView && (onMarkContacted || onToggleClient) && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-2 shrink-0 pt-1">
           {onToggleClient && (
             hasClientAccess ? (
               <Button
@@ -795,7 +803,7 @@ const ContactCardComponent = function ContactCard({
 
       {/* Trash view actions */}
       {isTrashView && (
-        <div className="mt-4 sm:mt-6 pt-4 border-t border-border flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+        <div className="mt-4 sm:mt-6 pt-4 border-t border-border flex flex-col sm:flex-row gap-2 sm:gap-2.5 shrink-0">
           {onRestore && (
             <Button
               variant="outline"
@@ -829,7 +837,7 @@ const ContactCardComponent = function ContactCard({
 
       {/* Normal action button */}
       {!isTrashView && action && (
-        <div className="mt-4 pt-4 border-t border-border">
+        <div className="mt-4 pt-4 border-t border-border shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation();
