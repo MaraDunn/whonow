@@ -1025,14 +1025,36 @@ function extractNeedsFollowUp(query: string): boolean {
 }
 
 /**
+ * Clean extracted phrase before responsibility matching.
+ * Strips leading articles/wrappers and caps length to avoid over-matching.
+ * Returns null if result is too short or too long (skip this match).
+ */
+function cleanResponsibilityPhrase(raw: string): string | null {
+  let s = raw
+    .trim()
+    .replace(/[?!.,;:'"]+$/g, "")
+    .trim();
+  s = s.replace(/^\s*(?:a|an|the)\s+/i, "").trim();
+  s = s.replace(
+    /^\s*(?:someone in|someone who can (?:do|make|create|design|build)\s+|someone who does\s+|somebody in|somebody who can (?:do|make|create|design|build)\s+|anyone who (?:can do|does)\s+|anybody who (?:can do|does)\s+)/i,
+    ""
+  ).trim();
+  const words = s.split(/\s+/).filter((w) => w.length > 0);
+  const capped = words.slice(0, 6).join(" ");
+  if (capped.length < 2 || capped.length > 50) return null;
+  return capped;
+}
+
+/**
  * Extract responsibility intent from query
- * Detects patterns like "who handles X", "who is responsible for X", etc.
+ * Detects patterns like "who handles X", "who is responsible for X", etc.,
+ * plus request phrasings: "I need a logo", "find me a designer", "who do I contact for legal?", etc.
  * Returns the matched responsibility or null if no match found
  */
 function extractResponsibility(query: string): { match: ResponsibilityMatch | null; phrase: string | null } {
   const normalized = normalizeQuery(query);
-  
-  // Responsibility intent patterns
+
+  // Block 1: Existing "who..." patterns (unchanged behavior)
   const responsibilityPatterns: Array<{ pattern: RegExp; phraseIndex: number }> = [
     { pattern: /who\s+(handles|manages|owns)\s+(.+)/i, phraseIndex: 2 },
     { pattern: /who\s+is\s+responsible\s+for\s+(.+)/i, phraseIndex: 1 },
@@ -1040,16 +1062,15 @@ function extractResponsibility(query: string): { match: ResponsibilityMatch | nu
     { pattern: /who\s+do\s+i\s+talk\s+to\s+about\s+(.+)/i, phraseIndex: 1 },
     { pattern: /who\s+should\s+i\s+contact\s+for\s+(.+)/i, phraseIndex: 1 },
     { pattern: /who\s+can\s+i\s+talk\s+to\s+about\s+(.+)/i, phraseIndex: 1 },
+    { pattern: /who\s+(?:can|could)\s+(?:make|create|design|help\s+(?:me\s+)?with|build|do)\s+(?:me\s+)?(?:a\s+)?(.+)/i, phraseIndex: 1 },
+    { pattern: /who\s+(?:can|could)\s+(.+)/i, phraseIndex: 1 },
   ];
-  
+
   for (const { pattern, phraseIndex } of responsibilityPatterns) {
     const match = normalized.match(pattern);
     if (match && match[phraseIndex]) {
       const responsibilityPhrase = match[phraseIndex].trim();
-      
-      // Match against responsibility aliases
       const matchResult = matchResponsibility(responsibilityPhrase, RESPONSIBILITY_INDEX);
-      
       if (matchResult) {
         const responsibility = RESPONSIBILITIES[matchResult.responsibilityId];
         if (responsibility) {
@@ -1063,15 +1084,61 @@ function extractResponsibility(query: string): { match: ResponsibilityMatch | nu
           };
         }
       }
-      
-      // If pattern matched but no responsibility found, return phrase for fallback
-      return {
-        match: null,
-        phrase: responsibilityPhrase,
-      };
+      return { match: null, phrase: responsibilityPhrase };
     }
   }
-  
+
+  // Block 2: Request-phrase patterns (run only when Block 1 found nothing)
+  // More specific patterns first; only return when matchResponsibility returns a hit
+  const requestPatterns: Array<{ pattern: RegExp; phraseIndex: number }> = [
+    { pattern: /(?:i\s+)?need\s+(?:a\s+)?contact\s+for\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?need\s+(?:a\s+)?person\s+for\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who\s+(?:do i|should i)\s+(?:contact|reach out to|talk to)\s+(?:for|about)\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who(?:'s|s)\s+responsible\s+for\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who\s+takes\s+care\s+of\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who\s+knows\s+about\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who\s+deals\s+with\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?want\s+to\s+(?:make|create|build|do|get)\s+(?:a\s+)?(?:new\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i'?m|i\s+am)\s+looking\s+for\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:find|get|show)\s+(?:me\s+)(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:can you|could you)\s+(?:find|get|show)\s+(?:me\s+)?(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /help\s+me\s+(?:find|get)\s+(?:(?:a\s+)?(?:someone\s+in\s+)?)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:get in touch with|reach out to)\s+(?:someone in\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:connect me with|connect me to|put me in touch with)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:intro to|introduce me to)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:point me to|direct me to)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i'?m\s+)?(?:trying\s+to\s+)?(?:find|get)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i'?m\s+)?searching\s+for\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:in\s+)?search\s+for\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:someone|somebody|anyone|anybody)\s+who\s+(?:can\s+(?:do|make|create|design|build)\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?need\s+(?:someone|somebody)\s+(?:to\s+(?:do|make|create|design|build)\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:do you\s+)?know\s+(?:anybody|anyone)\s+(?:who\s+(?:does|can do)\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /track\s+down\s+(?:our\s+|a\s+)?(.+?)(?:\s*(?:contact|person|team))?(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?need\s+to\s+(?:find|get)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?need\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+  ];
+
+  for (const { pattern, phraseIndex } of requestPatterns) {
+    const match = normalized.match(pattern);
+    if (!match || !match[phraseIndex]) continue;
+    const cleaned = cleanResponsibilityPhrase(match[phraseIndex]);
+    if (!cleaned) continue;
+    const matchResult = matchResponsibility(cleaned, RESPONSIBILITY_INDEX);
+    if (matchResult) {
+      const responsibility = RESPONSIBILITIES[matchResult.responsibilityId];
+      if (responsibility) {
+        return {
+          match: {
+            responsibilityId: matchResult.responsibilityId,
+            matchedAlias: matchResult.matchedAlias,
+            filters: responsibility.filters,
+          },
+          phrase: cleaned,
+        };
+      }
+    }
+  }
+
   return { match: null, phrase: null };
 }
 
@@ -2667,11 +2734,11 @@ export function parseSearchQueryToSchema(query: string): SearchQuery {
   // Add responsibility filters if found
   if (responsibilityResult.match) {
     const responsibility = responsibilityResult.match;
+    // Prefer department (more general) over specific roles for broader matching
+    // e.g. "marketing" matches "Marketing Director", "VP of Marketing", etc.
     if (responsibility.filters.departments && responsibility.filters.departments.length > 0) {
-      // Map first department to job_title (simplified)
       filters.job_title = responsibility.filters.departments[0];
-    }
-    if (responsibility.filters.roles && responsibility.filters.roles.length > 0) {
+    } else if (responsibility.filters.roles && responsibility.filters.roles.length > 0) {
       filters.job_title = responsibility.filters.roles[0];
     }
     if (responsibility.filters.tags && responsibility.filters.tags.length > 0) {
