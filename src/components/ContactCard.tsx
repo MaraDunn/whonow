@@ -136,6 +136,12 @@ const ContactCardComponent = function ContactCard({
   const handleCardClick = React.useCallback((e?: React.MouseEvent) => {
     if (isTrashView) return;
     
+    // In selection mode, clicking anywhere on the card toggles selection (checkbox uses stopPropagation)
+    if (selectionMode && onSelect) {
+      onSelect(!isSelected);
+      return;
+    }
+    
     // Prevent card click if dialog was just closed
     if (dialogJustClosed) {
       return;
@@ -161,7 +167,7 @@ const ContactCardComponent = function ContactCard({
         onEdit();
       }
     }
-  }, [isTrashView, compact, onToggleExpand, onView, onEdit]);
+  }, [isTrashView, selectionMode, onSelect, isSelected, compact, onToggleExpand, onView, onEdit]);
 
   // Compact mode for mobile/tablet - collapsed state
   if (compact && !isExpanded) {
