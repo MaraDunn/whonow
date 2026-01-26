@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
 import { DraggableContactCard } from "./DraggableContactCard";
@@ -6,6 +7,9 @@ import { Users, Trash2 } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { useResponsiveView } from "@/hooks/use-mobile";
+
+const VIRTUALIZE_THRESHOLD = 500;
+const ROW_HEIGHT_ESTIMATE = 200;
 
 interface ContactGridProps {
   contacts: Contact[];
@@ -35,6 +39,10 @@ interface ContactGridProps {
   hasClientAccess?: boolean;
   selectionMode?: boolean;
   onToggleSelectionMode?: () => void;
+  // Pagination: show "Load more" when there are more contacts for the current view
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 export function ContactGrid({ 
@@ -64,12 +72,25 @@ export function ContactGrid({
   hasClientAccess = false,
   selectionMode = false,
   onToggleSelectionMode,
+  hasMore = false,
+  onLoadMore,
+  isLoadingMore = false,
 }: ContactGridProps) {
   const responsiveView = useResponsiveView();
   const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
   
   // Track which contact is expanded in compact mode
   const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
+  
+  // Debug log to see what ContactGrid is receiving and rendering
+  useEffect(() => {
+    console.log('[ContactGrid] Render state:', {
+      contactsLength: contacts.length,
+      searchQuery,
+      isTrashView,
+      useVirtualized: contacts.length >= VIRTUALIZE_THRESHOLD && !isTrashView
+    });
+  }, [contacts.length, searchQuery, isTrashView]);
 
   // Memoize folder map for quick lookup - only recreate when folders change
   const folderMap = useMemo(() => 
@@ -96,6 +117,61 @@ export function ContactGrid({
     contacts.length > 0 && contacts.every(c => selectedContactIds.has(c.id)),
     [contacts, selectedContactIds]
   );
+
+  const useVirtualizedList = contacts.length >= VIRTUALIZE_THRESHOLD && !isTrashView;
+  const columns = isCompactMode ? 2 : 4;
+  const rowCount = useVirtualizedList ? Math.ceil(contacts.length / columns) : 0;
+  const parentRef = useRef<HTMLDivElement>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Start loading the next page as soon as the user scrolls near the bottom,
+  // so more contacts appear without waiting for a click.
+  useEffect(() => {
+    if (isTrashView || !hasMore || !onLoadMore) return;
+    const el = loadMoreSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (e?.isIntersecting && !isLoadingMore) onLoadMore();
+      },
+      { rootMargin: "200px", threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isTrashView, hasMore, onLoadMore, isLoadingMore]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT_ESTIMATE,
+    overscan: 3,
+    enabled: useVirtualizedList,
+  });
+
+  // Force virtualizer to measure when contacts change or virtualization toggles
+  useEffect(() => {
+    if (!useVirtualizedList) {
+      console.log('[ContactGrid] Not using virtualization');
+      return;
+    }
+    
+    console.log('[ContactGrid] Virtualization active, contacts:', contacts.length, 'rowCount:', rowCount);
+    
+    // Wait for next frame to ensure DOM is updated, then measure multiple times
+    // to ensure the virtualizer has valid measurements
+    requestAnimationFrame(() => {
+      rowVirtualizer.measure();
+      console.log('[ContactGrid] Initial measure done');
+      
+      // Measure again after a short delay to handle async layout
+      setTimeout(() => {
+        rowVirtualizer.measure();
+        const virtualItems = rowVirtualizer.getVirtualItems();
+        console.log('[ContactGrid] Second measure - virtual items:', virtualItems.length, 'totalSize:', rowVirtualizer.getTotalSize());
+      }, 50);
+    });
+  }, [useVirtualizedList, contacts.length, rowCount]);
 
   // Early return AFTER all hooks
   if (contacts.length === 0) {
@@ -140,35 +216,116 @@ export function ContactGrid({
           </Button>
         </div>
       )}
-      <div className={gridClasses}>
-        {contacts.map((contact, index) => (
-          <DraggableContactCard
-            key={contact.id}
-            contact={contact}
-            index={index}
-            action={action}
-            onEdit={() => onEditContact(contact)}
-            onView={onViewContact ? () => onViewContact(contact) : undefined}
-            isTrashView={isTrashView}
-            onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
-            onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
-            onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
-            folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
-            folders={folders}
-            onUpdateFolder={onUpdateFolder}
-            showOwnershipBadge={showOwnershipBadge}
-            onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
-            onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
-            hasClientAccess={hasClientAccess}
-            compact={isCompactMode}
-            isExpanded={expandedContactId === contact.id}
-            onToggleExpand={() => handleToggleExpand(contact.id)}
-            isSelected={selectedContactIds.has(contact.id)}
-            onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
-            selectionMode={selectionMode}
-          />
-        ))}
-      </div>
+      {useVirtualizedList ? (
+        <div
+          ref={parentRef}
+          className="overflow-auto rounded-lg border border-border/50"
+          style={{ height: "70vh", contain: "strict" }}
+        >
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {(() => {
+              const virtualItems = rowVirtualizer.getVirtualItems();
+              console.log('[ContactGrid] Rendering virtual items:', virtualItems.length, 'totalSize:', rowVirtualizer.getTotalSize());
+              return virtualItems.map((virtualRow) => {
+              const start = virtualRow.index * columns;
+              const rowContacts = contacts.slice(start, start + columns);
+              return (
+                <div
+                  key={virtualRow.key}
+                  className={gridClasses}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  {rowContacts.map((contact, index) => (
+                    <DraggableContactCard
+                      key={contact.id}
+                      contact={contact}
+                      index={start + index}
+                      action={action}
+                      onEdit={() => onEditContact(contact)}
+                      onView={onViewContact ? () => onViewContact(contact) : undefined}
+                      isTrashView={isTrashView}
+                      onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
+                      onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
+                      onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
+                      folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
+                      folders={folders}
+                      onUpdateFolder={onUpdateFolder}
+                      showOwnershipBadge={showOwnershipBadge}
+                      onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
+                      onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
+                      hasClientAccess={hasClientAccess}
+                      compact={isCompactMode}
+                      isExpanded={expandedContactId === contact.id}
+                      onToggleExpand={() => handleToggleExpand(contact.id)}
+                      isSelected={selectedContactIds.has(contact.id)}
+                      onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
+                      selectionMode={selectionMode}
+                    />
+                  ))}
+                </div>
+              );
+            });
+            })()}
+          </div>
+        </div>
+      ) : (
+        <div className={gridClasses}>
+          {contacts.map((contact, index) => (
+            <DraggableContactCard
+              key={contact.id}
+              contact={contact}
+              index={index}
+              action={action}
+              onEdit={() => onEditContact(contact)}
+              onView={onViewContact ? () => onViewContact(contact) : undefined}
+              isTrashView={isTrashView}
+              onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
+              onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
+              onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
+              folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
+              folders={folders}
+              onUpdateFolder={onUpdateFolder}
+              showOwnershipBadge={showOwnershipBadge}
+              onMarkContacted={onMarkContacted ? () => onMarkContacted(contact.id) : undefined}
+              onToggleClient={onToggleClient ? (isClient) => onToggleClient(contact.id, isClient) : undefined}
+              hasClientAccess={hasClientAccess}
+              compact={isCompactMode}
+              isExpanded={expandedContactId === contact.id}
+              onToggleExpand={() => handleToggleExpand(contact.id)}
+              isSelected={selectedContactIds.has(contact.id)}
+              onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
+              selectionMode={selectionMode}
+            />
+          ))}
+        </div>
+      )}
+      {hasMore && onLoadMore && !isTrashView && (
+        <>
+          <div ref={loadMoreSentinelRef} className="min-h-px w-full" aria-hidden />
+          <div className="mt-6 flex justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onLoadMore()}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? "Loading…" : "Load more"}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
