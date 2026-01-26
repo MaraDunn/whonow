@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { useResponsiveView } from "@/hooks/use-mobile";
 
 const VIRTUALIZE_THRESHOLD = 500;
-const ROW_HEIGHT_ESTIMATE = 200;
+// Must be at least as tall as one row of contact cards (avatar, name, metadata, phone, padding).
+// Too small causes the next row to be translateY'd too high and overlap.
+const ROW_HEIGHT_ESTIMATE = 280;
 
 interface ContactGridProps {
   contacts: Contact[];
@@ -141,12 +143,20 @@ export function ContactGrid({
     return () => observer.disconnect();
   }, [isTrashView, hasMore, onLoadMore, isLoadingMore]);
 
+  const useDynamicMeasurement =
+    typeof window === "undefined" || !navigator.userAgent.toLowerCase().includes("firefox");
+  // Match grid row gap: compact uses gap-2/gap-3 (8–12px), desktop uses gap-3/gap-4/gap-6 (12–24px)
+  const rowGapPx = isCompactMode ? 12 : 24;
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT_ESTIMATE,
     overscan: 3,
     enabled: useVirtualizedList,
+    gap: rowGapPx,
+    measureElement: useDynamicMeasurement
+      ? (el) => (el ? el.getBoundingClientRect().height : ROW_HEIGHT_ESTIMATE)
+      : undefined,
   });
 
   // Force virtualizer to measure when contacts change or virtualization toggles
@@ -238,6 +248,8 @@ export function ContactGrid({
               return (
                 <div
                   key={virtualRow.key}
+                  ref={useDynamicMeasurement ? rowVirtualizer.measureElement : undefined}
+                  data-index={virtualRow.index}
                   className={gridClasses}
                   style={{
                     position: "absolute",
