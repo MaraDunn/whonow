@@ -11,7 +11,7 @@ import { useResponsiveView } from "@/hooks/use-mobile";
 const VIRTUALIZE_THRESHOLD = 500;
 // Must be at least as tall as one row of contact cards (avatar, name, metadata, phone, padding).
 // Too small causes the next row to be translateY'd too high and overlap.
-const ROW_HEIGHT_ESTIMATE = 280;
+const ROW_HEIGHT_ESTIMATE = 300;
 
 interface ContactGridProps {
   contacts: Contact[];
@@ -155,7 +155,10 @@ export function ContactGrid({
     enabled: useVirtualizedList,
     gap: rowGapPx,
     measureElement: useDynamicMeasurement
-      ? (el) => (el ? el.getBoundingClientRect().height : ROW_HEIGHT_ESTIMATE)
+      ? (el) =>
+          el
+            ? Math.max(ROW_HEIGHT_ESTIMATE, el.getBoundingClientRect().height)
+            : ROW_HEIGHT_ESTIMATE
       : undefined,
   });
 
@@ -229,8 +232,8 @@ export function ContactGrid({
       {useVirtualizedList ? (
         <div
           ref={parentRef}
-          className="overflow-auto rounded-lg border border-border/50"
-          style={{ height: "70vh", contain: "strict" }}
+          className="overflow-auto rounded-lg"
+          style={{ height: "70vh" }}
         >
           <div
             style={{
