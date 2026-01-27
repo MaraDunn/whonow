@@ -11,7 +11,7 @@ import { useResponsiveView } from "@/hooks/use-mobile";
 const VIRTUALIZE_THRESHOLD = 500;
 // Match desktop card row height (28rem ≈ 448px) so virtualized rows don't overlap before measurement.
 const ROW_HEIGHT_ESTIMATE = 460;
-const DESKTOP_CARD_MIN_WIDTH_PX = 360;
+const DESKTOP_CARD_MIN_WIDTH_PX = 280; // Reduced to allow 3+ cards per row
 const DESKTOP_GRID_GAP_PX = 24;
 
 interface ContactGridProps {
@@ -144,7 +144,7 @@ export function ContactGrid({
   const gridClasses = useMemo(() => 
     isCompactMode
       ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 items-stretch"
-      : "grid w-full min-w-0 gap-4 sm:gap-5 lg:gap-6 items-stretch auto-rows-[28rem] grid-cols-[repeat(auto-fill,minmax(360px,1fr))]",
+      : "grid w-full min-w-0 gap-4 sm:gap-5 lg:gap-6 items-stretch auto-rows-[28rem] grid-cols-[repeat(auto-fill,minmax(280px,1fr))]",
     [isCompactMode]
   );
 
@@ -312,7 +312,7 @@ export function ContactGrid({
                     left: 0,
                     width: "100%",
                     transform: `translateY(${virtualRow.start}px)`,
-                    gridTemplateColumns: isCompactMode ? undefined : `repeat(${columns}, minmax(360px, 1fr))`,
+                    gridTemplateColumns: isCompactMode ? undefined : `repeat(${columns}, minmax(${DESKTOP_CARD_MIN_WIDTH_PX}px, 1fr))`,
                   }}
                 >
                   {rowContacts.map((contact, index) => (

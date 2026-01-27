@@ -183,62 +183,188 @@ const ContactCardComponent = function ContactCard({
 
   // Compact mode for mobile/tablet - collapsed state
   if (compact && !isExpanded) {
+    // Format role and company for secondary line
+    const roleCompanyText = contact.role && contact.company 
+      ? `${contact.role} · ${contact.company}`
+      : contact.role || contact.company || "No role";
+
     return (
       <div
         onClick={(e) => handleCardClick(e)}
         className={cn(
-          "group relative p-2 rounded-lg border transition-all duration-200 cursor-pointer animate-slide-up",
+          "group relative px-2 py-1.5 rounded border transition-colors cursor-pointer animate-slide-up",
           selectionMode 
             ? isSelected 
-              ? "border-primary bg-primary/5 shadow-md" 
-              : "border-border bg-card shadow-sm"
-            : "border-border bg-card shadow-sm hover:shadow-md hover:border-primary/30"
+              ? "border-primary bg-primary/5" 
+              : "border-border bg-card"
+            : "border-border bg-card hover:border-primary/50 hover:bg-accent/30"
         )}
         style={{ animationDelay: `${index * 20}ms` }}
       >
         {/* Selection checkbox */}
         {selectionMode && onSelect && (
-          <div className="absolute top-1.5 right-1.5 z-10" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute top-1 right-1 z-10" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={isSelected}
               onCheckedChange={(checked) => onSelect(checked === true)}
-              className="h-3.5 w-3.5"
+              className="h-3 w-3"
             />
           </div>
         )}
-        <div className="flex items-center gap-2">
-          {/* Avatar */}
-          <div className="relative flex-shrink-0">
-            <div className="w-8 h-8 rounded-md overflow-hidden gradient-hero flex items-center justify-center text-primary-foreground font-display font-medium text-xs">
+        
+        {/* Row 1: Avatar + Name + Actions */}
+        <div className="flex items-center gap-2 min-h-[20px]">
+          {/* Avatar - minimal size */}
+          <div className="flex-shrink-0">
+            <div className="w-8 h-8 rounded overflow-hidden gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-xs">
               {initials}
             </div>
           </div>
 
-          {/* Name and Company */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1">
-              <div className="min-w-0 flex-1 overflow-hidden" style={{ height: NAME_BLOCK_H_COMPACT }}>
-                <h3 className="font-display font-medium text-xs text-foreground line-clamp-2 break-words" title={contact.name}>
-                  {contact.name}
-                </h3>
-              </div>
-              {isCurrentUser && (
-                <User className="h-2.5 w-2.5 text-primary flex-shrink-0" aria-label="You" />
+          {/* Name - truncated */}
+          <h3 className="flex-1 min-w-0 font-display font-medium text-xs text-foreground truncate leading-tight" title={contact.name}>
+            {contact.name}
+          </h3>
+
+          {/* Quick Action Buttons - icon only, minimal */}
+          {!isTrashView && (onMarkContacted || onToggleClient) && (
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              {onMarkContacted && (
+                hasClientAccess ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMarkContacted();
+                    }}
+                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                    title="Mark as contacted"
+                  >
+                    <Clock className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <LockedFeatureButton feature="client_management" minimumTier="pro">
+                    <button
+                      className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground/40"
+                      title="Mark as contacted (Pro)"
+                    >
+                      <Clock className="h-3 w-3" />
+                    </button>
+                  </LockedFeatureButton>
+                )
               )}
-              {contact.isClient && (
-                <Star className="h-2.5 w-2.5 text-amber-500 fill-amber-500 flex-shrink-0" />
-              )}
-              {isInternal && (
-                <Building2 className="h-2.5 w-2.5 text-muted-foreground flex-shrink-0" aria-label="Internal" />
+              {onToggleClient && (
+                hasClientAccess ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleClient(!contact.isClient);
+                    }}
+                    className={cn(
+                      "w-5 h-5 flex items-center justify-center rounded hover:bg-accent transition-colors",
+                      contact.isClient ? "text-amber-600" : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title={contact.isClient ? "Unmark client" : "Mark as client"}
+                  >
+                    <Star className={cn("h-3 w-3", contact.isClient && "fill-current")} />
+                  </button>
+                ) : (
+                  <LockedFeatureButton feature="client_management" minimumTier="pro">
+                    <button
+                      className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground/40"
+                      title="Mark as client (Pro)"
+                    >
+                      <Star className="h-3 w-3" />
+                    </button>
+                  </LockedFeatureButton>
+                )
               )}
             </div>
-            <p className="text-[10px] text-muted-foreground truncate">
-              {contact.company}
-            </p>
-          </div>
+          )}
 
           {/* Expand indicator */}
-          <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground/60 flex-shrink-0" />
+        </div>
+
+        {/* Row 2: Role · Company (always same height) */}
+        <div className="ml-10 min-h-[14px] flex items-center">
+          <p className={cn(
+            "text-[10px] truncate leading-tight",
+            !contact.role && !contact.company ? "text-muted-foreground/40 italic" : "text-muted-foreground"
+          )}>
+            {roleCompanyText}
+          </p>
+        </div>
+
+        {/* Row 3: Contact info + Tags (single line, no wrap) */}
+        <div className="ml-10 mt-0.5 flex items-center gap-1.5 text-[10px] min-h-[16px]">
+          {/* Contact info - extremely compact */}
+          <div className="flex items-center gap-1 min-w-0 flex-shrink">
+            {contact.phone ? (
+              <a
+                href={`tel:${contact.phone}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-0.5 text-muted-foreground hover:text-primary transition-colors truncate max-w-[80px]"
+                title={contact.phone}
+              >
+                <Phone className="h-2.5 w-2.5 flex-shrink-0" />
+                <span className="truncate">{contact.phone}</span>
+              </a>
+            ) : (
+              <span className="flex items-center gap-0.5 text-muted-foreground/30 italic text-[9px]">
+                <Phone className="h-2.5 w-2.5 flex-shrink-0" />
+                <span className="whitespace-nowrap">No phone</span>
+              </span>
+            )}
+            
+            <span className="text-muted-foreground/30 text-[8px]">•</span>
+            
+            {contact.email ? (
+              <a
+                href={`mailto:${contact.email}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-0.5 text-muted-foreground hover:text-primary transition-colors truncate max-w-[100px]"
+                title={contact.email}
+              >
+                <Mail className="h-2.5 w-2.5 flex-shrink-0" />
+                <span className="truncate">{contact.email}</span>
+              </a>
+            ) : (
+              <span className="flex items-center gap-0.5 text-muted-foreground/30 italic text-[9px]">
+                <Mail className="h-2.5 w-2.5 flex-shrink-0" />
+                <span className="whitespace-nowrap">No email</span>
+              </span>
+            )}
+          </div>
+
+          {/* Status Tags - icon only, minimal padding */}
+          <div className="flex items-center gap-0.5 flex-shrink-0 ml-auto">
+            {isInternal && (
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-muted/50 text-muted-foreground" title="Internal">
+                <Building2 className="h-2.5 w-2.5" />
+              </span>
+            )}
+            {contact.isClient && (
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-amber-500/10 text-amber-600" title="Client">
+                <Star className="h-2.5 w-2.5 fill-current" />
+              </span>
+            )}
+            {showOwnershipBadge && (
+              contact.isShared ? (
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-accent/50 text-accent-foreground" title="Shared">
+                  <Users className="h-2.5 w-2.5" />
+                </span>
+              ) : (
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-secondary/50 text-secondary-foreground" title="Personal">
+                  <UserCircle className="h-2.5 w-2.5" />
+                </span>
+              )
+            )}
+            {!lastContactedText && (
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-orange-500/10 text-orange-600" title="Never contacted">
+                <Clock className="h-2.5 w-2.5" />
+              </span>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -503,9 +629,10 @@ const ContactCardComponent = function ContactCard({
   // Full desktop card — strictly fits grid cell (CARD_H_DESKTOP); no overlap with other cards or internal overlap
   return (
     <div
+      data-onboarding-contact-card={index === 0 ? "" : undefined}
       onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
       className={cn(
-        "group relative p-4 sm:p-6 rounded-xl sm:rounded-2xl border transition-all duration-300 cursor-pointer flex flex-col overflow-hidden box-border h-full max-h-full min-h-0",
+        "group relative p-5 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col overflow-hidden box-border h-full max-h-full min-h-0",
         selectionMode 
           ? isSelected 
             ? "border-primary bg-primary/5 shadow-md" 
@@ -630,55 +757,25 @@ const ContactCardComponent = function ContactCard({
               {contact.name}
             </h3>
           </div>
-          {contact.role && (
-            <p className="text-sm text-muted-foreground flex items-center gap-1.5 min-w-0 mt-3 shrink-0 overflow-hidden">
-              <Briefcase className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{contact.role}</span>
-            </p>
-          )}
-          {isCurrentUser && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium w-fit mt-3 shrink-0" title="Your profile">
-              <User className="h-3 w-3 shrink-0" />
-              You
-            </span>
-          )}
-          {/* Client, Internal, Shared/Personal, Never contacted — 2x2 grid; never clipped, full text visible */}
-          <div className="shrink-0 mt-3 grid gap-x-2 gap-y-2 w-full min-w-0 items-center overflow-visible" style={{ gridTemplateColumns: "minmax(min-content, 1fr) minmax(min-content, 1fr)" }}>
-            {contact.isClient ? (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium shrink-0 w-fit">
-                <Star className="h-3 w-3 fill-current shrink-0" />
-                Client
-              </span>
+          
+          {/* Role - always reserve space */}
+          <div className="flex items-center gap-1.5 min-w-0 mt-3 shrink-0 overflow-hidden" style={{ minHeight: '20px' }}>
+            <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {contact.role ? (
+              <span className="text-sm text-foreground truncate">{contact.role}</span>
             ) : (
-              <span className="min-h-[1.75rem]" aria-hidden />
+              <span className="text-sm text-muted-foreground/40 italic">No role</span>
             )}
-            {isInternal ? (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium shrink-0 w-fit" title="Team member">
-                <Building2 className="h-3 w-3 shrink-0" />
-                Internal
-              </span>
+          </div>
+          
+          {/* Timestamp / metadata - always reserve space */}
+          <div className="flex items-center gap-1.5 min-w-0 mt-2 shrink-0" style={{ minHeight: '20px' }}>
+            <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {lastContactedText ? (
+              <span className="text-sm text-muted-foreground">{lastContactedText}</span>
             ) : (
-              <span className="min-h-[1.75rem]" aria-hidden />
+              <span className="text-sm text-muted-foreground/40 italic">Never contacted</span>
             )}
-            {showOwnershipBadge ? (
-              contact.isShared ? (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium shrink-0 w-fit">
-                  <Users className="h-3 w-3 shrink-0" />
-                  Shared
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs font-medium shrink-0 w-fit">
-                  <UserCircle className="h-3 w-3 shrink-0" />
-                  Personal
-                </span>
-              )
-            ) : (
-              <span className="min-h-[1.75rem]" aria-hidden />
-            )}
-            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium w-fit min-w-0 ${lastContactedText ? "bg-muted/80 text-muted-foreground" : "bg-orange-500/10 text-orange-600 dark:text-orange-400"}`}>
-              <Clock className="h-3 w-3 shrink-0 flex-shrink-0" />
-              <span className="break-words line-clamp-2">{lastContactedText || "Never contacted"}</span>
-            </span>
           </div>
         </div>
 
@@ -698,75 +795,84 @@ const ContactCardComponent = function ContactCard({
         )}
       </div>
 
-      {/* Contact details — flex-1 + overflow-y-auto so card stays fixed height and details scroll when needed */}
+      {/* Contact details — always show all rows to maintain consistent layout */}
       {!isTrashView && (
-        <div className="mt-5 space-y-2.5 flex-1 min-h-0 overflow-y-auto">
-          {contact.email && (
-            <a
-              href={`mailto:${contact.email}`}
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/email"
-            >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/email:bg-primary/10 transition-colors">
-                <Mail className="h-4 w-4 text-secondary-foreground group-hover/email:text-primary" />
-              </div>
-              <span className="truncate hover:underline">{contact.email}</span>
-            </a>
-          )}
+        <div className="mt-6 space-y-3 flex-1 min-h-0">
+          {/* Phone row - always present */}
+          <div className="flex items-center gap-2 min-w-0" style={{ minHeight: '24px' }}>
+            <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {contact.phone ? (
+              <a
+                href={`tel:${contact.phone}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-sm text-foreground hover:text-primary transition-colors truncate"
+              >
+                {contact.phone}
+              </a>
+            ) : (
+              <span className="text-sm text-muted-foreground/40 italic">No phone</span>
+            )}
+          </div>
 
-          {contact.phone && (
-            <a
-              href={`tel:${contact.phone}`}
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-3 text-sm text-foreground hover:text-primary transition-colors group/phone min-w-0"
-            >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary group-hover/phone:bg-primary/10 transition-colors shrink-0">
-                <Phone className="h-4 w-4 text-secondary-foreground group-hover/phone:text-primary" />
-              </div>
-              <span className="truncate hover:underline">{contact.phone}</span>
-            </a>
-          )}
+          {/* Email row - always present */}
+          <div className="flex items-center gap-2 min-w-0" style={{ minHeight: '24px' }}>
+            <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {contact.email ? (
+              <a
+                href={`mailto:${contact.email}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-sm text-foreground hover:text-primary transition-colors truncate"
+              >
+                {contact.email}
+              </a>
+            ) : (
+              <span className="text-sm text-muted-foreground/40 italic">No email</span>
+            )}
+          </div>
 
-          {contact.company && (
-            <div className="flex items-center gap-3 text-sm text-foreground min-w-0">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary shrink-0">
-                <Building2 className="h-4 w-4 text-secondary-foreground" />
-              </div>
-              <span className="truncate">{contact.company}</span>
-            </div>
-          )}
+          {/* Company row - always present */}
+          <div className="flex items-center gap-2 min-w-0" style={{ minHeight: '24px' }}>
+            <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {contact.company ? (
+              <span className="text-sm text-foreground truncate">{contact.company}</span>
+            ) : (
+              <span className="text-sm text-muted-foreground/40 italic">No company</span>
+            )}
+          </div>
         </div>
       )}
 
       {/* Action buttons row - show for non-trash view */}
       {!isTrashView && (onMarkContacted || onToggleClient) && (
-        <div className="mt-4 flex flex-wrap gap-2 shrink-0 pt-1">
+        <div className="mt-8 flex gap-2 shrink-0">
           {onToggleClient && (
             hasClientAccess ? (
               <Button
                 variant={contact.isClient ? "default" : "outline"}
-                size="sm"
+                size="default"
                 className={cn(
-                  "flex-1 text-xs px-2 py-1.5 min-w-0 justify-center",
-                  contact.isClient && "bg-amber-500 hover:bg-amber-600 text-white"
+                  "flex-1 text-sm h-10 px-4 min-w-0 justify-center rounded-full font-medium",
+                  contact.isClient 
+                    ? "bg-amber-500 hover:bg-amber-600 text-white border-0" 
+                    : "border-border text-foreground"
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleClient(!contact.isClient);
                 }}
               >
-                <Star className={cn("h-3 w-3 mr-1.5 flex-shrink-0", contact.isClient && "fill-current")} />
-                <span className="truncate text-center">Client</span>
+                <Star className={cn("h-4 w-4 mr-2 flex-shrink-0", contact.isClient && "fill-current")} />
+                <span className="truncate">Client</span>
               </Button>
             ) : (
               <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="w-full text-xs px-2 py-1.5 opacity-70 justify-center"
+                  size="default"
+                  className="w-full text-sm h-10 px-4 opacity-70 justify-center rounded-full border-border text-foreground"
                 >
-                  <Star className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                  <span className="truncate text-center">Client</span>
+                  <Star className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">Client</span>
                 </Button>
               </LockedFeatureButton>
             )
@@ -775,31 +881,32 @@ const ContactCardComponent = function ContactCard({
             hasClientAccess ? (
               <Button
                 variant="outline"
-                size="sm"
-                className="flex-1 text-xs px-3 py-1.5 min-w-0 justify-center"
+                size="default"
+                className="flex-1 text-sm h-10 px-4 min-w-0 justify-center rounded-full border-border text-muted-foreground font-medium"
                 onClick={(e) => {
                   e.stopPropagation();
                   onMarkContacted();
                 }}
               >
-                <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                <span className="whitespace-nowrap">Contacted</span>
+                <Clock className="h-4 w-4 mr-2 flex-shrink-0 text-muted-foreground" />
+                <span className="truncate">Contacted</span>
               </Button>
             ) : (
               <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="w-full text-xs px-3 py-1.5 opacity-70 justify-center"
+                  size="default"
+                  className="w-full text-sm h-10 px-4 opacity-70 justify-center rounded-full border-border text-muted-foreground"
                 >
-                  <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                  <span className="whitespace-nowrap">Contacted</span>
+                  <Clock className="h-4 w-4 mr-2 flex-shrink-0 text-muted-foreground" />
+                  <span className="truncate">Contacted</span>
                 </Button>
               </LockedFeatureButton>
             )
           )}
         </div>
       )}
+
 
       {/* Trash view actions */}
       {isTrashView && (
