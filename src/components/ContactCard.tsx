@@ -758,6 +758,16 @@ const ContactCardComponent = function ContactCard({
             </h3>
           </div>
           
+          {/* Company - always reserve space, appears directly under name */}
+          <div className="flex items-center gap-1.5 min-w-0 mt-2 shrink-0 overflow-hidden" style={{ minHeight: '20px' }}>
+            <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {contact.company ? (
+              <span className="text-sm text-foreground truncate">{contact.company}</span>
+            ) : (
+              <span className="text-sm text-muted-foreground/40 italic">No company</span>
+            )}
+          </div>
+          
           {/* Role - always reserve space */}
           <div className="flex items-center gap-1.5 min-w-0 mt-3 shrink-0 overflow-hidden" style={{ minHeight: '20px' }}>
             <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -777,6 +787,23 @@ const ContactCardComponent = function ContactCard({
               <span className="text-sm text-muted-foreground/40 italic">Never contacted</span>
             )}
           </div>
+          
+          {/* Shared/Personal badge - show if enabled */}
+          {showOwnershipBadge && (
+            <div className="mt-2 shrink-0">
+              {contact.isShared ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent/50 text-accent-foreground text-xs font-medium" title="Shared contact">
+                  <Users className="h-3 w-3 shrink-0" />
+                  Shared
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary/50 text-secondary-foreground text-xs font-medium" title="Personal contact">
+                  <UserCircle className="h-3 w-3 shrink-0" />
+                  Personal
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Delete button for non-trash view */}
@@ -827,16 +854,6 @@ const ContactCardComponent = function ContactCard({
               </a>
             ) : (
               <span className="text-sm text-muted-foreground/40 italic">No email</span>
-            )}
-          </div>
-
-          {/* Company row - always present */}
-          <div className="flex items-center gap-2 min-w-0" style={{ minHeight: '24px' }}>
-            <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-            {contact.company ? (
-              <span className="text-sm text-foreground truncate">{contact.company}</span>
-            ) : (
-              <span className="text-sm text-muted-foreground/40 italic">No company</span>
             )}
           </div>
         </div>
