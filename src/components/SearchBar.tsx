@@ -56,7 +56,7 @@ export function SearchBar({ value, onChange, placeholder = "Search contacts...",
   };
 
   return (
-    <div className="relative w-full max-w-2xl mx-auto group min-w-0">
+    <div className="relative w-full group min-w-0" data-onboarding-search>
       <div className="absolute inset-0 rounded-xl sm:rounded-2xl gradient-hero opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500" />
       <div className="relative flex items-center min-w-0">
         {isLoading ? (
