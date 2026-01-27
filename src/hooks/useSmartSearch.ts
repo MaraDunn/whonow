@@ -183,6 +183,36 @@ export function useSmartSearch(
     };
   }, [query, user?.id, hasActiveQuery]);
 
+  // Update search results when contacts change (for optimistic updates)
+  useEffect(() => {
+    if (hasActiveQuery && Array.isArray(searchResults) && searchResults.length > 0 && Array.isArray(contacts)) {
+      // Create a map of updated contacts for quick lookup
+      const contactsMap = new Map(contacts.map(c => [c.id, c]));
+      
+      // Update any contacts in search results that have been updated in the base contacts
+      const updatedSearchResults = searchResults.map(resultContact => {
+        if (!resultContact || !resultContact.id) return resultContact;
+        const updatedContact = contactsMap.get(resultContact.id);
+        // If contact exists in base contacts, merge any updates (especially isClient)
+        if (updatedContact) {
+          return { ...resultContact, ...updatedContact };
+        }
+        return resultContact;
+      });
+      
+      // Only update if there are actual changes
+      const hasChanges = updatedSearchResults.some((contact, index) => {
+        const original = searchResults[index];
+        return !original || contact?.isClient !== original?.isClient;
+      });
+      
+      if (hasChanges) {
+        setSearchResults(updatedSearchResults);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contacts, hasActiveQuery]);
+
   // When there's no search query, ALWAYS return the input contacts directly
   // When there is a query, return the search results
   // This ensures clearing the search immediately shows the full list without state sync issues

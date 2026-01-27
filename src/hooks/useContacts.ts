@@ -1,10 +1,17 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Contact } from "@/types/contact";
+import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { normalizeEmail, normalizePhone, findDuplicateContacts } from "@/utils/duplicateDetection";
+
+/** First page size: smaller so first paint is fast. */
+const CONTACTS_INITIAL_PAGE_SIZE = 24;
+/** Page size for "load more" (and used to detect has-next). */
+const CONTACTS_PAGE_SIZE = 50;
+const CONTACTS_STALE_TIME_MS = 120_000;
 
 type DbContact = {
   id: string;
@@ -58,6 +65,7 @@ const mapDbToContact = (db: DbContact): ContactWithMeta => ({
   ownerId: db.owner_id || undefined,
   lastContactedAt: db.last_contacted_at || undefined,
   isClient: db.is_client || false,
+  companyId: db.company_id || undefined,
   createdAt: db.created_at || undefined, // Include timestamp for time-based searches
   address: db.address || undefined,
   city: db.city || undefined,
@@ -99,10 +107,20 @@ const mapContactToDb = (
   business_type: contact.businessType || null,
 });
 
-export const useContacts = () => {
+export type UseContactsListOptions = {
+  folderId?: string | null;
+  showClientDirectory?: boolean;
+  ownershipFilter?: ContactOwnershipFilter;
+};
+
+export const useContacts = (options?: UseContactsListOptions) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
+
+  const folderId = options?.folderId ?? null;
+  const showClientDirectory = options?.showClientDirectory ?? false;
+  const ownershipFilter = options?.ownershipFilter ?? "all";
 
   // Fetch total count of active contacts (not limited by 1000 row default)
   // Exclude "my-profile" contacts to match the contacts array filtering
@@ -177,31 +195,93 @@ export const useContacts = () => {
     enabled: !!user,
   });
 
-  // Fetch active contacts (not deleted)
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["contacts", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("contacts")
-        .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+  // Cursor for list_contacts_slim RPC keyset pagination.
+  type ListCursor = { created_at: string; id: string } | null;
 
+  // Fetch active contacts via list_contacts_slim (slim payload = faster load more).
+  const {
+    data: listData,
+    isLoading,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+    isError: isListError,
+    refetch: refetchList,
+  } = useInfiniteQuery({
+    queryKey: ["contacts", "list", user?.id, folderId, showClientDirectory, ownershipFilter],
+    queryFn: async ({ pageParam }: { pageParam: ListCursor }) => {
+      if (!user?.id) return [];
+      const limit = pageParam === null ? CONTACTS_INITIAL_PAGE_SIZE : CONTACTS_PAGE_SIZE;
+      const { data, error } = await supabase.rpc("list_contacts_slim", {
+        _user_id: user.id,
+        _cursor_created_at: pageParam?.created_at ?? null,
+        _cursor_id: pageParam?.id ?? null,
+        _limit: limit,
+        _folder_id: folderId ?? null,
+        _client_only: showClientDirectory ?? false,
+        _ownership_filter: ownershipFilter,
+      });
       if (error) throw error;
-      // Filter out contacts with "my-profile" tag (profile contact cards)
-      // Optimize: filter during map to avoid second pass
-      const contacts: ContactWithMeta[] = [];
-      for (const dbContact of data as DbContact[]) {
-        const contact = mapDbToContact(dbContact);
-        // Only add if not a profile contact
-        if (!contact.tags?.includes("my-profile")) {
-          contacts.push(contact);
-        }
+      const out: ContactWithMeta[] = [];
+      for (const row of (data ?? []) as Record<string, unknown>[]) {
+        const contact = mapDbToContact({ ...row } as DbContact);
+        if (!contact.tags?.includes("my-profile")) out.push(contact);
       }
-      return contacts;
+      return out;
+    },
+    initialPageParam: null as ListCursor,
+    getNextPageParam: (lastPage, allPages): ListCursor => {
+      const isFirstPage = allPages.length === 1;
+      const pageSize = isFirstPage ? CONTACTS_INITIAL_PAGE_SIZE : CONTACTS_PAGE_SIZE;
+      if (lastPage.length < pageSize) return undefined;
+      const last = lastPage[lastPage.length - 1];
+      const created_at = last.createdAt;
+      if (!created_at || !last.id) return undefined;
+      return { created_at, id: last.id };
     },
     enabled: !!user,
+    staleTime: CONTACTS_STALE_TIME_MS,
+    placeholderData: keepPreviousData,
   });
+
+  const flatPages = (listData?.pages ?? []).flat() as ContactWithMeta[];
+  const lastKnownGoodRef = useRef<ContactWithMeta[]>([]);
+  if (flatPages.length > 0) lastKnownGoodRef.current = flatPages;
+  // Never show fewer contacts than we've already loaded (avoids grid clearing on fetch error or race).
+  const contacts: ContactWithMeta[] = useMemo(() => {
+    if (flatPages.length > 0) return flatPages;
+    if (lastKnownGoodRef.current.length > 0) return lastKnownGoodRef.current;
+    return flatPages;
+  }, [flatPages]);
+
+  const loadMoreContacts = useCallback(() => {
+    fetchNextPage();
+  }, [fetchNextPage]);
+
+  // Fetch full contact by id (for detail view when list only has slim rows).
+  const getContactById = useCallback(
+    async (id: string): Promise<ContactWithMeta | null> => {
+      const { data, error } = await supabase.from("contacts").select("*").eq("id", id).single();
+      if (error || !data) return null;
+      return mapDbToContact(data as DbContact);
+    },
+    []
+  );
+
+  // Prefetch the next page as soon as we have data and there is more to load,
+  // so "Load more" feels instant (data is often already in cache).
+  useEffect(() => {
+    const pageCount = listData?.pages?.length ?? 0;
+    if (pageCount >= 1 && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [listData?.pages?.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  useEffect(() => {
+    if (isListError) {
+      toast.error("Failed to load contacts. Try refreshing.");
+    }
+  }, [isListError]);
 
   // Fetch count of trashed contacts (accurate count, not limited by 1000)
   const { data: trashCount = 0 } = useQuery({
@@ -721,11 +801,63 @@ export const useContacts = () => {
         .eq("id", id);
       if (error) throw error;
     },
+    onMutate: async ({ id, isClient }) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ["contacts"] });
+
+      // Snapshot the previous value
+      const previousContacts = queryClient.getQueriesData({ queryKey: ["contacts"] });
+
+      // Optimistically update the contact in all contact queries
+      queryClient.setQueriesData<{ pages?: Array<{ data?: Contact[] }> } | Contact[]>(
+        { queryKey: ["contacts"] },
+        (old) => {
+          if (!old) return old;
+          
+          // Handle infinite query structure (pages array)
+          if (old && typeof old === 'object' && 'pages' in old && Array.isArray(old.pages)) {
+            return {
+              ...old,
+              pages: old.pages.map((page) => {
+                if (!page || !page.data || !Array.isArray(page.data)) {
+                  return page;
+                }
+                return {
+                  ...page,
+                  data: page.data.map((contact) =>
+                    contact?.id === id ? { ...contact, isClient } : contact
+                  ),
+                };
+              }),
+            };
+          }
+          
+          // Handle array structure (direct contacts array)
+          if (Array.isArray(old)) {
+            return old.map((contact) =>
+              contact?.id === id ? { ...contact, isClient } : contact
+            );
+          }
+          
+          return old;
+        }
+      );
+
+      return { previousContacts };
+    },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       toast.success(variables.isClient ? "Marked as client" : "Removed from clients");
     },
-    onError: (error) => {
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousContacts && Array.isArray(context.previousContacts)) {
+        context.previousContacts.forEach(([queryKey, data]) => {
+          if (queryKey && data !== undefined) {
+            queryClient.setQueryData(queryKey, data);
+          }
+        });
+      }
       toast.error("Failed to update contact: " + error.message);
     },
   });
@@ -855,6 +987,10 @@ export const useContacts = () => {
     clientCount,
     isLoading,
     trashLoading,
+    hasMoreContacts: hasNextPage ?? false,
+    loadMoreContacts,
+    isLoadingMoreContacts: isFetchingNextPage,
+    refetchContacts: refetchList,
     addContact: addContact.mutate,
     updateContact: updateContact.mutate,
     deleteContact: deleteContact.mutate,

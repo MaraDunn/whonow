@@ -13,6 +13,7 @@ import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
 import { SelectionToolbar } from "@/components/SelectionToolbar";
+import { OnboardingTutorial } from "@/components/OnboardingTutorial";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { useTeamDirectoryContacts } from "@/hooks/useTeamDirectoryContacts";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { onboardingSteps } from "@/config/onboardingSteps";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 
@@ -34,10 +36,11 @@ const IndexContent = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
+  const { profile, needsCompanySetup, needsOnboarding, createCompany, joinCompany, skipCompanySetup, completeOnboarding, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
   const { canAccessFeature } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -71,7 +74,10 @@ const IndexContent = () => {
     personalContactsCount: accuratePersonalCount,
     sharedContactsCount: accurateSharedCount,
     clientCount: accurateClientCount,
-    isLoading: contactsLoading, 
+    isLoading: contactsLoading,
+    hasMoreContacts,
+    loadMoreContacts,
+    isLoadingMoreContacts,
     addContact, 
     updateContact,
     deleteContact,
@@ -86,7 +92,11 @@ const IndexContent = () => {
     totalCount,
     bulkDeleteContacts,
     bulkMoveToFolder,
-  } = useContacts();
+  } = useContacts({
+    folderId: selectedFolderId,
+    showClientDirectory,
+    ownershipFilter,
+  });
   const { 
     folders, 
     organizationFolders, 
@@ -99,6 +109,22 @@ const IndexContent = () => {
     deleteFolder 
   } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
+
+  // Show onboarding tutorial for new users (after company setup is complete)
+  useEffect(() => {
+    // Only show onboarding if:
+    // 1. User profile is loaded
+    // 2. User needs onboarding
+    // 3. Company setup is not in progress (needsCompanySetup is false)
+    // 4. Not already showing onboarding
+    if (profile && needsOnboarding && !needsCompanySetup && !showOnboarding) {
+      // Delay slightly to let the UI settle
+      const timer = setTimeout(() => {
+        setShowOnboarding(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [profile, needsOnboarding, needsCompanySetup, showOnboarding]);
 
   // Handle OAuth callback redirects (e.g., from Slack)
   useEffect(() => {
@@ -122,26 +148,39 @@ const IndexContent = () => {
     }
   }, [searchParams, setSearchParams]);
 
-  // Filter contacts by folder and ownership
+  // Client directory: only clients, sorted by selected sort option.
+  // When showClientDirectory is true, useContacts already returns client-only list; this applies sort.
+  const clientDirectoryContacts = useMemo(() => {
+    const clientsOnly = contacts.filter(c => c.isClient);
+    return [...clientsOnly].sort((a, b) => {
+      switch (clientSortOption) {
+        case "oldest-contacted":
+          if (!a.lastContactedAt && !b.lastContactedAt) return 0;
+          if (!a.lastContactedAt) return -1;
+          if (!b.lastContactedAt) return 1;
+          return new Date(a.lastContactedAt).getTime() - new Date(b.lastContactedAt).getTime();
+        case "newest-contacted":
+          if (!a.lastContactedAt && !b.lastContactedAt) return 0;
+          if (!a.lastContactedAt) return 1;
+          if (!b.lastContactedAt) return -1;
+          return new Date(b.lastContactedAt).getTime() - new Date(a.lastContactedAt).getTime();
+        case "oldest-added":
+          return a.id.localeCompare(b.id);
+        case "newest-added":
+          return b.id.localeCompare(a.id);
+        default:
+          return 0;
+      }
+    });
+  }, [contacts, clientSortOption]);
+
+  // List to show: trash, client directory (sorted), or main contacts list.
+  // useContacts already returns the server-filtered list for (folderId, showClientDirectory, ownershipFilter).
   const folderFilteredContacts = useMemo(() => {
     if (showTrash) return trashedContacts;
-    
-    let filtered = contacts;
-    
-    // Apply ownership filter for company users
-    if (company && ownershipFilter !== "all") {
-      filtered = filtered.filter(c => 
-        ownershipFilter === "shared" ? c.isShared : !c.isShared
-      );
-    }
-    
-    // Apply folder filter
-    if (selectedFolderId !== null) {
-      filtered = filtered.filter(c => c.folderId === selectedFolderId);
-    }
-    
-    return filtered;
-  }, [contacts, trashedContacts, selectedFolderId, showTrash, ownershipFilter, company]);
+    if (showClientDirectory) return clientDirectoryContacts;
+    return contacts;
+  }, [showTrash, trashedContacts, showClientDirectory, clientDirectoryContacts, contacts]);
 
   // Use accurate counts from database functions (fallback to array length if not available)
   // Only compute fallback if needed (when accurate count is 0 or unavailable)
@@ -157,35 +196,6 @@ const IndexContent = () => {
   
   const personalContactsCount = accuratePersonalCount > 0 ? accuratePersonalCount : fallbackPersonalCount;
   const sharedContactsCount = accurateSharedCount > 0 ? accurateSharedCount : fallbackSharedCount;
-
-  // Client directory: only clients, sorted based on selected sort option
-  const clientDirectoryContacts = useMemo(() => {
-    const clientsOnly = contacts.filter(c => c.isClient);
-    return [...clientsOnly].sort((a, b) => {
-      switch (clientSortOption) {
-        case "oldest-contacted":
-          // Never contacted first, then oldest contacted
-          if (!a.lastContactedAt && !b.lastContactedAt) return 0;
-          if (!a.lastContactedAt) return -1;
-          if (!b.lastContactedAt) return 1;
-          return new Date(a.lastContactedAt).getTime() - new Date(b.lastContactedAt).getTime();
-        case "newest-contacted":
-          // Most recently contacted first, never contacted last
-          if (!a.lastContactedAt && !b.lastContactedAt) return 0;
-          if (!a.lastContactedAt) return 1;
-          if (!b.lastContactedAt) return -1;
-          return new Date(b.lastContactedAt).getTime() - new Date(a.lastContactedAt).getTime();
-        case "oldest-added":
-          // Oldest added first (we don't have createdAt on Contact type, so use id order as proxy)
-          return a.id.localeCompare(b.id);
-        case "newest-added":
-          // Most recently added first
-          return b.id.localeCompare(a.id);
-        default:
-          return 0;
-      }
-    });
-  }, [contacts, clientSortOption]);
 
   // Count of clients for sidebar - use accurate count from database function
   // Only compute fallback if needed
@@ -203,9 +213,21 @@ const IndexContent = () => {
     return teamContacts;
   }, [teamContacts, selectedTeamFolderId]);
 
+  // Emails of internal/team members — used to show "Internal" badge on contact cards in All Contacts and Client Directory
+  const internalContactEmails = useMemo(
+    () => new Set(teamContacts.map((c) => (c.email || "").toLowerCase().trim()).filter(Boolean)),
+    [teamContacts]
+  );
+  // User ids of team members — contacts owned by any of these (e.g. imported by you or a colleague) show "Internal"
+  const internalContactOwnerIds = useMemo(
+    () => new Set(teamContacts.map((c) => c.id)),
+    [teamContacts]
+  );
+
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent, interpretation } = useSmartSearch(
-    showDirectory ? filteredTeamContacts : (showClientDirectory ? clientDirectoryContacts : folderFilteredContacts), 
-    searchQuery
+    showDirectory ? filteredTeamContacts : (showClientDirectory ? clientDirectoryContacts : folderFilteredContacts),
+    searchQuery,
+    { totalCount: showDirectory ? undefined : totalCount }
   );
 
   const handleSelectTrash = () => {
@@ -479,6 +501,12 @@ const IndexContent = () => {
     }
   }, [searchQuery, filteredContacts, filteredTeamContacts, updateContact]);
 
+  // Wrapper for toggleClientStatus that updates contact optimistically
+  // The mutation's onMutate will handle the optimistic update in the query cache
+  const handleToggleClient = useCallback((id: string, isClient: boolean) => {
+    toggleClientStatus({ id, isClient });
+  }, [toggleClientStatus]);
+
   const handleSaveContact = (contactData: Omit<Contact, "id">) => {
     if (editingContact) {
       updateContact({ ...contactData, id: editingContact.id });
@@ -683,7 +711,26 @@ const IndexContent = () => {
     queryClient.invalidateQueries({ queryKey: ["contacts"] });
   }, [queryClient]);
 
+  const handleCompleteOnboarding = useCallback(() => {
+    setShowOnboarding(false);
+    completeOnboarding();
+  }, [completeOnboarding]);
+
+  const handleSkipOnboarding = useCallback(() => {
+    setShowOnboarding(false);
+    completeOnboarding();
+  }, [completeOnboarding]);
+
   return (
+    <>
+      {/* Onboarding Tutorial */}
+      {showOnboarding && (
+        <OnboardingTutorial
+          steps={onboardingSteps}
+          onComplete={handleCompleteOnboarding}
+          onSkip={handleSkipOnboarding}
+        />
+      )}
         <div className="min-h-screen bg-background flex w-full overflow-x-hidden">
           {/* Folder Sidebar */}
           <FolderSidebar
@@ -888,7 +935,7 @@ const IndexContent = () => {
                     onUpdateFolder={handleUpdateFolder}
                     showOwnershipBadge={!!company}
                     onMarkContacted={updateLastContacted}
-                    onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
+                    onToggleClient={handleToggleClient}
                     selectedContactIds={selectedContactIds}
                     onSelectContact={handleSelectContact}
                     onSelectAll={handleSelectAll}
@@ -897,8 +944,16 @@ const IndexContent = () => {
                     onBulkToggleClient={handleBulkToggleClient}
                     onBulkMarkContacted={handleBulkMarkContacted}
                     hasClientAccess={hasClientAccess}
+                    internalContactEmails={internalContactEmails}
+                    internalCompanyId={profile?.companyId}
+                    internalContactOwnerIds={internalContactOwnerIds}
+                    currentUserEmail={user?.email}
+                    currentUserId={user?.id}
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
+                    hasMore={hasMoreContacts}
+                    onLoadMore={loadMoreContacts}
+                    isLoadingMore={isLoadingMoreContacts}
                   />
                 </>
               ) : (
@@ -927,8 +982,16 @@ const IndexContent = () => {
                   onBulkToggleClient={handleBulkToggleClient}
                   onBulkMarkContacted={handleBulkMarkContacted}
                   hasClientAccess={hasClientAccess}
+                  internalContactEmails={!showTrash && !showDirectory ? internalContactEmails : undefined}
+                  internalCompanyId={!showTrash && !showDirectory ? profile?.companyId : undefined}
+                  internalContactOwnerIds={!showTrash && !showDirectory ? internalContactOwnerIds : undefined}
+                  currentUserEmail={user?.email}
+                  currentUserId={user?.id}
                   selectionMode={selectionMode}
                   onToggleSelectionMode={handleToggleSelectionMode}
+                  hasMore={!showTrash && hasMoreContacts}
+                  onLoadMore={loadMoreContacts}
+                  isLoadingMore={isLoadingMoreContacts}
                 />
               )}
 
@@ -1008,6 +1071,7 @@ const IndexContent = () => {
             </div>
           </div>
         </div>
+    </>
   );
 };
 
