@@ -2463,7 +2463,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
   const uniqueKeywords = Array.from(new Set(keywords));
   
   // Extract time range if present (for creation date)
-  const timeRange = extractTimeRange(query);
+  let timeRange = extractTimeRange(query);
   
   // Extract comparative filters
   const comparativeFilters = extractComparativeFilters(query);
@@ -2478,18 +2478,24 @@ export function parseSearchQuery(query: string): ParsedQuery {
   const hasAddKeyword = normalized.includes("add") || normalized.includes("added");
   
   // If query has "add"/"added" and a time range, prioritize creation date over interaction date
-  // This handles queries like "who did I add today?" vs "who did I meet today?"
+  // This handles queries like "who did I add today?" vs "who did I call today?"
   // When "add" is present, we want creation date, not interaction date
   if (hasAddKeyword && timeRange) {
     // Clear interaction filters - user is asking about when contacts were added, not when they interacted
     interactionType = null;
     interactionTimeRange = undefined;
-  } else if (interactionType && timeRange && !hasAddKeyword) {
-    // If query has interaction keywords and time range but no "add"/"added",
-    // it's ambiguous. Default to creation date since that's what we're tracking.
-    // This handles "who did I meet today?" - treat as "who did I add today?"
+  } else if (interactionTimeRange && !hasAddKeyword) {
+    // If we successfully extracted an interaction time range (e.g., "call last week"),
+    // this is clearly an interaction-based query, not a creation date query
+    // Clear the creation date time range and use the interaction time range instead
+    // This handles queries like "who did I call last week?" or "who did I email yesterday?"
+    timeRange = undefined;
+    // Keep interactionType and interactionTimeRange - they're correctly set
+  } else if (interactionType && timeRange && !hasAddKeyword && !interactionTimeRange) {
+    // Edge case: interaction keyword present but no clear interaction time pattern extracted
+    // This might be ambiguous, but if there's a time range, default to creation date
+    // This handles queries like "who did I meet?" with a time range but no clear interaction time pattern
     interactionType = null;
-    interactionTimeRange = undefined;
   }
   
   // Extract needs follow-up
@@ -2714,28 +2720,46 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
  * LLM handles complex entity extraction (company, role, location, etc.)
  */
 export function parseSearchQueryToSchema(query: string): SearchQuery {
-  // Extract time range (this works well with regex)
+  const normalized = normalizeQuery(query);
+  const hasAddKeyword = normalized.includes("add") || normalized.includes("added");
+
+  // Extract time ranges: creation (add) vs interaction (call/email/meet)
   const timeRange = extractTimeRange(query);
-  
+  const interactionTimeRange = extractInteractionTimeRange(query);
+
+  // Resolve add vs interaction: same logic as parseSearchQuery
+  let useCreationRange: { start: Date; end: Date } | undefined = undefined;
+  let useInteractionRange: { start: Date; end: Date } | undefined = undefined;
+  if (hasAddKeyword && timeRange) {
+    useCreationRange = timeRange;
+  } else if (interactionTimeRange && !hasAddKeyword) {
+    useInteractionRange = interactionTimeRange;
+  } else if (timeRange) {
+    useCreationRange = timeRange;
+  }
+
   // Extract responsibility (this works well)
   const responsibilityResult = extractResponsibility(query);
-  
+
   // Create minimal SearchQuery - LLM will enhance it with entities
   const filters: SearchQuery["filters"] = {};
-  
-  // Add time range if found
-  if (timeRange) {
+
+  if (useCreationRange) {
     filters.date_range = {
-      from: timeRange.start.toISOString(),
-      to: timeRange.end.toISOString(),
+      from: useCreationRange.start.toISOString(),
+      to: useCreationRange.end.toISOString(),
     };
   }
-  
+  if (useInteractionRange) {
+    filters.interaction_date_range = {
+      from: useInteractionRange.start.toISOString(),
+      to: useInteractionRange.end.toISOString(),
+    };
+  }
+
   // Add responsibility filters if found
   if (responsibilityResult.match) {
     const responsibility = responsibilityResult.match;
-    // Prefer department (more general) over specific roles for broader matching
-    // e.g. "marketing" matches "Marketing Director", "VP of Marketing", etc.
     if (responsibility.filters.departments && responsibility.filters.departments.length > 0) {
       filters.job_title = responsibility.filters.departments[0];
     } else if (responsibility.filters.roles && responsibility.filters.roles.length > 0) {
@@ -2745,42 +2769,47 @@ export function parseSearchQueryToSchema(query: string): SearchQuery {
       filters.tags = responsibility.filters.tags;
     }
   }
-  
+
   // Simple name extraction: if query is 1-3 words and looks like a name, extract it
-  // This handles simple queries like "james", "john smith", etc.
-  const normalized = normalizeQuery(query);
   const words = normalized.split(/\s+/).filter(w => w.length > 0);
-  
-  // If query is 1-3 words, no time/responsibility patterns, and looks like a name
-  // (not a question word, not a common verb), treat it as a name
-  if (words.length >= 1 && words.length <= 3 && !timeRange && !responsibilityResult.match && !filters.name) {
-    // Check if it looks like a name (not a question word, not a common verb)
+  const hasTimeFilter = !!filters.date_range || !!filters.interaction_date_range;
+  if (words.length >= 1 && words.length <= 3 && !hasTimeFilter && !responsibilityResult.match && !filters.name) {
     const questionWords = ["who", "what", "where", "when", "why", "how", "do", "does", "did", "i", "you", "we", "they"];
     const commonVerbs = ["find", "show", "get", "search", "look", "list", "display", "know", "knows"];
     const firstWord = words[0].toLowerCase();
-    
-    // Also check original query to see if it starts with capital (more likely a name)
     const originalWords = query.trim().split(/\s+/);
     const originalFirstWord = originalWords[0] || "";
     const startsWithCapital = originalFirstWord.length > 0 && originalFirstWord[0] === originalFirstWord[0].toUpperCase();
-    
     if (!questionWords.includes(firstWord) && !commonVerbs.includes(firstWord)) {
-      // If it starts with capital OR is a single word (likely a name), extract it
       if (startsWithCapital || words.length === 1) {
-        // Use original query capitalization for the name
         filters.name = originalWords.slice(0, words.length).join(" ");
       }
     }
   }
-  
-  // Create minimal query - LLM will enhance with entities
+
+  // For interaction-date-only queries, omit semantic_hint so the RPC doesn't require
+  // full-text match on "who did i call last week" (which would return no results).
+  const interactionOnly = !!filters.interaction_date_range && !filters.date_range && !filters.job_title && !filters.name && !filters.company && !filters.location;
+  const semantic_hint = interactionOnly ? undefined : query;
+
+  let explanation: string;
+  if (filters.name) {
+    explanation = `Searching for contacts named "${filters.name}"`;
+  } else if (filters.interaction_date_range) {
+    explanation = "Searching contacts you contacted in that time range";
+  } else if (filters.date_range) {
+    explanation = "Searching contacts with time filter";
+  } else if (responsibilityResult.match) {
+    explanation = "Searching contacts for responsibility";
+  } else {
+    explanation = "Searching contacts";
+  }
+
   return {
     intent: "search_contacts",
     filters,
-    semantic_hint: query, // Use original query for semantic matching
-    confidence: filters.name ? 0.7 : 0.5, // Higher confidence if we extracted a name
-    explanation: filters.name 
-      ? `Searching for contacts named "${filters.name}"`
-      : `Searching contacts${timeRange ? " with time filter" : ""}${responsibilityResult.match ? " for responsibility" : ""}`,
+    semantic_hint,
+    confidence: filters.name ? 0.7 : 0.5,
+    explanation,
   };
 }

@@ -34,6 +34,8 @@ function mapSearchRowToContact(row: Record<string, unknown>): Contact {
     avatar: row.avatar != null ? String(row.avatar) : undefined,
     folderId: row.folder_id != null ? String(row.folder_id) : undefined,
     createdAt: row.created_at != null ? String(row.created_at) : undefined,
+    lastContactedAt: row.last_contacted_at != null ? String(row.last_contacted_at) : undefined,
+    isClient: row.is_client === true,
     address: row.address != null ? String(row.address) : undefined,
     city: row.city != null ? String(row.city) : undefined,
     state: row.state != null ? String(row.state) : undefined,
@@ -116,6 +118,12 @@ export function useSmartSearch(
         if (deterministicQuery.filters.date_range?.to) {
           searchParams._date_range_to = deterministicQuery.filters.date_range.to;
         }
+        if (deterministicQuery.filters.interaction_date_range?.from) {
+          searchParams._last_contacted_from = deterministicQuery.filters.interaction_date_range.from;
+        }
+        if (deterministicQuery.filters.interaction_date_range?.to) {
+          searchParams._last_contacted_to = deterministicQuery.filters.interaction_date_range.to;
+        }
         if (deterministicQuery.filters.name) {
           searchParams._name = deterministicQuery.filters.name;
         }
@@ -133,9 +141,21 @@ export function useSmartSearch(
         if (deterministicQuery.filters.relationship_type) {
           searchParams._relationship_type = deterministicQuery.filters.relationship_type;
         }
-        // Only use semantic_hint for text search if we don't have structured filters
-        // (Responsibility queries use job_title, not text matching)
-        if ((deterministicQuery.semantic_hint || query) && !deterministicQuery.filters.job_title) {
+        // Only use semantic_hint for text search when appropriate.
+        // Skip for job_title (responsibility) and for interaction-date-only queries, since
+        // FTS on "who did i call last week" would match nothing.
+        const interactionOnly =
+          !!deterministicQuery.filters.interaction_date_range &&
+          !deterministicQuery.filters.date_range &&
+          !deterministicQuery.filters.job_title &&
+          !deterministicQuery.filters.name &&
+          !deterministicQuery.filters.company &&
+          !deterministicQuery.filters.location;
+        if (
+          !interactionOnly &&
+          (deterministicQuery.semantic_hint || query) &&
+          !deterministicQuery.filters.job_title
+        ) {
           searchParams._semantic_hint = deterministicQuery.semantic_hint || query;
         }
         
