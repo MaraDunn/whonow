@@ -27,12 +27,22 @@ export function useBusinessCardScannerAI() {
   const startCamera = useCallback(async (videoElement: HTMLVideoElement) => {
     try {
       setError(null);
-      
+
+      // Stop any existing stream and clear the video first so a new load doesn't
+      // interrupt an in-flight play() ("play() request was interrupted by a new load").
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
       // Check if mediaDevices API is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Camera access is not supported in this browser. Please use a modern browser with HTTPS.");
       }
-      
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
       });
@@ -44,6 +54,7 @@ export function useBusinessCardScannerAI() {
       console.error("Camera error:", err);
       const e = typeof err === "object" && err !== null ? (err as { name?: string; message?: string }) : {};
       
+      const errMsg = String(e.message ?? "");
       let message = "Failed to access camera. ";
       if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
         message += "Please grant camera permission and try again.";
@@ -53,8 +64,10 @@ export function useBusinessCardScannerAI() {
         message += "Camera is already in use by another application.";
       } else if (e.name === "OverconstrainedError") {
         message += "No camera with requested capabilities found.";
+      } else if (errMsg.includes("interrupted") && errMsg.includes("load")) {
+        message += "Camera was restarted too soon. Please try again.";
       } else {
-        message += e.message || "Unknown error occurred.";
+        message += errMsg || "Unknown error occurred.";
       }
       
       setError(message);
@@ -72,7 +85,10 @@ export function useBusinessCardScannerAI() {
     }
   }, []);
 
-  const captureImage = useCallback((videoElement: HTMLVideoElement): string => {
+  const captureImage = useCallback((videoElement: HTMLVideoElement | null | undefined): string => {
+    if (!videoElement?.videoWidth || !videoElement?.videoHeight) {
+      throw new Error("Video not ready. Please wait for the camera to load before capturing.");
+    }
     const canvas = document.createElement("canvas");
     canvas.width = videoElement.videoWidth;
     canvas.height = videoElement.videoHeight;
@@ -167,9 +183,14 @@ export function useBusinessCardScannerAI() {
     }
   }, []);
 
-  const captureAndScan = useCallback(async (videoElement: HTMLVideoElement): Promise<ScannedContact | null> => {
+  const captureAndScan = useCallback(async (videoElement?: HTMLVideoElement | null): Promise<ScannedContact | null> => {
+    const el = videoElement ?? videoRef.current;
+    if (!el) {
+      setError("Camera not ready. Please start the camera first.");
+      return null;
+    }
     try {
-      const imageBase64 = captureImage(videoElement);
+      const imageBase64 = captureImage(el);
       setCapturedImage(imageBase64);
       stopCamera();
       return await scanImage(imageBase64);

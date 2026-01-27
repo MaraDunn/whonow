@@ -10,7 +10,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -114,7 +113,9 @@ export function ImportContactsDialog({
     }
   }, [open, activeTab, scanner.stopCamera]);
 
-  // Start camera when cameraActive is set and video element is available
+  // Start camera when cameraActive is set and video element is available.
+  // Depend only on startCamera (stable from useCallback), not the whole scanner object,
+  // to avoid re-running and interrupting play() with a new load.
   useEffect(() => {
     if (cameraActive && videoRef.current && cameraInitializing) {
       scanner.startCamera(videoRef.current).then(() => {
@@ -124,7 +125,7 @@ export function ImportContactsDialog({
         setCameraInitializing(false);
       });
     }
-  }, [cameraActive, cameraInitializing, scanner]);
+  }, [cameraActive, cameraInitializing, scanner.startCamera]);
 
 
   const handleGoogleImport = () => {
@@ -301,7 +302,9 @@ export function ImportContactsDialog({
   };
 
   const handleCapture = async () => {
-    await scanner.captureAndScan();
+    if (videoRef.current) {
+      await scanner.captureAndScan(videoRef.current);
+    }
     scanner.stopCamera();
     setCameraActive(false);
   };
@@ -335,7 +338,7 @@ export function ImportContactsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col min-h-0 overflow-hidden">
           <TabsList className="grid w-full grid-cols-3 shrink-0">
             <TabsTrigger value="scan" className="flex items-center gap-2">
               <Camera className="h-4 w-4" />
@@ -352,7 +355,7 @@ export function ImportContactsDialog({
           </TabsList>
 
           {/* Scan Tab */}
-          <TabsContent value="scan" className="flex-1 overflow-y-auto mt-4">
+          <TabsContent value="scan" className="flex-1 flex flex-col min-h-0 mt-4 data-[state=inactive]:hidden">
             {!scanner.scannedContact && !scanner.capturedImage ? (
               <div className="space-y-4">
                 {cameraActive ? (
@@ -436,8 +439,8 @@ export function ImportContactsDialog({
                 <p className="text-sm text-muted-foreground">Analyzing business card...</p>
               </div>
             ) : scanner.scannedContact && editedContact ? (
-              <div className="space-y-4 pb-2">
-                  
+              <div className="flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-1 -mr-1">
                   {/* Avatar Upload */}
                   <div className="flex flex-col items-center gap-2">
                     <div 
@@ -614,7 +617,8 @@ export function ImportContactsDialog({
                       {scanner.error}
                     </div>
                   )}
-                  <div className="flex gap-2 pt-2">
+                  </div>
+                  <div className="shrink-0 flex gap-2 pt-4 mt-2 border-t">
                     <Button onClick={handleScanReset} variant="outline" className="gap-2">
                       <RotateCcw className="h-4 w-4" />
                       Scan Another
@@ -651,7 +655,7 @@ export function ImportContactsDialog({
           </TabsContent>
 
           {/* File Tab */}
-          <TabsContent value="file" className="space-y-4">
+          <TabsContent value="file" className="flex-1 flex flex-col min-h-0 data-[state=inactive]:hidden">
             {fileImport.contacts.length === 0 ? (
               <div className="space-y-4">
                 <div
@@ -699,8 +703,8 @@ export function ImportContactsDialog({
                 )}
               </div>
             ) : (
-              <>
-                <div className="flex items-center justify-between">
+              <div className="flex-1 flex flex-col min-h-0 gap-4">
+                <div className="flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <FileUp className="h-4 w-4" />
                     <span className="truncate max-w-[150px]">{fileImport.fileName}</span>
@@ -715,7 +719,7 @@ export function ImportContactsDialog({
                     </Button>
                   </div>
                 </div>
-                <ScrollArea className="h-64 rounded-md border">
+                <div className="flex-1 min-h-0 overflow-y-auto rounded-md border">
                   <div className="p-4 space-y-2">
                     {fileImport.contacts.map((contact, i) => (
                       <label
@@ -735,8 +739,8 @@ export function ImportContactsDialog({
                       </label>
                     ))}
                   </div>
-                </ScrollArea>
-                <div className="flex items-center justify-between">
+                </div>
+                <div className="shrink-0 flex items-center justify-between pt-2 border-t">
                   <span className="text-sm text-muted-foreground">
                     {selectedFileContacts.size} selected
                   </span>
@@ -749,13 +753,13 @@ export function ImportContactsDialog({
                     Import Selected
                   </Button>
                 </div>
-              </>
+              </div>
             )}
           </TabsContent>
 
 
           {/* Google Tab */}
-          <TabsContent value="google" className="space-y-4">
+          <TabsContent value="google" className="flex-1 flex flex-col min-h-0 data-[state=inactive]:hidden">
             {!google.isConfigured ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
@@ -800,8 +804,8 @@ export function ImportContactsDialog({
                 </Button>
               </div>
             ) : (
-              <>
-                <div className="flex items-center justify-between">
+              <div className="flex-1 flex flex-col min-h-0 gap-4">
+                <div className="flex items-center justify-between shrink-0">
                   <span className="text-sm text-muted-foreground">
                     {google.contacts.length} contacts found
                   </span>
@@ -814,7 +818,7 @@ export function ImportContactsDialog({
                     </Button>
                   </div>
                 </div>
-                <ScrollArea className="h-64 rounded-md border">
+                <div className="flex-1 min-h-0 overflow-y-auto rounded-md border">
                   <div className="p-4 space-y-2">
                     {google.contacts.map((contact, i) => (
                       <label
@@ -834,8 +838,8 @@ export function ImportContactsDialog({
                       </label>
                     ))}
                   </div>
-                </ScrollArea>
-                <div className="flex items-center justify-between">
+                </div>
+                <div className="shrink-0 flex items-center justify-between pt-2 border-t">
                   <span className="text-sm text-muted-foreground">
                     {selectedGoogleContacts.size} selected
                   </span>
@@ -848,7 +852,7 @@ export function ImportContactsDialog({
                     Import Selected
                   </Button>
                 </div>
-              </>
+              </div>
             )}
           </TabsContent>
         </Tabs>
