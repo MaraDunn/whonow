@@ -67,7 +67,16 @@ export const useSubscription = () => {
   const describeFunctionsError = (err: unknown): string => {
     if (err instanceof FunctionsHttpError) {
       const body = err.context?.body;
-      if (typeof body === "string") return body;
+      if (typeof body === "string") {
+        try {
+          const parsed = JSON.parse(body) as { error?: string; message?: string };
+          if (typeof parsed?.error === "string") return parsed.error;
+          if (typeof parsed?.message === "string") return parsed.message;
+        } catch {
+          return body;
+        }
+        return body;
+      }
       if (body && typeof body === "object") {
         const maybeError = (body as { error?: unknown; message?: unknown }).error ?? (body as { message?: unknown }).message;
         if (typeof maybeError === "string") return maybeError;
@@ -75,6 +84,26 @@ export const useSubscription = () => {
       return `Edge Function HTTP ${err.context?.status ?? "error"}`;
     }
     return err instanceof Error ? err.message : "Unknown error";
+  };
+
+  const getCustomerPortalErrorMessage = async (err: unknown): Promise<string> => {
+    const fallback = describeFunctionsError(err) || "Failed to open billing portal";
+    if (!(err instanceof FunctionsHttpError) || !err.context) return fallback;
+    const res = err.context as Response;
+    try {
+      const r = typeof (res as Response).clone === "function" ? (res as Response).clone() : res;
+      const text = await (typeof (r as Response).text === "function" ? (r as Response).text() : Promise.resolve(""));
+      const body = text && String(text).trim().startsWith("{") ? (JSON.parse(String(text)) as { error?: string }) : null;
+      if (body?.error && typeof body.error === "string") return body.error;
+      if (typeof (res as Response).status === "number" && (res as Response).status >= 500) {
+        return "Billing portal is unavailable. Check that STRIPE_SECRET_KEY is set in Supabase and Stripe Customer Portal is enabled.";
+      }
+    } catch {
+      if (typeof (res as Response).status === "number" && (res as Response).status >= 500) {
+        return "Billing portal is unavailable. Check that STRIPE_SECRET_KEY is set in Supabase and Stripe Customer Portal is enabled.";
+      }
+    }
+    return fallback;
   };
 
   const checkSubscription = useCallback(async () => {
@@ -443,10 +472,8 @@ export const useSubscription = () => {
 
         if (error) {
           console.error("Customer portal error:", error);
-          if (error instanceof FunctionsHttpError) {
-            console.error("customer-portal details:", error.context);
-          }
-          toast.error(error.message || "Failed to open billing portal");
+          const message = await getCustomerPortalErrorMessage(error);
+          toast.error(message);
           return null;
         }
 
@@ -463,13 +490,10 @@ export const useSubscription = () => {
           toast.error("No portal URL received");
           return null;
         }
-      } catch (error) {
-        console.error("Error opening customer portal:", error);
-        if (error instanceof FunctionsHttpError) {
-          console.error("customer-portal details:", error.context);
-        }
-        const errorMessage = describeFunctionsError(error);
-        toast.error(errorMessage);
+      } catch (err) {
+        console.error("Error opening customer portal:", err);
+        const message = await getCustomerPortalErrorMessage(err);
+        toast.error(message);
         return null;
       }
   }, [session?.access_token]);

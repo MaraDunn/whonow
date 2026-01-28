@@ -22,6 +22,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -32,7 +33,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -230,13 +230,16 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-6">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="font-display text-xl">Account Management</DialogTitle>
+          <DialogDescription className="sr-only">
+            Manage your subscription, profile, and security settings.
+          </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="subscription" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs defaultValue="subscription" className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <TabsList className="grid w-full grid-cols-3 shrink-0">
             <TabsTrigger value="subscription" className="flex items-center gap-2">
               <CreditCard className="h-4 w-4" />
               <span className="hidden sm:inline">Subscription</span>
@@ -255,9 +258,9 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 mt-4">
-            {/* Subscription Tab */}
-            <TabsContent value="subscription" className="space-y-6 mt-0 pr-4">
+          {/* Subscription Tab */}
+          <TabsContent value="subscription" className="flex-1 flex flex-col min-h-0 overflow-hidden mt-4 data-[state=inactive]:hidden">
+            <div className="overflow-y-auto pr-4 space-y-6">
               {/* Current Plan */}
               <div className="space-y-4">
                 <Label className="text-base font-medium">Current Plan</Label>
@@ -366,10 +369,12 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                   ))}
                 </ul>
               </div>
-            </TabsContent>
+            </div>
+          </TabsContent>
 
-            {/* Personal Info Tab */}
-            <TabsContent value="personal" className="space-y-6 mt-0 pr-4">
+          {/* Personal Info Tab */}
+          <TabsContent value="personal" className="flex-1 flex flex-col min-h-0 overflow-hidden mt-4 data-[state=inactive]:hidden">
+            <div className="overflow-y-auto pr-4 space-y-6">
               {/* Email (read-only, editable in security) */}
               <div className="space-y-2">
                 <Label className="text-base font-medium">Email Address</Label>
@@ -425,10 +430,12 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                   {isSavingProfile ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
-            </TabsContent>
+            </div>
+          </TabsContent>
 
-            {/* Security Tab */}
-            <TabsContent value="security" className="space-y-6 mt-0 pr-4">
+          {/* Security Tab */}
+          <TabsContent value="security" className="flex-1 flex flex-col min-h-0 overflow-hidden mt-4 data-[state=inactive]:hidden">
+            <div className="overflow-y-auto pr-4 space-y-6">
               {/* Change Password */}
               <div className="space-y-4">
                 <Label className="text-base font-medium">Change Password</Label>
@@ -625,11 +632,11 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                   )}
                 </div>
               </div>
-            </TabsContent>
-          </ScrollArea>
+            </div>
+          </TabsContent>
         </Tabs>
 
-        <div className="flex justify-end pt-4 border-t border-border mt-4">
+        <div className="flex justify-end pt-4 border-t border-border mt-4 shrink-0">
           <Button onClick={() => onOpenChange(false)}>
             Done
           </Button>
