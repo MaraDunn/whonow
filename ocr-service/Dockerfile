@@ -36,8 +36,8 @@ EXPOSE 8000
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
-# Health check (using urllib instead of requests)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+# Health check: long start-period so PaddleOCR can load at startup (30-90s) without marking unhealthy
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 # Run the application

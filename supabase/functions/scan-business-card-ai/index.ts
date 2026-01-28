@@ -187,66 +187,73 @@ serve(async (req) => {
 
     console.log(`Calling OCR service at: ${OCR_SERVICE_URL}/ocr`);
 
-    // Call PaddleOCR service with timeout
-    // Increased timeout to 120 seconds to handle first-time model downloads
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (2 minutes)
-
-    let ocrResponse;
+    const totalTimeoutMs = 120000; // 2 minutes total for all attempts
+    const retryDelayMs = 15000;
+    const maxAttempts = 3;
     const requestStartTime = Date.now();
-    try {
-      console.log("Sending request to OCR service...");
-      console.log("Request timeout set to: 120 seconds");
-      console.log("Image size in request:", JSON.stringify({ image: image }).length, "bytes");
-      
-      ocrResponse = await fetch(`${OCR_SERVICE_URL}/ocr`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          image: image,
-          enhance: true,
-        }),
-        signal: controller.signal,
-      });
-      
-      const requestDuration = Date.now() - requestStartTime;
-      clearTimeout(timeoutId);
-      console.log(`OCR service responded after ${(requestDuration / 1000).toFixed(1)} seconds`);
-      console.log("OCR service responded with status:", ocrResponse.status);
-      console.log("Response headers:", Object.fromEntries(ocrResponse.headers.entries()));
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      const requestDuration = Date.now() - requestStartTime;
-      console.error("=== OCR SERVICE FETCH ERROR ===");
-      console.error("Error after", (requestDuration / 1000).toFixed(1), "seconds");
-      console.error("Error type:", fetchError?.constructor?.name);
-      console.error("Error name:", fetchError.name);
-      console.error("Error message:", fetchError instanceof Error ? fetchError.message : String(fetchError));
-      
-      if (fetchError.name === "AbortError") {
-        console.error("Request timed out after 120 seconds");
+    let ocrResponse: Response | undefined;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const elapsed = Date.now() - requestStartTime;
+      const remainingMs = Math.max(1000, totalTimeoutMs - elapsed);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), remainingMs);
+
+      try {
+        console.log(`OCR service request attempt ${attempt}/${maxAttempts} (timeout ${Math.round(remainingMs / 1000)}s)`);
+        ocrResponse = await fetch(`${OCR_SERVICE_URL}/ocr`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: image, enhance: true }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        const status = ocrResponse.status;
+        console.log(`OCR service responded with status: ${status}`);
+
+        if ((status === 502 || status === 503) && attempt < maxAttempts) {
+          console.log(`OCR service returned ${status} (not ready), retrying in ${retryDelayMs / 1000}s`);
+          await new Promise((r) => setTimeout(r, Math.min(retryDelayMs, remainingMs - 2000)));
+          continue;
+        }
+        break;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        const err = fetchError as { name?: string; message?: string };
+        console.error(`OCR fetch attempt ${attempt} failed:`, err.name, err.message);
+        if (attempt < maxAttempts && Date.now() - requestStartTime < totalTimeoutMs - retryDelayMs) {
+          console.log(`Retrying in ${retryDelayMs / 1000}s`);
+          await new Promise((r) => setTimeout(r, retryDelayMs));
+          continue;
+        }
+        const requestDuration = Date.now() - requestStartTime;
+        if (err.name === "AbortError") {
+          return new Response(
+            JSON.stringify({
+              error: "OCR service timeout",
+              details: `The OCR service did not respond within ${Math.round(requestDuration / 1000)} seconds. The scanner may still be starting up. Please try again in a moment.`,
+            }),
+            { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         return new Response(
           JSON.stringify({
-            error: "OCR service timeout",
-            details: "The OCR service did not respond within 120 seconds. If this is the first request, the service may be downloading PaddleOCR models (this only happens once and can take 30-60 seconds). Please wait a moment and try again. Subsequent requests will be much faster.",
+            error: "Failed to reach OCR service",
+            details: `Could not connect to OCR service at ${OCR_SERVICE_URL}. Error: ${err.message}. The service may be starting up; please try again in a moment.`,
           }),
-          {
-            status: 504,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+    }
+
+    if (!ocrResponse) {
       return new Response(
         JSON.stringify({
           error: "Failed to reach OCR service",
-          details: `Could not connect to OCR service at ${OCR_SERVICE_URL}. Error: ${fetchError.message}. Please verify the service is running and the URL is correct.`,
+          details: "No response after retries. The service may be starting up; please try again in a moment.",
         }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
