@@ -1137,6 +1137,9 @@ function extractResponsibility(query: string): { match: ResponsibilityMatch | nu
         };
       }
     }
+    // Phrase matched pattern but no predefined responsibility (e.g. "I need a driver" → "driver").
+    // Return phrase so caller can use it as job_title for role/company/tag ILIKE matching.
+    return { match: null, phrase: cleaned };
   }
 
   return { match: null, phrase: null };
@@ -2768,6 +2771,10 @@ export function parseSearchQueryToSchema(query: string): SearchQuery {
     if (responsibility.filters.tags && responsibility.filters.tags.length > 0) {
       filters.tags = responsibility.filters.tags;
     }
+  } else if (responsibilityResult.phrase) {
+    // Pattern matched (e.g. "I need a driver") but no predefined responsibility.
+    // Use the extracted phrase as job_title so server can match role/company/tags (e.g. role ILIKE '%driver%').
+    filters.job_title = responsibilityResult.phrase;
   }
 
   // Simple name extraction: if query is 1-3 words and looks like a name, extract it
