@@ -23,6 +23,9 @@ interface ContactGridProps {
   isTrashView?: boolean;
   trashCount?: number; // Accurate count of trashed contacts (not limited by 1000)
   onDeleteContact?: (id: string) => void;
+  onExportContact?: (contact: Contact) => void;
+  onShareToSlack?: (contact: Contact) => void;
+  onShareToTeams?: (contact: Contact) => void;
   onRestoreContact?: (id: string) => void;
   onPermanentlyDelete?: (id: string) => void;
   onEmptyTrash?: () => void;
@@ -67,6 +70,9 @@ export function ContactGrid({
   isTrashView = false,
   trashCount,
   onDeleteContact,
+  onExportContact,
+  onShareToSlack,
+  onShareToTeams,
   onRestoreContact,
   onPermanentlyDelete,
   onEmptyTrash,
@@ -325,6 +331,9 @@ export function ContactGrid({
                         onView={onViewContact ? () => onViewContact(contact) : undefined}
                         isTrashView={isTrashView}
                         onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
+                        onExportContact={onExportContact ? () => onExportContact(contact) : undefined}
+                        onShareToSlack={onShareToSlack ? () => onShareToSlack(contact) : undefined}
+                        onShareToTeams={onShareToTeams ? () => onShareToTeams(contact) : undefined}
                         onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
                         onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
                         folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
@@ -364,6 +373,9 @@ export function ContactGrid({
               onView={onViewContact ? () => onViewContact(contact) : undefined}
               isTrashView={isTrashView}
               onDelete={onDeleteContact ? () => onDeleteContact(contact.id) : undefined}
+              onExportContact={onExportContact ? () => onExportContact(contact) : undefined}
+              onShareToSlack={onShareToSlack ? () => onShareToSlack(contact) : undefined}
+              onShareToTeams={onShareToTeams ? () => onShareToTeams(contact) : undefined}
               onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
               onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
               folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}

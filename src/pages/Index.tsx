@@ -6,6 +6,7 @@ import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
+import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
 import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
@@ -17,7 +18,7 @@ import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
-import { useContacts } from "@/hooks/useContacts";
+import { useContacts, fetchAllContactsForExport } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
 import { useCustomKeywords } from "@/hooks/useCustomKeywords";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,6 +28,7 @@ import { useTeamDirectoryContacts } from "@/hooks/useTeamDirectoryContacts";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { contactsToCsv, downloadCsv, sanitizeFilenameForContact } from "@/utils/exportContactsCsv";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 
@@ -44,6 +46,7 @@ const IndexContent = () => {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [shareSlackContact, setShareSlackContact] = useState<Contact | null>(null);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -683,6 +686,43 @@ const IndexContent = () => {
     queryClient.invalidateQueries({ queryKey: ["contacts"] });
   }, [queryClient]);
 
+  const handleExportContact = useCallback((contact: Contact) => {
+    const csv = contactsToCsv([contact]);
+    const filename = `${sanitizeFilenameForContact(contact.name)}.csv`;
+    downloadCsv(csv, filename);
+    toast.success("Contact exported");
+  }, []);
+
+  const handleShareToSlack = useCallback((contact: Contact) => {
+    setShareSlackContact(contact);
+  }, []);
+
+  const handleShareToTeams = useCallback(() => {
+    toast.info("Share to Teams coming soon");
+  }, []);
+
+  const fetchContactsForExport = useCallback(
+    async (options: { folderId?: string | null }) => {
+      if (!user?.id) return [];
+      return fetchAllContactsForExport(supabase, user.id, {
+        folderId: options.folderId ?? null,
+        clientOnly: false,
+        ownershipFilter: "all",
+      });
+    },
+    [user?.id]
+  );
+
+  const handleExportSelectedContacts = useCallback((contacts: Contact[]) => {
+    if (contacts.length === 0) {
+      toast.error("Select at least one contact");
+      return;
+    }
+    const csv = contactsToCsv(contacts);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(csv, `contacts-export-${date}.csv`);
+  }, []);
+
   return (
         <div className="min-h-screen bg-background flex w-full overflow-x-hidden">
           {/* Folder Sidebar */}
@@ -881,6 +921,9 @@ const IndexContent = () => {
                     onViewContact={handleViewContact}
                     isTrashView={false}
                     onDeleteContact={deleteContact}
+                    onExportContact={handleExportContact}
+                    onShareToSlack={handleShareToSlack}
+                    onShareToTeams={handleShareToTeams}
                     onRestoreContact={restoreContact}
                     onPermanentlyDelete={permanentlyDeleteContact}
                     onEmptyTrash={emptyTrash}
@@ -911,6 +954,9 @@ const IndexContent = () => {
                   isTrashView={showTrash}
                   trashCount={showTrash ? trashCount : undefined}
                   onDeleteContact={deleteContact}
+                  onExportContact={handleExportContact}
+                  onShareToSlack={handleShareToSlack}
+                  onShareToTeams={handleShareToTeams}
                   onRestoreContact={restoreContact}
                   onPermanentlyDelete={permanentlyDeleteContact}
                   onEmptyTrash={emptyTrash}
@@ -972,6 +1018,13 @@ const IndexContent = () => {
                 onEdit={handleEditFromDetails}
                 onSave={handleSaveContactFromDetails}
                 onDelete={handleDeleteFromDetails}
+                onExportContact={handleExportContact}
+              />
+
+              <ShareToSlackDialog
+                open={!!shareSlackContact}
+                onOpenChange={(open) => !open && setShareSlackContact(null)}
+                contact={shareSlackContact}
               />
 
               <SettingsDialog
@@ -984,6 +1037,9 @@ const IndexContent = () => {
                 isCompanyKeywords={isCompanyKeywords}
                 canEditKeywords={canEditKeywords}
                 onBulkImport={handleImportContacts}
+                folders={folders}
+                fetchContactsForExport={fetchContactsForExport}
+                onExportSelectedContacts={handleExportSelectedContacts}
               />
 
               <ImportContactsDialog

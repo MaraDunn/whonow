@@ -1,6 +1,6 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, FileDown, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera, MessageSquare, Video } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
@@ -82,6 +93,7 @@ interface ContactDetailsDialogProps {
   hasCompany?: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onExportContact?: (contact: Contact) => void;
   onSave?: (contact: Contact) => void;
 }
 
@@ -96,6 +108,7 @@ export function ContactDetailsDialog({
   hasCompany = false,
   onEdit,
   onDelete,
+  onExportContact,
   onSave,
 }: ContactDetailsDialogProps) {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -435,35 +448,68 @@ export function ContactDetailsDialog({
             {isEditing ? "Edit Contact" : "Contact Details"}
           </h2>
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {!isEditing && slack.status?.connected && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShareDialogOpen(true)}
-                className="h-8 w-8"
-                title="Share to Slack"
-              >
-                <Share2 className="h-4 w-4" />
-              </Button>
-            )}
             {!isEditing && (
               <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleEditClick}
-                  className="h-8 w-8"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onDelete}
-                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Share</TooltipContent>
+                  </Tooltip>
+                  <DropdownMenuContent align="end" side="bottom">
+                    <DropdownMenuItem onClick={() => setShareDialogOpen(true)}>
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Share to Slack
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => toast.info("Share to Teams coming soon")}
+                    >
+                      <Video className="h-4 w-4 mr-2" />
+                      Share to Teams
+                    </DropdownMenuItem>
+                    {onExportContact && contact && (
+                      <DropdownMenuItem onClick={() => onExportContact(contact)}>
+                        <FileDown className="h-4 w-4 mr-2" />
+                        Export to CSV
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleEditClick}
+                      className="h-8 w-8"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Edit</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={onDelete}
+                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Delete</TooltipContent>
+                </Tooltip>
               </>
             )}
             {isEditing && (

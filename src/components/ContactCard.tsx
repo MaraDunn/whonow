@@ -1,7 +1,7 @@
 import React from "react";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown, Check } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, Share2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown, Check, FileDown, Video } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +13,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
 // Name block: fixed height for two lines + room for descenders so badges never overlap
@@ -39,6 +50,9 @@ interface ContactCardProps {
   onView?: () => void;
   isTrashView?: boolean;
   onDelete?: () => void;
+  onExportContact?: (contact: Contact) => void;
+  onShareToSlack?: (contact: Contact) => void;
+  onShareToTeams?: (contact: Contact) => void;
   onRestore?: () => void;
   onPermanentlyDelete?: () => void;
   folder?: Folder;
@@ -70,6 +84,9 @@ const ContactCardComponent = function ContactCard({
   onView,
   isTrashView = false,
   onDelete,
+  onExportContact,
+  onShareToSlack,
+  onShareToTeams,
   onRestore,
   onPermanentlyDelete,
   folder,
@@ -609,17 +626,79 @@ const ContactCardComponent = function ContactCard({
                 </LockedFeatureButton>
               )
             )}
-            <Button
-              variant="secondary"
-              size="sm"
-              className="flex-1 text-xs h-8 px-2 min-w-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit();
-              }}
-            >
-              <span className="truncate">Edit</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1 text-xs h-8 px-2 min-w-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                >
+                  <span className="truncate">Edit</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Edit</TooltipContent>
+            </Tooltip>
+            {(onShareToSlack || onShareToTeams || onExportContact) && (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Share</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  {onShareToSlack && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareToSlack(contact); }}>
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Share to Slack
+                    </DropdownMenuItem>
+                  )}
+                  {onShareToTeams && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareToTeams(contact); }}>
+                      <Video className="h-4 w-4 mr-2" />
+                      Share to Teams
+                    </DropdownMenuItem>
+                  )}
+                  {onExportContact && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onExportContact(contact); }}>
+                      <FileDown className="h-4 w-4 mr-2" />
+                      Export to CSV
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {onDelete && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Delete</TooltipContent>
+              </Tooltip>
+            )}
           </div>
         )}
       </div>
@@ -806,19 +885,67 @@ const ContactCardComponent = function ContactCard({
           )}
         </div>
 
-        {/* Delete button for non-trash view */}
-        {!isTrashView && onDelete && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+        {/* Share and Delete buttons — grouped close together */}
+        {!isTrashView && (onShareToSlack || onShareToTeams || onExportContact || onDelete) && (
+          <div className="flex items-center gap-0">
+            {(onShareToSlack || onShareToTeams || onExportContact) && (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground -mr-px"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Share</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  {onShareToSlack && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareToSlack(contact); }}>
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Share to Slack
+                    </DropdownMenuItem>
+                  )}
+                  {onShareToTeams && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareToTeams(contact); }}>
+                      <Video className="h-4 w-4 mr-2" />
+                      Share to Teams
+                    </DropdownMenuItem>
+                  )}
+                  {onExportContact && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onExportContact(contact); }}>
+                      <FileDown className="h-4 w-4 mr-2" />
+                      Export to CSV
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {onDelete && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Delete</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         )}
       </div>
 
