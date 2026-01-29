@@ -109,7 +109,7 @@ export const FEATURE_ACCESS: Record<FeatureName, SubscriptionTier[]> = {
   advanced_search: ["pro", "team", "business"],
   organization_creation: ["team", "business"],
   team_features: ["team", "business"],
-  integrations: ["team", "business"],
+  integrations: ["pro", "team", "business"],
   advanced_analytics: ["business"],
   api_access: ["business"],
   custom_branding: ["business"],

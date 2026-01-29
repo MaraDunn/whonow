@@ -9,6 +9,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
 import { toast } from "sonner";
@@ -42,6 +43,8 @@ export function Header({
 }: HeaderProps) {
   const { user, signOut } = useAuth();
   const { profile, company } = useProfile(user?.id);
+  const { canAccessFeature } = useSubscription();
+  const hasIntegrationsAccess = canAccessFeature("integrations");
   const slack = useSlackIntegration();
   const teams = useTeamsIntegration();
   const isMobile = useIsMobile();
@@ -117,6 +120,7 @@ export function Header({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button 
+              data-onboarding-add-button
               className="flex items-center justify-center gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-medium text-sm transition-opacity shadow-lg gradient-hero text-primary-foreground hover:opacity-90 shadow-primary/20"
             >
               <Plus className="h-4 w-4" />
@@ -147,22 +151,26 @@ export function Header({
               <Chrome className="mr-2 h-4 w-4" />
               Sync from Google
             </DropdownMenuItem>
-            <DropdownMenuItem 
-              className="cursor-pointer" 
-              onClick={handleSlackImport}
-              disabled={slack.isLoading}
-            >
-              <MessageSquare className="mr-2 h-4 w-4" />
-              {slack.isLoading ? "Importing..." : "Import from Slack"}
-            </DropdownMenuItem>
-            <DropdownMenuItem 
-              className="cursor-pointer" 
-              onClick={handleTeamsImport}
-              disabled={teams.isLoading}
-            >
-              <Video className="mr-2 h-4 w-4" />
-              {teams.isLoading ? "Importing..." : "Import from Teams"}
-            </DropdownMenuItem>
+            {hasIntegrationsAccess && (
+              <>
+                <DropdownMenuItem 
+                  className="cursor-pointer" 
+                  onClick={handleSlackImport}
+                  disabled={slack.isLoading}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  {slack.isLoading ? "Importing..." : "Import from Slack"}
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="cursor-pointer" 
+                  onClick={handleTeamsImport}
+                  disabled={teams.isLoading}
+                >
+                  <Video className="mr-2 h-4 w-4" />
+                  {teams.isLoading ? "Importing..." : "Import from Teams"}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 

@@ -253,6 +253,31 @@ serve(async (req) => {
           }
         }
 
+        // For user-level, require Pro tier or higher
+        if (scope === 'user') {
+          const { data: userTier } = await supabase.rpc('get_user_subscription_tier', { _user_id: user.id });
+          let effectiveTier = (userTier ?? 'starter') as string;
+          if (effectiveTier === 'starter' && profile?.company_id) {
+            const { data: companySub } = await supabase
+              .from('subscriptions')
+              .select('tier')
+              .eq('company_id', profile.company_id)
+              .eq('status', 'active')
+              .limit(1)
+              .maybeSingle();
+            if (companySub?.tier) effectiveTier = companySub.tier as string;
+          }
+          const allowedTiers = ['pro', 'team', 'business'];
+          if (!allowedTiers.includes(effectiveTier)) {
+            return new Response(JSON.stringify({
+              error: "Microsoft Teams integration requires a Pro subscription or higher.",
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+
         const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
         // NOTE: Reading Teams + members typically requires admin-consented Graph permissions in the Azure app.
         const scopes = [

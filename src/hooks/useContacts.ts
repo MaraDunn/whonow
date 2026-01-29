@@ -991,6 +991,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
     loadMoreContacts,
     isLoadingMoreContacts: isFetchingNextPage,
     refetchContacts: refetchList,
+    getContactById,
     addContact: addContact.mutate,
     updateContact: updateContact.mutate,
     deleteContact: deleteContact.mutate,

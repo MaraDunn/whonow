@@ -1,11 +1,36 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function checkLaunchMode(): { blocked: boolean; mode: string } {
+  const mode = Deno.env.get("APP_LAUNCH_MODE") || "live";
+  return { blocked: mode === "waitlist", mode };
+}
+
+function waitlistModeBlockedResponse(_origin?: string | null): Response {
+  return new Response(
+    JSON.stringify({
+      error: "Slack is unavailable while the app is in waitlist mode. Set APP_LAUNCH_MODE to 'live' in Supabase Edge Function secrets to enable integrations.",
+    }),
+    {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    }
+  );
+}
+
+/** True when the request is from a test/dev origin (localhost or INTEGRATION_TEST_ORIGINS). */
+function isTestOrigin(origin: string | null): boolean {
+  if (!origin) return false;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
+  const allowed = Deno.env.get("INTEGRATION_TEST_ORIGINS");
+  if (!allowed) return false;
+  return allowed.split(",").some((o) => origin === o.trim());
+}
 
 type SlackUserProfile = {
   email?: string;
@@ -38,11 +63,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Check launch mode - block in waitlist mode
+  // Check launch mode - block in waitlist mode unless: skip flag is set, or test origin, or OAuth callback
+  const skipWaitlistForIntegrations = Deno.env.get("INTEGRATION_SKIP_WAITLIST") === "true";
   const { blocked } = checkLaunchMode();
-  if (blocked) {
+  if (!skipWaitlistForIntegrations && blocked) {
     const origin = req.headers.get("origin");
-    return waitlistModeBlockedResponse(origin);
+    const isOAuthCallback = req.method === "GET" && new URL(req.url).searchParams.has("code");
+    if (!isTestOrigin(origin) && !isOAuthCallback) return waitlistModeBlockedResponse(origin);
   }
 
   try {
@@ -114,9 +141,14 @@ serve(async (req) => {
 
       if (!tokenData.ok) {
         console.error("Slack OAuth failed:", tokenData.error);
+        // Map known Slack errors to user-friendly messages
+        let userMessage = tokenData.error as string;
+        if (tokenData.error === "invalid_team_for_non_distributed_app") {
+          userMessage = "Slack app must be publicly distributed. In your Slack app settings, go to Manage Distribution and enable Public Distribution. If you have multiple workspaces open, try connecting in an incognito window or after signing out of other workspaces.";
+        }
         return new Response(null, {
           status: 302,
-          headers: { Location: `${appUrl}/?integration=slack&status=error&message=${encodeURIComponent(tokenData.error)}` },
+          headers: { Location: `${appUrl}/?integration=slack&status=error&message=${encodeURIComponent(userMessage)}` },
         });
       }
 
@@ -240,6 +272,31 @@ serve(async (req) => {
           if (!isAdminData) {
             return new Response(JSON.stringify({ 
               error: "Only organization admins can setup organization integrations" 
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+
+        // For user-level, require Pro tier or higher
+        if (scope === 'user') {
+          const { data: userTier } = await supabase.rpc('get_user_subscription_tier', { _user_id: user.id });
+          let effectiveTier = (userTier ?? 'starter') as string;
+          if (effectiveTier === 'starter' && profile?.company_id) {
+            const { data: companySub } = await supabase
+              .from('subscriptions')
+              .select('tier')
+              .eq('company_id', profile.company_id)
+              .eq('status', 'active')
+              .limit(1)
+              .maybeSingle();
+            if (companySub?.tier) effectiveTier = companySub.tier as string;
+          }
+          const allowedTiers = ['pro', 'team', 'business'];
+          if (!allowedTiers.includes(effectiveTier)) {
+            return new Response(JSON.stringify({
+              error: "Slack integration requires a Pro subscription or higher.",
             }), {
               status: 403,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -425,12 +482,28 @@ serve(async (req) => {
       case "share-contact": {
         const { contactId, channelId } = params;
 
-        const { data: integration } = await supabase
-          .from("integrations")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("provider", "slack")
-          .single();
+        // Resolve integration: org-level first (if user has company), then user-level
+        let integration = null;
+        if (profile?.company_id) {
+          const { data: orgIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("company_id", profile.company_id)
+            .eq("provider", "slack")
+            .eq("scope", "organization")
+            .eq("is_active", true)
+            .maybeSingle();
+          integration = orgIntegration;
+        }
+        if (!integration?.access_token) {
+          const { data: userIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("provider", "slack")
+            .maybeSingle();
+          integration = userIntegration;
+        }
 
         if (!integration?.access_token) {
           return new Response(JSON.stringify({ error: "Slack not connected" }), {
@@ -453,12 +526,22 @@ serve(async (req) => {
           });
         }
 
-        // Format contact as Slack message
+        const appUrl = Deno.env.get("APP_URL") || "http://localhost:8080";
+        // Logo must be a public HTTPS URL reachable by Slack's servers. Prefer SLACK_LOGO_URL if set (e.g. https://www.whonow.co/logo-icon.png).
+        const logoUrl =
+          Deno.env.get("SLACK_LOGO_URL") ||
+          (appUrl.startsWith("http://localhost") ? null : `${appUrl.replace(/\/$/, "")}/logo-icon.png`);
+        // If no usable logo URL (e.g. APP_URL is localhost), omit the accessory so the message doesn't show a broken image
+        const sectionWithOptionalLogo = {
+          type: "section",
+          text: { type: "mrkdwn", text: `*${contact.name}*` },
+          ...(logoUrl && logoUrl.startsWith("http")
+            ? { accessory: { type: "image" as const, image_url: logoUrl, alt_text: "WhoNow" } }
+            : {}),
+        };
+
         const blocks = [
-          {
-            type: "header",
-            text: { type: "plain_text", text: `📇 ${contact.name}` },
-          },
+          sectionWithOptionalLogo,
           {
             type: "section",
             fields: [
@@ -482,7 +565,13 @@ serve(async (req) => {
         const messageData = await messageResponse.json();
 
         if (!messageData.ok) {
-          return new Response(JSON.stringify({ error: messageData.error }), {
+          let userMessage = messageData.error as string;
+          if (messageData.error === "not_in_channel") {
+            userMessage = "The app isn't in that channel yet. In Slack, invite the app to the channel first (e.g. type /invite then select the app, or add the app to the channel), then try sharing again.";
+          } else if (messageData.error === "channel_not_found") {
+            userMessage = "Channel not found. It may have been deleted or the app may not have access.";
+          }
+          return new Response(JSON.stringify({ error: userMessage }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -494,12 +583,28 @@ serve(async (req) => {
       }
 
       case "get-channels": {
-        const { data: integration } = await supabase
-          .from("integrations")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("provider", "slack")
-          .single();
+        // Resolve integration: org-level first (if user has company), then user-level
+        let integration = null;
+        if (profile?.company_id) {
+          const { data: orgIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("company_id", profile.company_id)
+            .eq("provider", "slack")
+            .eq("scope", "organization")
+            .eq("is_active", true)
+            .maybeSingle();
+          integration = orgIntegration;
+        }
+        if (!integration?.access_token) {
+          const { data: userIntegration } = await supabase
+            .from("integrations")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("provider", "slack")
+            .maybeSingle();
+          integration = userIntegration;
+        }
 
         if (!integration?.access_token) {
           return new Response(JSON.stringify({ error: "Slack not connected" }), {
@@ -572,10 +677,10 @@ serve(async (req) => {
       }
 
       case "get-status": {
-        // Check for org-level integration first, then user-level
+        // Check org-level first if user has a company (so Share to Slack works for org-connected users), then user-level
         let integration = null;
         
-        if (scope === 'organization' && profile?.company_id) {
+        if (profile?.company_id) {
           const { data: orgIntegration } = await supabase
             .from("integrations")
             .select("*")

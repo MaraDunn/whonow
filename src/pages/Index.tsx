@@ -75,6 +75,7 @@ const IndexContent = () => {
     sharedContactsCount: accurateSharedCount,
     clientCount: accurateClientCount,
     isLoading: contactsLoading, 
+    getContactById,
     addContact, 
     updateContact,
     deleteContact,
@@ -505,9 +506,11 @@ const IndexContent = () => {
     setDialogOpen(true);
   };
 
-  const handleViewContact = (contact: Contact) => {
+  const handleViewContact = async (contact: Contact) => {
     setViewingContact(contact);
     setDetailsDialogOpen(true);
+    const fullContact = await getContactById(contact.id);
+    if (fullContact) setViewingContact(fullContact);
   };
 
   const handleDeleteFromDetails = () => {

@@ -390,9 +390,10 @@ export function useSlackIntegration() {
       return true;
     } catch (error) {
       console.error("Error sharing contact:", error);
+      const message = error instanceof Error ? error.message : "Could not share contact to Slack";
       toast({
         title: "Sharing failed",
-        description: "Could not share contact to Slack",
+        description: message,
         variant: "destructive",
       });
       return false;

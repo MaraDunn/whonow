@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, FileDown, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, FileDown, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Link2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { AdminPdfImport } from "@/components/AdminPdfImport";
@@ -375,18 +375,22 @@ export function SettingsDialog({
   }, [showOrganizationTab]);
 
   const categories = useMemo(() => {
+    const generalItems: Array<{ id: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+      { id: "general", label: "Appearance", icon: Palette },
+      { id: "keywords", label: "Keywords", icon: Tags },
+      { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
+      { id: "ai-settings", label: "AI Search", icon: Sparkles },
+      { id: "export-contacts", label: "Export Contacts", icon: FileDown },
+    ];
+    if (hasIntegrationsAccess) {
+      generalItems.push({ id: "integrations", label: "Integrations", icon: Link2 });
+    }
     const cats = [
       {
         id: "general",
         label: "General",
         icon: Palette,
-        items: [
-          { id: "general", label: "Appearance", icon: Palette },
-          { id: "keywords", label: "Keywords", icon: Tags },
-          { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
-          { id: "ai-settings", label: "AI Search", icon: Sparkles },
-          { id: "export-contacts", label: "Export Contacts", icon: FileDown },
-        ],
+        items: generalItems,
       },
       {
         id: "account",
@@ -433,7 +437,7 @@ export function SettingsDialog({
     }
 
     return cats;
-  }, [showOrganizationTab, isAdmin, company, hasTeamFeatures]);
+  }, [showOrganizationTab, isAdmin, company, hasTeamFeatures, hasIntegrationsAccess]);
 
   // Safety check: redirect non-admin users away from admin-only categories
   useEffect(() => {
@@ -452,7 +456,11 @@ export function SettingsDialog({
         }
       }
     }
-  }, [selectedCategory, isAdmin, company, categories]);
+    // Redirect non-Pro users away from individual Integrations (e.g. deep link)
+    if (selectedCategory === "integrations" && !hasIntegrationsAccess) {
+      setSelectedCategory("general");
+    }
+  }, [selectedCategory, isAdmin, company, categories, hasIntegrationsAccess]);
 
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) return categories;
@@ -1041,6 +1049,13 @@ export function SettingsDialog({
                 ) : (
                   <p className="text-sm text-muted-foreground">Export is not available.</p>
                 )}
+              </div>
+            )}
+
+            {/* Integrations (individual Slack & Teams) - Pro+ only */}
+            {selectedCategory === "integrations" && hasIntegrationsAccess && (
+              <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                <IntegrationsPanel />
               </div>
             )}
 
