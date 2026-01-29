@@ -319,7 +319,10 @@ const ContactCardComponent = function ContactCard({
             {contact.phone ? (
               <a
                 href={`tel:${contact.phone}`}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkContacted?.();
+                }}
                 className="flex items-center gap-0.5 text-muted-foreground hover:text-primary transition-colors truncate max-w-[80px]"
                 title={contact.phone}
               >
@@ -338,7 +341,10 @@ const ContactCardComponent = function ContactCard({
             {contact.email ? (
               <a
                 href={`mailto:${contact.email}`}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkContacted?.();
+                }}
                 className="flex items-center gap-0.5 text-muted-foreground hover:text-primary transition-colors truncate max-w-[100px]"
                 title={contact.email}
               >
@@ -460,7 +466,10 @@ const ContactCardComponent = function ContactCard({
           {contact.email && (
             <a
               href={`mailto:${contact.email}`}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMarkContacted?.();
+              }}
               className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors"
             >
               <Mail className="h-4 w-4 text-secondary-foreground" />
@@ -471,7 +480,10 @@ const ContactCardComponent = function ContactCard({
           {contact.phone && (
             <a
               href={`tel:${contact.phone}`}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMarkContacted?.();
+              }}
               className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors min-w-0"
             >
               <Phone className="h-4 w-4 text-secondary-foreground shrink-0" />
@@ -958,7 +970,10 @@ const ContactCardComponent = function ContactCard({
             {contact.phone ? (
               <a
                 href={`tel:${contact.phone}`}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkContacted?.();
+                }}
                 className="text-sm text-foreground hover:text-primary transition-colors truncate"
               >
                 {contact.phone}
@@ -974,7 +989,10 @@ const ContactCardComponent = function ContactCard({
             {contact.email ? (
               <a
                 href={`mailto:${contact.email}`}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkContacted?.();
+                }}
                 className="text-sm text-foreground hover:text-primary transition-colors truncate"
               >
                 {contact.email}
