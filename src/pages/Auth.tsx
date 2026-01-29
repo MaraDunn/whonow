@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,8 +21,19 @@ const passwordSchema = z.string()
   .regex(/[0-9]/, "Password must contain at least one number")
   .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character");
 
+/** Safe redirect: must be same-origin path (starts with /) and not auth loop. */
+function getSafeRedirect(redirect: string | null): string | null {
+  if (!redirect || typeof redirect !== "string") return null;
+  const decoded = decodeURIComponent(redirect);
+  if (!decoded.startsWith("/") || decoded.startsWith("//")) return null;
+  if (decoded.startsWith("/auth")) return null;
+  return decoded;
+}
+
 const Auth = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectParam = getSafeRedirect(searchParams.get("redirect"));
   const { user, loading, signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,9 +48,9 @@ const Auth = () => {
   // Redirect if already authenticated
   useEffect(() => {
     if (!loading && user) {
-      navigate("/app");
+      navigate(redirectParam || "/app", { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, redirectParam]);
 
   const validateForm = (isSignUp: boolean) => {
     const newErrors: { email?: string; password?: string; fullName?: string } = {};
@@ -80,7 +91,7 @@ const Auth = () => {
       }
     } else {
       toast.success("Welcome back!");
-      navigate("/app");
+      navigate(redirectParam || "/app", { replace: true });
     }
   };
 
@@ -100,7 +111,7 @@ const Auth = () => {
       }
     } else {
       toast.success("Account created! Setting up your workspace...");
-      navigate("/app");
+      navigate(redirectParam || "/app", { replace: true });
     }
   };
 

@@ -15,6 +15,8 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
+import ImportContactPage from "./pages/ImportContactPage";
+import ExportSharedContactPage from "./pages/ExportSharedContactPage";
 
 const queryClient = new QueryClient();
 
@@ -48,8 +50,8 @@ const WaitlistRouteGuard = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   
   if (IS_WAITLIST_MODE_EFFECTIVE) {
-    // Public routes allowed in waitlist mode
-    const publicRoutes = ["/", "/waitlist", "/privacy", "/terms"];
+    // Public routes allowed in waitlist mode (include shared-contact links so Slack links still open)
+    const publicRoutes = ["/", "/waitlist", "/privacy", "/terms", "/import-contact", "/export-shared-contact"];
     const isPublicRoute = publicRoutes.includes(location.pathname);
     
     if (!isPublicRoute) {
@@ -104,6 +106,8 @@ const AppRoutes = () => {
               <Route path="/waitlist" element={<Waitlist />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
+              <Route path="/import-contact" element={<ImportContactPage />} />
+              <Route path="/export-shared-contact" element={<ExportSharedContactPage />} />
               {/* Block all other routes in waitlist mode */}
               <Route path="/app" element={<Navigate to="/" replace />} />
               <Route path="/auth" element={<Navigate to="/" replace />} />
@@ -123,6 +127,8 @@ const AppRoutes = () => {
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/import-contact" element={<ImportContactPage />} />
+              <Route path="/export-shared-contact" element={<ExportSharedContactPage />} />
               <Route path="*" element={<NotFound />} />
             </>
           )}

@@ -526,12 +526,56 @@ serve(async (req) => {
           });
         }
 
-        const appUrl = Deno.env.get("APP_URL") || "http://localhost:8080";
+        const appUrl = (Deno.env.get("APP_URL") || "http://localhost:8080").replace(/\/$/, "");
+
+        // Build portable contact payload (camelCase) for Add to WhoNow / Download CSV
+        const contactPayload = {
+          name: contact.name ?? "",
+          email: contact.email ?? "",
+          phone: contact.phone ?? "",
+          company: contact.company ?? "",
+          role: contact.role ?? "",
+          tags: contact.tags ?? [],
+          description: contact.description ?? "",
+          address: contact.address ?? "",
+          city: contact.city ?? "",
+          state: contact.state ?? "",
+          zipCode: contact.zip_code ?? "",
+          country: contact.country ?? "",
+          lastContactedAt: contact.last_contacted_at ?? "",
+          isClient: contact.is_client === true,
+        };
+
+        // Short-lived token for share link (7 days)
+        const tokenBytes = new Uint8Array(16);
+        crypto.getRandomValues(tokenBytes);
+        const shareToken = btoa(String.fromCharCode(...tokenBytes))
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { error: insertError } = await supabase.from("contact_share_tokens").insert({
+          token: shareToken,
+          contact_payload: contactPayload,
+          expires_at: expiresAt,
+        });
+
+        if (insertError) {
+          console.error("Failed to create share token:", insertError);
+          return new Response(JSON.stringify({ error: "Failed to create share link" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const addToWhoNowUrl = `${appUrl}/import-contact?token=${shareToken}`;
+        const downloadCsvUrl = `${appUrl}/export-shared-contact?token=${shareToken}`;
+
         // Logo must be a public HTTPS URL reachable by Slack's servers. Prefer SLACK_LOGO_URL if set (e.g. https://www.whonow.co/logo-icon.png).
         const logoUrl =
           Deno.env.get("SLACK_LOGO_URL") ||
-          (appUrl.startsWith("http://localhost") ? null : `${appUrl.replace(/\/$/, "")}/logo-icon.png`);
-        // If no usable logo URL (e.g. APP_URL is localhost), omit the accessory so the message doesn't show a broken image
+          (appUrl.startsWith("http://localhost") ? null : `${appUrl}/logo-icon.png`);
         const sectionWithOptionalLogo = {
           type: "section",
           text: { type: "mrkdwn", text: `*${contact.name}*` },
@@ -550,6 +594,15 @@ serve(async (req) => {
               { type: "mrkdwn", text: `*Role:*\n${contact.role || "N/A"}` },
               { type: "mrkdwn", text: `*Company:*\n${contact.company || "N/A"}` },
             ],
+          },
+          // Use markdown links instead of buttons so the message works without enabling
+          // Interactivity in the Slack app (which causes "app is not configured for this feature")
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `<${addToWhoNowUrl}|Add to WhoNow> · <${downloadCsvUrl}|Download CSV>`,
+            },
           },
         ];
 

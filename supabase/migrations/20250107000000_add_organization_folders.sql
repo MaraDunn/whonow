@@ -7,11 +7,15 @@ CREATE INDEX IF NOT EXISTS idx_folders_is_organization ON public.folders(is_orga
 CREATE INDEX IF NOT EXISTS idx_folders_company_org ON public.folders(company_id, is_organization_folder);
 
 -- Update RLS Policies for folders to support organization folders
--- Drop existing policies
+-- Drop existing policies (include current names for idempotency)
 DROP POLICY IF EXISTS "Users can view their own and company folders" ON public.folders;
+DROP POLICY IF EXISTS "Users can view their own and organization folders" ON public.folders;
 DROP POLICY IF EXISTS "Users can create folders" ON public.folders;
+DROP POLICY IF EXISTS "Users can create folders based on role" ON public.folders;
 DROP POLICY IF EXISTS "Users can update their own folders or company folders if admin" ON public.folders;
+DROP POLICY IF EXISTS "Users can update their folders based on ownership" ON public.folders;
 DROP POLICY IF EXISTS "Users can delete their own folders or company folders if admin" ON public.folders;
+DROP POLICY IF EXISTS "Users can delete their folders based on ownership" ON public.folders;
 
 -- Policy: Users can view their personal folders + all organization folders in their company
 CREATE POLICY "Users can view their own and organization folders"
