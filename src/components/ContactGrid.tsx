@@ -11,6 +11,8 @@ import { useResponsiveView } from "@/hooks/use-mobile";
 const VIRTUALIZE_THRESHOLD = 500;
 // Match desktop card row height (28rem ≈ 448px) so virtualized rows don't overlap before measurement.
 const ROW_HEIGHT_ESTIMATE = 460;
+// Compact (mobile/tablet) cards are single-row ~60–80px; use slightly larger for expanded state.
+const COMPACT_ROW_HEIGHT_ESTIMATE = 90;
 const DESKTOP_CARD_MIN_WIDTH_PX = 280; // Reduced to allow 3+ cards per row
 const DESKTOP_GRID_GAP_PX = 24;
 
@@ -121,6 +123,17 @@ export function ContactGrid({
     [currentUserEmail, currentUserId]
   );
   const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
+
+  // Match Tailwind sm (640px): single column only when grid is actually 1-col to avoid virtualizer overlap
+  const [compactGridSingleCol, setCompactGridSingleCol] = useState(true);
+  useEffect(() => {
+    if (!isCompactMode) return;
+    const mql = window.matchMedia("(min-width: 640px)");
+    const update = () => setCompactGridSingleCol(!mql.matches);
+    update();
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, [isCompactMode]);
   
   // Track which contact is expanded in compact mode
   const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
@@ -149,8 +162,17 @@ export function ContactGrid({
   // MUST be before early return to follow Rules of Hooks
   const gridClasses = useMemo(() => 
     isCompactMode
-      ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 items-stretch"
+      ? "grid grid-cols-1 sm:grid-cols-2 gap-0 sm:gap-3 items-stretch"
       : "grid w-full min-w-0 gap-4 sm:gap-5 lg:gap-6 items-stretch auto-rows-[28rem] grid-cols-[repeat(auto-fill,minmax(280px,1fr))]",
+    [isCompactMode]
+  );
+
+  // Card wrapper: on compact use margin for spacing so cards never touch (grid gap can be unreliable on mobile)
+  const cardWrapperClass = useMemo(
+    () =>
+      isCompactMode
+        ? "min-h-0 overflow-hidden rounded-xl mb-4 last:mb-0 sm:mb-0"
+        : "min-h-[28rem] h-full overflow-hidden rounded-xl sm:rounded-2xl",
     [isCompactMode]
   );
 
@@ -165,10 +187,10 @@ export function ContactGrid({
   const parentRef = useRef<HTMLDivElement>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
-  // Columns per row: compact uses 2; desktop virtualized uses container width so no horizontal scroll.
+  // Columns per row: compact uses 1 when grid is 1-col (< 640px), 2 when grid is 2-col (≥ 640px); desktop uses container width.
   const [virtualizedColumns, setVirtualizedColumns] = useState(4);
   useEffect(() => {
-    if (!useVirtualizedList || !parentRef.current) return;
+    if (!useVirtualizedList || !parentRef.current || isCompactMode) return;
     const el = parentRef.current;
     const updateColumns = () => {
       const w = el.clientWidth;
@@ -179,9 +201,11 @@ export function ContactGrid({
     const ro = new ResizeObserver(updateColumns);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [useVirtualizedList]);
+  }, [useVirtualizedList, isCompactMode]);
 
-  const columns = isCompactMode ? 2 : (useVirtualizedList ? virtualizedColumns : 1);
+  const columns = isCompactMode
+    ? (compactGridSingleCol ? 1 : 2)
+    : (useVirtualizedList ? virtualizedColumns : 1);
   const rowCount = useVirtualizedList ? Math.ceil(contacts.length / columns) : 0;
 
   // Start loading the next page as soon as the user scrolls near the bottom,
@@ -205,18 +229,19 @@ export function ContactGrid({
     typeof window === "undefined" || !navigator.userAgent.toLowerCase().includes("firefox");
   // Match grid row gap: compact uses gap-2/gap-3 (8–12px), desktop uses gap-3/gap-4/gap-6 (12–24px)
   const rowGapPx = isCompactMode ? 12 : 24;
+  const rowHeightEstimate = isCompactMode ? COMPACT_ROW_HEIGHT_ESTIMATE : ROW_HEIGHT_ESTIMATE;
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT_ESTIMATE,
+    estimateSize: () => rowHeightEstimate,
     overscan: 3,
     enabled: useVirtualizedList,
     gap: rowGapPx,
     measureElement: useDynamicMeasurement
       ? (el) =>
           el
-            ? Math.max(ROW_HEIGHT_ESTIMATE, el.getBoundingClientRect().height)
-            : ROW_HEIGHT_ESTIMATE
+            ? Math.max(rowHeightEstimate, el.getBoundingClientRect().height)
+            : rowHeightEstimate
       : undefined,
   });
 
@@ -322,7 +347,7 @@ export function ContactGrid({
                   }}
                 >
                   {rowContacts.map((contact, index) => (
-                    <div key={contact.id} className="min-h-[28rem] h-full overflow-hidden rounded-xl sm:rounded-2xl">
+                    <div key={contact.id} className={cardWrapperClass}>
                       <DraggableContactCard
                         contact={contact}
                         index={start + index}
@@ -364,7 +389,7 @@ export function ContactGrid({
         <div className="min-w-0 overflow-x-hidden w-full">
           <div className={gridClasses}>
           {contacts.map((contact, index) => (
-            <div key={contact.id} className="min-h-[28rem] h-full overflow-hidden rounded-xl sm:rounded-2xl">
+            <div key={contact.id} className={cardWrapperClass}>
               <DraggableContactCard
                 contact={contact}
                 index={index}
