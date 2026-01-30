@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { useBranding } from "@/hooks/useBranding";
 
@@ -13,9 +14,23 @@ export const Footer = () => {
             <WhoNowLogo size="sm" showText={false} />
             <span className="font-display font-semibold text-foreground">{branding.companyName || "WhoNow"}</span>
           </div>
-          <p className="text-sm text-muted-foreground">
-            © {currentYear} {branding.companyName || "WhoNow"}. All rights reserved.
-          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+            <Link
+              to="/privacy"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Privacy Policy
+            </Link>
+            <Link
+              to="/terms"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Terms of Service
+            </Link>
+            <p className="text-sm text-muted-foreground">
+              © {currentYear} {branding.companyName || "WhoNow"}. All rights reserved.
+            </p>
+          </div>
         </div>
       </div>
     </footer>

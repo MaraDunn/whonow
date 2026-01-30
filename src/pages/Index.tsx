@@ -10,6 +10,9 @@ import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
 import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
 import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { HelpDialog } from "@/components/HelpDialog";
+import { ReportProblemDialog } from "@/components/ReportProblemDialog";
+import { ContactSupportDialog } from "@/components/ContactSupportDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
@@ -66,6 +69,9 @@ const IndexContent = () => {
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [showOnboardingTutorial, setShowOnboardingTutorial] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
 
   // Launch onboarding tutorial for new users after company setup is done (or skipped), with a short delay
   useEffect(() => {
@@ -789,6 +795,7 @@ const IndexContent = () => {
                 onOpenAddDialog={handleOpenAddDialog}
                 onOpenProfile={handleOpenProfile}
                 onOpenSettings={() => setSettingsOpen(true)}
+                onOpenHelp={() => setHelpDialogOpen(true)}
                 onOpenImport={(tab) => {
                   setImportDefaultTab(tab);
                   setImportDialogOpen(true);
@@ -1056,6 +1063,29 @@ const IndexContent = () => {
                   contact={shareTeamsContact}
                 />
               )}
+
+              <HelpDialog
+                open={helpDialogOpen}
+                onOpenChange={setHelpDialogOpen}
+                onOpenReport={() => {
+                  setHelpDialogOpen(false);
+                  setReportDialogOpen(true);
+                }}
+                onOpenContact={() => {
+                  setHelpDialogOpen(false);
+                  setContactDialogOpen(true);
+                }}
+              />
+
+              <ReportProblemDialog
+                open={reportDialogOpen}
+                onOpenChange={setReportDialogOpen}
+              />
+
+              <ContactSupportDialog
+                open={contactDialogOpen}
+                onOpenChange={setContactDialogOpen}
+              />
 
               <SettingsDialog
                 open={settingsOpen}

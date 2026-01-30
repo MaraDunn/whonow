@@ -17,6 +17,7 @@ import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import ImportContactPage from "./pages/ImportContactPage";
 import ExportSharedContactPage from "./pages/ExportSharedContactPage";
+import HelpFAQPage from "./pages/HelpFAQPage";
 
 const queryClient = new QueryClient();
 
@@ -121,6 +122,14 @@ const AppRoutes = () => {
                 element={
                   <ProtectedRoute>
                     <Index />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/help/faq"
+                element={
+                  <ProtectedRoute>
+                    <HelpFAQPage />
                   </ProtectedRoute>
                 }
               />

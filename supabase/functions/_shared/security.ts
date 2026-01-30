@@ -24,15 +24,24 @@ const ALLOWED_ORIGINS = Deno.env.get("ALLOWED_ORIGINS")
   ? Deno.env.get("ALLOWED_ORIGINS")!.split(",").map(o => o.trim())
   : DEFAULT_ORIGINS;
 
+/** True when the request origin is localhost/127.0.0.1 (for local dev CORS). */
+function isLocalOrigin(origin: string | null | undefined): boolean {
+  if (!origin) return false;
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+}
+
 /**
- * Get secure CORS headers based on request origin
- * Falls back to first allowed origin if request origin is not in allowlist
+ * Get secure CORS headers based on request origin.
+ * Localhost/127.0.0.1 origins are always reflected so local dev works even when
+ * ALLOWED_ORIGINS is set to production only. Otherwise uses allowlist or first allowed origin.
  */
 export function getCorsHeaders(requestOrigin?: string | null): Record<string, string> {
-  const origin = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin) 
-    ? requestOrigin 
-    : ALLOWED_ORIGINS[0];
-    
+  let origin: string;
+  if (requestOrigin && (isLocalOrigin(requestOrigin) || ALLOWED_ORIGINS.includes(requestOrigin))) {
+    origin = requestOrigin;
+  } else {
+    origin = ALLOWED_ORIGINS[0];
+  }
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",

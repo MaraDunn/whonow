@@ -1,4 +1,4 @@
-import { Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, MessageSquare, Video } from "lucide-react";
+import { Plus, User, Settings, LogOut, FileUp, Camera, Chrome, ChevronDown, Building2, MessageSquare, Video, HelpCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { TEAMS_COMING_SOON } from "@/config/features";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Tooltip,
   TooltipContent,
@@ -30,6 +30,7 @@ interface HeaderProps {
   onOpenAddDialog: () => void;
   onOpenProfile: () => void;
   onOpenSettings: () => void;
+  onOpenHelp?: () => void;
   onOpenImport: (tab?: string) => void;
   onContactsImported?: () => void;
 }
@@ -39,6 +40,7 @@ export function Header({
   onOpenAddDialog, 
   onOpenProfile, 
   onOpenSettings, 
+  onOpenHelp, 
   onOpenImport, 
   onContactsImported, 
 }: HeaderProps) {
@@ -222,6 +224,20 @@ export function Header({
             <DropdownMenuItem className="cursor-pointer" onClick={onOpenSettings}>
               <Settings className="mr-2 h-4 w-4" />
               Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={onOpenHelp}>
+              <HelpCircle className="mr-2 h-4 w-4" />
+              Help
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/privacy" className="cursor-pointer">
+                Privacy Policy
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/terms" className="cursor-pointer">
+                Terms of Service
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={handleSignOut}>
