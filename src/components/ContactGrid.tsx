@@ -4,6 +4,18 @@ import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
 import { DraggableContactCard } from "./DraggableContactCard";
 import { Users, Trash2 } from "lucide-react";
+
+/** Sample contact shown when the user has no contacts (first-time / empty state). Not persisted. */
+const SAMPLE_CONTACT: Contact = {
+  id: "__demo__",
+  name: "Sample Contact",
+  email: "sample@example.com",
+  phone: "+1 (555) 000-0000",
+  company: "Example Corp",
+  role: "Product Manager",
+  tags: [],
+  description: "This is what a contact card looks like. Add your own contacts to get started.",
+};
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { useResponsiveView } from "@/hooks/use-mobile";
@@ -61,6 +73,8 @@ interface ContactGridProps {
   hasMore?: boolean;
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
+  /** When true and there are no contacts, show a sample contact card (e.g. during onboarding). Hidden after tutorial and when user has real contacts. */
+  showSampleContact?: boolean;
 }
 
 export function ContactGrid({ 
@@ -101,6 +115,7 @@ export function ContactGrid({
   hasMore = false,
   onLoadMore,
   isLoadingMore = false,
+  showSampleContact = false,
 }: ContactGridProps) {
   const responsiveView = useResponsiveView();
   const isInternalContact = useCallback(
@@ -271,6 +286,40 @@ export function ContactGrid({
 
   // Early return AFTER all hooks
   if (contacts.length === 0) {
+    const showSampleCard = showSampleContact && !isTrashView && !searchQuery;
+    // When showing sample card, render it in the same grid position as the first contact would be
+    if (showSampleCard) {
+      return (
+        <div className="min-w-0 overflow-x-hidden w-full animate-fade-in">
+          <p className="text-sm text-muted-foreground mb-3">
+            Here&apos;s what a contact looks like:
+          </p>
+          <div className={gridClasses}>
+            <div className={cardWrapperClass} data-onboarding-contact-card="">
+              <DraggableContactCard
+                contact={SAMPLE_CONTACT}
+                index={0}
+                action={action}
+                onEdit={() => {}}
+                onView={undefined}
+                isTrashView={false}
+                folder={undefined}
+                folders={folders}
+                showOwnershipBadge={showOwnershipBadge}
+                hasClientAccess={hasClientAccess}
+                isInternal={false}
+                isCurrentUser={false}
+                compact={isCompactMode}
+                isExpanded={false}
+                onToggleExpand={() => {}}
+                isSelected={false}
+                selectionMode={false}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
         <div className="w-20 h-20 rounded-2xl bg-secondary flex items-center justify-center mb-4">

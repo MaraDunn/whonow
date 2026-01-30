@@ -13,6 +13,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
 import { toast } from "sonner";
+import { TEAMS_COMING_SOON } from "@/config/features";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
@@ -161,14 +162,21 @@ export function Header({
                   <MessageSquare className="mr-2 h-4 w-4" />
                   {slack.isLoading ? "Importing..." : "Import from Slack"}
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="cursor-pointer" 
-                  onClick={handleTeamsImport}
-                  disabled={teams.isLoading}
-                >
-                  <Video className="mr-2 h-4 w-4" />
-                  {teams.isLoading ? "Importing..." : "Import from Teams"}
-                </DropdownMenuItem>
+                {TEAMS_COMING_SOON ? (
+                  <DropdownMenuItem className="cursor-default" disabled>
+                    <Video className="mr-2 h-4 w-4" />
+                    Import from Teams (coming soon)
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem 
+                    className="cursor-pointer" 
+                    onClick={handleTeamsImport}
+                    disabled={teams.isLoading}
+                  >
+                    <Video className="mr-2 h-4 w-4" />
+                    {teams.isLoading ? "Importing..." : "Import from Teams"}
+                  </DropdownMenuItem>
+                )}
               </>
             )}
           </DropdownMenuContent>

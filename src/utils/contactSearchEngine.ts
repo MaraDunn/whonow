@@ -1,6 +1,11 @@
 /**
  * Deterministic Contact Search Engine
  * Weighted full-text search with indexing + semantic similarity
+ * 
+ * @deprecated This client-side search engine is no longer used by default.
+ * All search now goes through the server-side smart_search_contacts RPC for consistent
+ * performance at any scale. This file is kept for potential future offline functionality.
+ * See: supabase/migrations/20260128000002_smart_search_contacts.sql
  */
 
 import { Contact } from "@/types/contact";

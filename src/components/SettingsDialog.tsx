@@ -6,7 +6,6 @@ import { AdminPdfImport } from "@/components/AdminPdfImport";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 import { BrandingSettings } from "@/components/BrandingSettings";
 import { DuplicateCleanupDialog } from "@/components/DuplicateCleanupDialog";
-import { AISettingsDialog } from "@/components/AISettingsDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TIER_CONFIGS } from "@/types/subscription";
 import {
@@ -119,7 +118,6 @@ export function SettingsDialog({
   const [selectedCategory, setSelectedCategory] = useState("general");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["general", "account", "organization"]));
   const [duplicateCleanupOpen, setDuplicateCleanupOpen] = useState(false);
-  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
 
   // Export Contacts panel state
   const [exportScope, setExportScope] = useState<"all" | "folder">("all");
@@ -379,7 +377,6 @@ export function SettingsDialog({
       { id: "general", label: "Appearance", icon: Palette },
       { id: "keywords", label: "Keywords", icon: Tags },
       { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
-      { id: "ai-settings", label: "AI Search", icon: Sparkles },
       { id: "export-contacts", label: "Export Contacts", icon: FileDown },
     ];
     if (hasIntegrationsAccess) {
@@ -861,26 +858,6 @@ export function SettingsDialog({
                     </Button>
                   </CardContent>
                 </Card>
-              </div>
-            )}
-
-            {/* AI Settings */}
-            {selectedCategory === "ai-settings" && (
-              <div className="space-y-4 p-4 sm:p-6 md:p-8">
-                <div>
-                  <h2 className="text-2xl font-semibold mb-2">AI Search Settings</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Configure AI-powered search features and model downloads.
-                  </p>
-                </div>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setAiSettingsOpen(true)}
-                  className="w-full"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Manage AI Features
-                </Button>
               </div>
             )}
 
@@ -1726,11 +1703,6 @@ export function SettingsDialog({
       <DuplicateCleanupDialog
         open={duplicateCleanupOpen}
         onOpenChange={setDuplicateCleanupOpen}
-      />
-      
-      <AISettingsDialog 
-        open={aiSettingsOpen} 
-        onOpenChange={setAiSettingsOpen} 
       />
     </Dialog>
   );

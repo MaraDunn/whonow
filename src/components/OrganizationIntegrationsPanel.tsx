@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { useOrganizationIntegrations } from "@/hooks/useOrganizationIntegrations";
 import { Loader2, Link2, Unlink, Download, Check, Video, Shield, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TEAMS_COMING_SOON } from "@/config/features";
 
 export function OrganizationIntegrationsPanel() {
   const {
@@ -79,7 +80,7 @@ export function OrganizationIntegrationsPanel() {
               </div>
             )}
 
-            {teamsStatus?.connected && (
+            {!TEAMS_COMING_SOON && teamsStatus?.connected && (
               <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/50">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6264A7]">
                   <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="currentColor">
@@ -205,7 +206,7 @@ export function OrganizationIntegrationsPanel() {
         </Card>
 
         {/* Microsoft Teams Integration */}
-        <Card>
+        <Card className={TEAMS_COMING_SOON ? "opacity-90" : undefined}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -221,15 +222,23 @@ export function OrganizationIntegrationsPanel() {
                   </CardDescription>
                 </div>
               </div>
-              {teamsStatus?.connected && (
+              {TEAMS_COMING_SOON ? (
+                <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                  Coming soon
+                </Badge>
+              ) : teamsStatus?.connected ? (
                 <Badge variant="secondary" className="bg-green-500/10 text-green-600">
                   <Check className="h-3 w-3 mr-1" /> Connected
                 </Badge>
-              )}
+              ) : null}
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {teamsStatus?.connected ? (
+            {TEAMS_COMING_SOON ? (
+              <p className="text-sm text-muted-foreground">
+                Microsoft Teams integration is coming soon. You’ll be able to connect your organization’s Teams and import team members as shared contacts.
+              </p>
+            ) : teamsStatus?.connected ? (
               <>
                 <p className="text-sm text-muted-foreground">
                   Connected as <strong>{teamsStatus.settings?.email}</strong>

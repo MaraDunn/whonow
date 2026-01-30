@@ -14,6 +14,8 @@ import { FolderSidebar } from "@/components/FolderSidebar";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
+import { OnboardingTutorial } from "@/components/OnboardingTutorial";
+import { onboardingSteps } from "@/config/onboardingSteps";
 import { SelectionToolbar } from "@/components/SelectionToolbar";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,6 +27,7 @@ import { useCustomKeywords } from "@/hooks/useCustomKeywords";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useSubscription } from "@/hooks/useSubscription";
+import { TEAMS_COMING_SOON } from "@/config/features";
 import { useTeamDirectoryContacts } from "@/hooks/useTeamDirectoryContacts";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
@@ -37,7 +40,7 @@ const IndexContent = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
+  const { needsCompanySetup, needsOnboarding, completeOnboarding, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
   const { canAccessFeature } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
@@ -62,6 +65,17 @@ const IndexContent = () => {
   const [selectedTeamFolderId, setSelectedTeamFolderId] = useState<string | null>(null);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
+  const [showOnboardingTutorial, setShowOnboardingTutorial] = useState(false);
+
+  // Launch onboarding tutorial for new users after company setup is done (or skipped), with a short delay
+  useEffect(() => {
+    if (!needsOnboarding || needsCompanySetup) {
+      setShowOnboardingTutorial(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowOnboardingTutorial(true), 500);
+    return () => clearTimeout(timer);
+  }, [needsOnboarding, needsCompanySetup]);
 
   // Refetch team contacts when directory becomes visible or team folder is selected
   useEffect(() => {
@@ -928,7 +942,7 @@ const IndexContent = () => {
                     onDeleteContact={deleteContact}
                     onExportContact={handleExportContact}
                     onShareToSlack={handleShareToSlack}
-                    onShareToTeams={handleShareToTeams}
+                    onShareToTeams={TEAMS_COMING_SOON ? undefined : handleShareToTeams}
                     onRestoreContact={restoreContact}
                     onPermanentlyDelete={permanentlyDeleteContact}
                     onEmptyTrash={emptyTrash}
@@ -947,6 +961,7 @@ const IndexContent = () => {
                     hasClientAccess={hasClientAccess}
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
+                    showSampleContact={needsOnboarding}
                   />
                 </>
               ) : (
@@ -961,7 +976,7 @@ const IndexContent = () => {
                   onDeleteContact={deleteContact}
                   onExportContact={handleExportContact}
                   onShareToSlack={handleShareToSlack}
-                  onShareToTeams={handleShareToTeams}
+                  onShareToTeams={TEAMS_COMING_SOON ? undefined : handleShareToTeams}
                   onRestoreContact={restoreContact}
                   onPermanentlyDelete={permanentlyDeleteContact}
                   onEmptyTrash={emptyTrash}
@@ -980,6 +995,7 @@ const IndexContent = () => {
                   hasClientAccess={hasClientAccess}
                   selectionMode={selectionMode}
                   onToggleSelectionMode={handleToggleSelectionMode}
+                  showSampleContact={needsOnboarding}
                 />
               )}
 
@@ -1024,6 +1040,7 @@ const IndexContent = () => {
                 onSave={handleSaveContactFromDetails}
                 onDelete={handleDeleteFromDetails}
                 onExportContact={handleExportContact}
+                teamsComingSoon={TEAMS_COMING_SOON}
               />
 
               <ShareToSlackDialog
@@ -1032,11 +1049,13 @@ const IndexContent = () => {
                 contact={shareSlackContact}
               />
 
-              <ShareToTeamsDialog
-                open={!!shareTeamsContact}
-                onOpenChange={(open) => !open && setShareTeamsContact(null)}
-                contact={shareTeamsContact}
-              />
+              {!TEAMS_COMING_SOON && (
+                <ShareToTeamsDialog
+                  open={!!shareTeamsContact}
+                  onOpenChange={(open) => !open && setShareTeamsContact(null)}
+                  contact={shareTeamsContact}
+                />
+              )}
 
               <SettingsDialog
                 open={settingsOpen}
@@ -1072,6 +1091,14 @@ const IndexContent = () => {
                 onJoinCompany={joinCompany}
                 onSkipCompanySetup={skipCompanySetup}
               />
+
+              {showOnboardingTutorial && needsOnboarding && (
+                <OnboardingTutorial
+                  steps={onboardingSteps}
+                  onComplete={() => completeOnboarding()}
+                  onSkip={() => completeOnboarding()}
+                />
+              )}
             </div>
           </div>
         </div>

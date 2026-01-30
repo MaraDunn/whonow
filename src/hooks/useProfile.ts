@@ -15,6 +15,7 @@ type DbProfile = {
   description: string | null;
   is_visible_in_directory: boolean | null;
   has_completed_company_setup: boolean | null;
+  has_completed_onboarding: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -43,6 +44,7 @@ const mapDbToProfile = (db: DbProfile): Profile => ({
   description: db.description || undefined,
   isVisibleInDirectory: db.is_visible_in_directory ?? true,
   hasCompletedCompanySetup: db.has_completed_company_setup ?? false,
+  hasCompletedOnboarding: db.has_completed_onboarding ?? false,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });
@@ -371,6 +373,26 @@ export const useProfile = (userId?: string) => {
     },
   });
 
+  // Complete onboarding tutorial
+  const completeOnboarding = useMutation({
+    mutationFn: async () => {
+      if (!userId) throw new Error("No user ID");
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ has_completed_onboarding: true })
+        .eq("id", userId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+    },
+    onError: (error) => {
+      console.error("Failed to complete onboarding:", error);
+    },
+  });
+
   // Remove user from company (admin only)
   const removeUserFromCompany = useMutation({
     mutationFn: async (targetUserId: string) => {
@@ -531,11 +553,13 @@ export const useProfile = (userId?: string) => {
     createCompany: createCompany.mutate,
     joinCompany: joinCompany.mutate,
     skipCompanySetup: skipCompanySetup.mutate,
+    completeOnboarding: completeOnboarding.mutate,
     removeUserFromCompany: removeUserFromCompany.mutate,
     grantAdminRole: grantAdminRole.mutate,
     revokeAdminRole: revokeAdminRole.mutate,
     refreshInviteCode: refreshInviteCode.mutate,
     deleteCompany: deleteCompany.mutate,
     needsCompanySetup: !!profile && !profile.companyId && !profile.hasCompletedCompanySetup,
+    needsOnboarding: !!profile && !profile.hasCompletedOnboarding,
   };
 };

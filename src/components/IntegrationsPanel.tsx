@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useTeamsIntegration } from "@/hooks/useTeamsIntegration";
 import { Loader2, Link2, Unlink, Download, Video, Check, ExternalLink } from "lucide-react";
+import { TEAMS_COMING_SOON } from "@/config/features";
 
 export function IntegrationsPanel() {
   const [webhookUrl, setWebhookUrl] = useState("");
@@ -16,7 +17,7 @@ export function IntegrationsPanel() {
 
   useEffect(() => {
     slack.getStatus();
-    teams.getStatus();
+    if (!TEAMS_COMING_SOON) teams.getStatus();
   }, []);
 
   // Check URL params for integration callback
@@ -28,7 +29,7 @@ export function IntegrationsPanel() {
     if (integration && status === "success") {
       if (integration === "slack") {
         slack.getStatus();
-      } else if (integration === "teams") {
+      } else if (integration === "teams" && !TEAMS_COMING_SOON) {
         teams.getStatus();
       }
       // Clean up URL
@@ -161,7 +162,7 @@ export function IntegrationsPanel() {
         </Card>
 
         {/* Microsoft Teams Integration */}
-        <Card>
+        <Card className={TEAMS_COMING_SOON ? "opacity-90" : undefined}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -177,15 +178,23 @@ export function IntegrationsPanel() {
                   </CardDescription>
                 </div>
               </div>
-              {teams.status?.connected && (
+              {TEAMS_COMING_SOON ? (
+                <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                  Coming soon
+                </Badge>
+              ) : teams.status?.connected ? (
                 <Badge variant="secondary" className="bg-green-500/10 text-green-600">
                   <Check className="h-3 w-3 mr-1" /> Connected
                 </Badge>
-              )}
+              ) : null}
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {teams.status?.connected ? (
+            {TEAMS_COMING_SOON ? (
+              <p className="text-sm text-muted-foreground">
+                Microsoft Teams integration is coming soon. You’ll be able to import team members and share contacts directly from Teams.
+              </p>
+            ) : teams.status?.connected ? (
               <>
                 <p className="text-sm text-muted-foreground">
                   Connected as <strong>{teams.status.settings?.email}</strong>
@@ -253,35 +262,25 @@ export function IntegrationsPanel() {
         </Card>
       </div>
 
-      {/* Setup Instructions */}
-      <Card className="border-dashed">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Setup Instructions</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm space-y-4">
-          <div>
-            <h4 className="font-medium mb-2">Slack Setup</h4>
-            <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
-              <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">api.slack.com/apps</a> and create a new app</li>
-              <li>Under "OAuth & Permissions", add these scopes: <code className="bg-muted px-1 rounded">users:read</code>, <code className="bg-muted px-1 rounded">users:read.email</code>, <code className="bg-muted px-1 rounded">chat:write</code>, <code className="bg-muted px-1 rounded">channels:read</code></li>
-              <li>Add a redirect URL: <code className="bg-muted px-1 rounded text-[10px]">https://kzivlasydxnhbqduqpjb.supabase.co/functions/v1/slack-integration</code></li>
-              <li>Copy Client ID and Client Secret to your secrets</li>
-            </ol>
-          </div>
-          
-          <Separator />
-
-          <div>
-            <h4 className="font-medium mb-2">Microsoft Teams Setup</h4>
-            <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
-              <li>Go to <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Azure AD Portal</a> and register a new app</li>
-              <li>Add API permissions: <code className="bg-muted px-1 rounded">User.Read</code>, <code className="bg-muted px-1 rounded">Team.ReadBasic.All</code>, <code className="bg-muted px-1 rounded">Channel.ReadBasic.All</code>, <code className="bg-muted px-1 rounded">Chat.ReadWrite</code>, <code className="bg-muted px-1 rounded">OnlineMeetings.ReadWrite</code></li>
-              <li>Add a redirect URI (Web): <code className="bg-muted px-1 rounded text-[10px]">https://kzivlasydxnhbqduqpjb.supabase.co/functions/v1/teams-integration</code></li>
-              <li>Create a client secret and copy it along with Client ID</li>
-            </ol>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Setup Instructions (Teams only when not coming soon) */}
+      {!TEAMS_COMING_SOON && (
+        <Card className="border-dashed">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Setup Instructions</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm space-y-4">
+            <div>
+              <h4 className="font-medium mb-2">Microsoft Teams Setup</h4>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
+                <li>Go to <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Azure AD Portal</a> and register a new app</li>
+                <li>Add API permissions: <code className="bg-muted px-1 rounded">User.Read</code>, <code className="bg-muted px-1 rounded">Team.ReadBasic.All</code>, <code className="bg-muted px-1 rounded">Channel.ReadBasic.All</code>, <code className="bg-muted px-1 rounded">Chat.ReadWrite</code>, <code className="bg-muted px-1 rounded">OnlineMeetings.ReadWrite</code></li>
+                <li>Add a redirect URI (Web): <code className="bg-muted px-1 rounded text-[10px]">https://kzivlasydxnhbqduqpjb.supabase.co/functions/v1/teams-integration</code></li>
+                <li>Create a client secret and copy it along with Client ID</li>
+              </ol>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

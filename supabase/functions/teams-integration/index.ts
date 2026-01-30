@@ -43,8 +43,8 @@ serve(async (req) => {
 
     const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID");
     const MICROSOFT_CLIENT_SECRET = Deno.env.get("MICROSOFT_CLIENT_SECRET");
-    // Teams access requires a work/school account; default to organizations (not "common") to avoid personal accounts.
-    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "organizations";
+    // "common" allows both personal (Outlook.com) and work/school accounts. Use MICROSOFT_TENANT_ID=organizations to restrict to work/school only.
+    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "common";
 
     // Check if this is an OAuth callback (GET request with code parameter)
     const url = new URL(req.url);
@@ -1003,7 +1003,7 @@ async function getValidIntegration(
 
     // Refresh the token
     const tokenResponse = await fetch(
-      `https://login.microsoftonline.com/${tenantId || "organizations"}/oauth2/v2.0/token`,
+      `https://login.microsoftonline.com/${tenantId || "common"}/oauth2/v2.0/token`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },

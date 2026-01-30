@@ -92,6 +92,7 @@ interface ContactDetailsDialogProps {
   presetKeywords?: string[];
   showOwnershipBadge?: boolean;
   hasCompany?: boolean;
+  teamsComingSoon?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onExportContact?: (contact: Contact) => void;
@@ -107,6 +108,7 @@ export function ContactDetailsDialog({
   presetKeywords = [],
   showOwnershipBadge = false,
   hasCompany = false,
+  teamsComingSoon = false,
   onEdit,
   onDelete,
   onExportContact,
@@ -478,10 +480,17 @@ export function ContactDetailsDialog({
                       <MessageSquare className="h-4 w-4 mr-2" />
                       Share to Slack
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShareTeamsDialogOpen(true)}>
-                      <Video className="h-4 w-4 mr-2" />
-                      Share to Teams
-                    </DropdownMenuItem>
+                    {teamsComingSoon ? (
+                      <DropdownMenuItem className="cursor-default" disabled>
+                        <Video className="h-4 w-4 mr-2" />
+                        Share to Teams (coming soon)
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={() => setShareTeamsDialogOpen(true)}>
+                        <Video className="h-4 w-4 mr-2" />
+                        Share to Teams
+                      </DropdownMenuItem>
+                    )}
                     {onExportContact && contact && (
                       <DropdownMenuItem onClick={() => onExportContact(contact)}>
                         <FileDown className="h-4 w-4 mr-2" />

@@ -69,7 +69,8 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
       "Up to 25 team members",
       "Shared contact folders",
       "Role-based permissions",
-      "Slack & Teams integration",
+      "Slack integration",
+      "Teams (coming soon)",
     ],
   },
   business: {
