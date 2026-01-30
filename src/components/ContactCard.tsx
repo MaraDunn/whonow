@@ -169,10 +169,10 @@ const ContactCardComponent = function ContactCard({
       <div
         onClick={(e) => handleCardClick(e)}
         className={cn(
-          "group relative p-2 rounded-lg border transition-all duration-200 cursor-pointer animate-slide-up",
+          "group relative p-2 rounded-lg border transition-all duration-200 cursor-pointer animate-slide-up outline-none",
           selectionMode 
             ? isSelected 
-              ? "border-primary bg-primary/5 shadow-md" 
+              ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary ring-inset" 
               : "border-border bg-card shadow-sm"
             : "border-border bg-card shadow-sm hover:shadow-md hover:border-primary/30"
         )}
@@ -223,10 +223,10 @@ const ContactCardComponent = function ContactCard({
     return (
       <div
         className={cn(
-          "group relative p-4 rounded-xl border transition-all duration-300 animate-scale-in",
+          "group relative p-4 rounded-xl border transition-all duration-300 animate-scale-in outline-none",
           selectionMode 
             ? isSelected 
-              ? "border-primary bg-primary/5 shadow-md" 
+              ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary ring-inset" 
               : "border-border bg-card shadow-sm"
             : "border-primary/30 bg-card shadow-md"
         )}
@@ -465,10 +465,10 @@ const ContactCardComponent = function ContactCard({
     <div
       onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
       className={cn(
-        "group relative p-4 sm:p-6 rounded-xl sm:rounded-2xl border transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col",
+        "group relative p-4 sm:p-6 rounded-xl sm:rounded-2xl border transition-all duration-300 cursor-pointer animate-slide-up h-full flex flex-col outline-none",
         selectionMode 
           ? isSelected 
-            ? "border-primary bg-primary/5 shadow-md" 
+            ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary ring-inset" 
             : "border-border bg-card"
           : "border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30"
       )}
