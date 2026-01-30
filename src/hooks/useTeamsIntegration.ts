@@ -459,6 +459,65 @@ export function useTeamsIntegration() {
     }
   }, [toast]);
 
+  const shareContact = useCallback(async (contactId: string, teamId: string, channelId: string) => {
+    try {
+      setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return false;
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnonKey) return false;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          action: "share-contact",
+          contactId,
+          teamId,
+          channelId,
+          jwt: session.access_token,
+        }),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+      const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
+
+      if (error) throw error;
+
+      if (data.error) {
+        toast({
+          title: "Sharing failed",
+          description: data.error,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      toast({
+        title: "Shared",
+        description: "Contact shared to Teams channel",
+      });
+      return true;
+    } catch (error) {
+      console.error("Error sharing contact to Teams:", error);
+      const message = error instanceof Error ? error.message : "Could not share contact to Teams";
+      toast({
+        title: "Sharing failed",
+        description: message,
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
   const createMeeting = useCallback(async (params: CreateMeetingParams) => {
     try {
       setIsLoading(true);
@@ -527,6 +586,7 @@ export function useTeamsIntegration() {
     getChannels,
     importMembers,
     sendToChannel,
+    shareContact,
     createMeeting,
   };
 }

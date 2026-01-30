@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
 import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
+import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
 import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
@@ -47,6 +48,7 @@ const IndexContent = () => {
   const [viewingContact, setViewingContact] = useState<Contact | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [shareSlackContact, setShareSlackContact] = useState<Contact | null>(null);
+  const [shareTeamsContact, setShareTeamsContact] = useState<Contact | null>(null);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -700,8 +702,8 @@ const IndexContent = () => {
     setShareSlackContact(contact);
   }, []);
 
-  const handleShareToTeams = useCallback(() => {
-    toast.info("Share to Teams coming soon");
+  const handleShareToTeams = useCallback((contact: Contact) => {
+    setShareTeamsContact(contact);
   }, []);
 
   const fetchContactsForExport = useCallback(
@@ -1028,6 +1030,12 @@ const IndexContent = () => {
                 open={!!shareSlackContact}
                 onOpenChange={(open) => !open && setShareSlackContact(null)}
                 contact={shareSlackContact}
+              />
+
+              <ShareToTeamsDialog
+                open={!!shareTeamsContact}
+                onOpenChange={(open) => !open && setShareTeamsContact(null)}
+                contact={shareTeamsContact}
               />
 
               <SettingsDialog

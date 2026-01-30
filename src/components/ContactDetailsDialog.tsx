@@ -38,6 +38,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
+import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
 import { useState, useEffect, useRef } from "react";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
@@ -112,6 +113,7 @@ export function ContactDetailsDialog({
   onSave,
 }: ContactDetailsDialogProps) {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareTeamsDialogOpen, setShareTeamsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [folderPopoverOpen, setFolderPopoverOpen] = useState(false);
   const slack = useSlackIntegration();
@@ -476,9 +478,7 @@ export function ContactDetailsDialog({
                       <MessageSquare className="h-4 w-4 mr-2" />
                       Share to Slack
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => toast.info("Share to Teams coming soon")}
-                    >
+                    <DropdownMenuItem onClick={() => setShareTeamsDialogOpen(true)}>
                       <Video className="h-4 w-4 mr-2" />
                       Share to Teams
                     </DropdownMenuItem>
@@ -1240,6 +1240,11 @@ export function ContactDetailsDialog({
       <ShareToSlackDialog
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
+        contact={contact}
+      />
+      <ShareToTeamsDialog
+        open={shareTeamsDialogOpen}
+        onOpenChange={setShareTeamsDialogOpen}
         contact={contact}
       />
     </Dialog>
