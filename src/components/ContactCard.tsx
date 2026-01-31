@@ -209,10 +209,10 @@ const ContactCardComponent = function ContactCard({
       <div
         onClick={(e) => handleCardClick(e)}
         className={cn(
-          "group relative px-2 py-1.5 rounded border transition-colors cursor-pointer animate-slide-up",
+          "group relative px-2 py-1.5 rounded border transition-colors cursor-pointer animate-slide-up outline-none",
           selectionMode 
             ? isSelected 
-              ? "border-primary bg-primary/5" 
+              ? "border-primary bg-primary/5 ring-2 ring-primary ring-inset" 
               : "border-border bg-card"
             : "border-border bg-card hover:border-primary/50 hover:bg-accent/30"
         )}
@@ -398,10 +398,10 @@ const ContactCardComponent = function ContactCard({
     return (
       <div
         className={cn(
-          "group relative p-4 rounded-xl border transition-all duration-300 animate-scale-in",
+          "group relative p-4 rounded-xl border transition-all duration-300 animate-scale-in outline-none",
           selectionMode 
             ? isSelected 
-              ? "border-primary bg-primary/5 shadow-md" 
+              ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary ring-inset" 
               : "border-border bg-card shadow-sm"
             : "border-primary/30 bg-card shadow-md"
         )}
@@ -723,10 +723,10 @@ const ContactCardComponent = function ContactCard({
       data-onboarding-contact-card={index === 0 ? "" : undefined}
       onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
       className={cn(
-        "group relative p-5 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col overflow-hidden box-border h-full max-h-full min-h-0",
+        "group relative p-5 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col overflow-hidden box-border h-full max-h-full min-h-0 outline-none",
         selectionMode 
           ? isSelected 
-            ? "border-primary bg-primary/5 shadow-md" 
+            ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary ring-inset" 
             : "border-border bg-card"
           : "border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30"
       )}
