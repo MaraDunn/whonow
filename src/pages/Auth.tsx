@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
-import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +43,17 @@ const Auth = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [signUpEmailSent, setSignUpEmailSent] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setInterval(() => setResendCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resendCooldown]);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -51,6 +61,14 @@ const Auth = () => {
       navigate(redirectParam || "/app", { replace: true });
     }
   }, [user, loading, navigate, redirectParam]);
+
+  // Show message when redirected from ProtectedRoute due to unverified email
+  useEffect(() => {
+    if (searchParams.get("unverified") === "1") {
+      toast.info("Please verify your email address to continue.");
+      navigate("/auth", { replace: true }); // clear ?unverified=1 from URL
+    }
+  }, [searchParams, navigate]);
 
   const validateForm = (isSignUp: boolean) => {
     const newErrors: { email?: string; password?: string; fullName?: string } = {};
@@ -110,8 +128,21 @@ const Auth = () => {
         toast.error(error.message);
       }
     } else {
-      toast.success("Account created! Setting up your workspace...");
-      navigate(redirectParam || "/app", { replace: true });
+      toast.success("Check your email to verify your account.");
+      setSignUpEmailSent(email);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!signUpEmailSent || resendCooldown > 0 || isResending) return;
+    setIsResending(true);
+    const { error } = await supabase.auth.resend({ email: signUpEmailSent, type: "signup" });
+    setIsResending(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Verification email sent. Check your inbox.");
+      setResendCooldown(60);
     }
   };
 
@@ -159,6 +190,44 @@ const Auth = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {signUpEmailSent ? (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-4 text-center">
+                <Mail className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+                <p className="font-medium">Check your email</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  We sent a verification link to <strong>{signUpEmailSent}</strong>. Click the link to verify your account, then sign in.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setSignUpEmailSent(null);
+                    setResendCooldown(0);
+                  }}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Use a different email
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={handleResendVerification}
+                  disabled={resendCooldown > 0 || isResending}
+                >
+                  {isResending
+                    ? "Sending..."
+                    : resendCooldown > 0
+                      ? `Resend available in ${resendCooldown}s`
+                      : "Resend verification email"}
+                </Button>
+              </div>
+            </div>
+          ) : (
           <Tabs defaultValue="signin" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
@@ -307,6 +376,7 @@ const Auth = () => {
               </form>
             </TabsContent>
           </Tabs>
+          )}
 
           {/* Forgot Password Modal */}
           {showForgotPassword && (

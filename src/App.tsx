@@ -1,25 +1,52 @@
-import React from "react";
-import { Toaster } from "@/components/ui/toaster";
+import React, { Suspense, lazy } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandingTheme } from "@/components/BrandingTheme";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IS_WAITLIST_MODE_EFFECTIVE, isDesktopOrNativeApp } from "@/utils/launchMode";
-import Index from "./pages/Index";
-import Landing from "./pages/Landing";
-import Waitlist from "./pages/Waitlist";
-import Privacy from "./pages/Privacy";
-import Terms from "./pages/Terms";
-import NotFound from "./pages/NotFound";
-import Auth from "./pages/Auth";
-import ImportContactPage from "./pages/ImportContactPage";
-import ExportSharedContactPage from "./pages/ExportSharedContactPage";
-import HelpFAQPage from "./pages/HelpFAQPage";
+import { pushErrorLog } from "@/utils/errorLogBuffer";
+import { devLog } from "@/lib/devLog";
 
-const queryClient = new QueryClient();
+const RouteFallback = () => (
+  <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+  </div>
+);
+
+const Index = lazy(() => import("./pages/Index"));
+const Landing = lazy(() => import("./pages/Landing"));
+const Waitlist = lazy(() => import("./pages/Waitlist"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Auth = lazy(() => import("./pages/Auth"));
+const ImportContactPage = lazy(() => import("./pages/ImportContactPage"));
+const ExportSharedContactPage = lazy(() => import("./pages/ExportSharedContactPage"));
+const HelpFAQPage = lazy(() => import("./pages/HelpFAQPage"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000, // 1 minute
+      gcTime: 5 * 60_000, // 5 minutes (formerly cacheTime)
+      onError: (error) => {
+        pushErrorLog(error instanceof Error ? error.message : String(error));
+        toast.error("Something went wrong. Please try again.");
+      },
+    },
+    mutations: {
+      onError: (error) => {
+        pushErrorLog(error instanceof Error ? error.message : String(error));
+        toast.error("Something went wrong. Please try again.");
+      },
+    },
+  },
+});
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -40,6 +67,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       return <Navigate to="/auth" replace />;
     }
     return <Navigate to="/" replace />;
+  }
+
+  // Require verified email (defense in depth when Confirm email is enabled in Supabase)
+  if (!user.email_confirmed_at) {
+    return <Navigate to="/auth?unverified=1" replace />;
   }
 
   return <>{children}</>;
@@ -71,7 +103,7 @@ const DesktopAppRootRedirect = () => {
   React.useEffect(() => {
     const checkNative = () => {
       const detected = isDesktopOrNativeApp();
-      console.log('[DesktopAppRootRedirect] Native detection result:', detected);
+      devLog('[DesktopAppRootRedirect] Native detection result:', detected);
       setIsNative(detected);
     };
     
@@ -86,13 +118,17 @@ const DesktopAppRootRedirect = () => {
   
   // In desktop/native apps, redirect root path to /app
   if (isNative && !IS_WAITLIST_MODE_EFFECTIVE) {
-    console.log('[DesktopAppRootRedirect] Redirecting to /app');
+    devLog('[DesktopAppRootRedirect] Redirecting to /app');
     return <Navigate to="/app" replace />;
   }
   
   // Otherwise show landing page
-  console.log('[DesktopAppRootRedirect] Showing landing page, isNative:', isNative);
-  return <Landing />;
+  devLog('[DesktopAppRootRedirect] Showing landing page, isNative:', isNative);
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <Landing />
+    </Suspense>
+  );
 };
 
 const AppRoutes = () => {
@@ -103,12 +139,12 @@ const AppRoutes = () => {
         <Routes>
           {IS_WAITLIST_MODE_EFFECTIVE ? (
             <>
-              <Route path="/" element={<Waitlist />} />
-              <Route path="/waitlist" element={<Waitlist />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/import-contact" element={<ImportContactPage />} />
-              <Route path="/export-shared-contact" element={<ExportSharedContactPage />} />
+              <Route path="/" element={<Suspense fallback={<RouteFallback />}><Waitlist /></Suspense>} />
+              <Route path="/waitlist" element={<Suspense fallback={<RouteFallback />}><Waitlist /></Suspense>} />
+              <Route path="/privacy" element={<Suspense fallback={<RouteFallback />}><Privacy /></Suspense>} />
+              <Route path="/terms" element={<Suspense fallback={<RouteFallback />}><Terms /></Suspense>} />
+              <Route path="/import-contact" element={<Suspense fallback={<RouteFallback />}><ImportContactPage /></Suspense>} />
+              <Route path="/export-shared-contact" element={<Suspense fallback={<RouteFallback />}><ExportSharedContactPage /></Suspense>} />
               {/* Block all other routes in waitlist mode */}
               <Route path="/app" element={<Navigate to="/" replace />} />
               <Route path="/auth" element={<Navigate to="/" replace />} />
@@ -121,7 +157,9 @@ const AppRoutes = () => {
                 path="/app"
                 element={
                   <ProtectedRoute>
-                    <Index />
+                    <Suspense fallback={<RouteFallback />}>
+                      <Index />
+                    </Suspense>
                   </ProtectedRoute>
                 }
               />
@@ -129,16 +167,18 @@ const AppRoutes = () => {
                 path="/help/faq"
                 element={
                   <ProtectedRoute>
-                    <HelpFAQPage />
+                    <Suspense fallback={<RouteFallback />}>
+                      <HelpFAQPage />
+                    </Suspense>
                   </ProtectedRoute>
                 }
               />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/import-contact" element={<ImportContactPage />} />
-              <Route path="/export-shared-contact" element={<ExportSharedContactPage />} />
-              <Route path="*" element={<NotFound />} />
+              <Route path="/privacy" element={<Suspense fallback={<RouteFallback />}><Privacy /></Suspense>} />
+              <Route path="/terms" element={<Suspense fallback={<RouteFallback />}><Terms /></Suspense>} />
+              <Route path="/auth" element={<Suspense fallback={<RouteFallback />}><Auth /></Suspense>} />
+              <Route path="/import-contact" element={<Suspense fallback={<RouteFallback />}><ImportContactPage /></Suspense>} />
+              <Route path="/export-shared-contact" element={<Suspense fallback={<RouteFallback />}><ExportSharedContactPage /></Suspense>} />
+              <Route path="*" element={<Suspense fallback={<RouteFallback />}><NotFound /></Suspense>} />
             </>
           )}
         </Routes>
@@ -151,10 +191,11 @@ const App = () => (
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
         <Sonner />
         <BrowserRouter>
-          <AppRoutes />
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
