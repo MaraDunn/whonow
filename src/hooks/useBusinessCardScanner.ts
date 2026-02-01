@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef } from "react";
-import Tesseract from "tesseract.js";
 import { supabase } from "@/integrations/supabase/client";
 import { createPreprocessingVariants } from "@/utils/advancedImagePreprocessing";
 import { mergeOCRResults, type OCRAttempt } from "@/utils/ocrMerger";
 import { type OCRStructure, type OCRWord, type OCRLine } from "@/utils/ocrParser";
+import { devLog } from "@/lib/devLog";
 
 interface ScannedContact {
   name: string;
@@ -95,18 +95,29 @@ export function useBusinessCardScanner() {
     setScannedContact(null);
 
     try {
-      console.log("=== Starting Multi-Pass Offline OCR ===");
+      let Tesseract: typeof import("tesseract.js")["default"];
+      try {
+        const mod = await import("tesseract.js");
+        Tesseract = mod.default;
+      } catch (loadErr) {
+        const msg = loadErr instanceof Error ? loadErr.message : "Failed to load OCR library";
+        setError("Scanning is unavailable. Please try again or use manual entry.");
+        console.error("Tesseract dynamic import failed:", loadErr);
+        return null;
+      }
+
+      devLog("=== Starting Multi-Pass Offline OCR ===");
       
       // Step 1: Create multiple preprocessing variants
-      console.log("Creating preprocessing variants...");
+      devLog("Creating preprocessing variants...");
       const variants = await createPreprocessingVariants(imageBase64);
-      console.log(`Created ${variants.length} preprocessing variants`);
+      devLog(`Created ${variants.length} preprocessing variants`);
 
       // Step 2: Run OCR on each variant
       const ocrAttempts: OCRAttempt[] = [];
       
       for (const variant of variants) {
-        console.log(`Processing variant: ${variant.name} (${variant.description})`);
+        devLog(`Processing variant: ${variant.name} (${variant.description})`);
         
         try {
           // Create worker for this variant
@@ -184,10 +195,10 @@ export function useBusinessCardScanner() {
               variantName: variant.name,
             });
 
-            console.log(`✓ ${variant.name}: ${text.length} chars, confidence: ${(avgConfidence || 50).toFixed(1)}%`);
-            console.log(`  Preview: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+            devLog(`✓ ${variant.name}: ${text.length} chars, confidence: ${(avgConfidence || 50).toFixed(1)}%`);
+            devLog(`  Preview: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
           } else {
-            console.log(`✗ ${variant.name}: No text extracted`);
+            devLog(`✗ ${variant.name}: No text extracted`);
           }
         } catch (err) {
           console.warn(`Failed to process variant ${variant.name}:`, err);
@@ -199,10 +210,10 @@ export function useBusinessCardScanner() {
       }
 
       // Step 3: Merge OCR results intelligently
-      console.log(`\n=== Merging ${ocrAttempts.length} OCR attempts ===`);
+      devLog(`\n=== Merging ${ocrAttempts.length} OCR attempts ===`);
       const mergedResult = mergeOCRResults(ocrAttempts);
-      console.log(`Merged result: ${mergedResult.text.length} chars, confidence: ${mergedResult.confidence.toFixed(1)}%`);
-      console.log(`Sources used: ${mergedResult.sourcesUsed.join(", ")}`);
+      devLog(`Merged result: ${mergedResult.text.length} chars, confidence: ${mergedResult.confidence.toFixed(1)}%`);
+      devLog(`Sources used: ${mergedResult.sourcesUsed.join(", ")}`);
 
       const ocrResult = {
         text: mergedResult.text,
@@ -217,7 +228,7 @@ export function useBusinessCardScanner() {
       // Check OCR quality
       let avgConfidence = mergedResult.confidence;
       
-      console.log("OCR quality metrics:", {
+      devLog("OCR quality metrics:", {
         averageConfidence: avgConfidence.toFixed(2),
         textLength: ocrResult.text.length,
         hasStructuredData: !!ocrResult.structure,
@@ -229,9 +240,9 @@ export function useBusinessCardScanner() {
       if (avgConfidence < 40) {
         console.warn("Low OCR confidence detected:", avgConfidence.toFixed(1), "% - but continuing with extraction");
       } else if (avgConfidence < 60) {
-        console.log("Moderate OCR confidence:", avgConfidence.toFixed(1), "% - continuing");
+        devLog("Moderate OCR confidence:", avgConfidence.toFixed(1), "% - continuing");
       } else {
-        console.log("Good OCR confidence:", avgConfidence.toFixed(1), "%");
+        devLog("Good OCR confidence:", avgConfidence.toFixed(1), "%");
       }
 
       // Send OCR text and structured data to backend for parsing
@@ -269,9 +280,9 @@ export function useBusinessCardScanner() {
 
       // Check for low confidence fields and provide feedback
       const contact = data.contact;
-      console.log("=== Received contact from backend ===");
-      console.log("Full contact object:", JSON.stringify(contact, null, 2));
-      console.log("Contact fields:", {
+      devLog("=== Received contact from backend ===");
+      devLog("Full contact object:", JSON.stringify(contact, null, 2));
+      devLog("Contact fields:", {
         name: contact.name,
         email: contact.email,
         phone: contact.phone,
@@ -280,7 +291,7 @@ export function useBusinessCardScanner() {
       });
       
       const confidences = contact.confidence || {};
-      console.log("Confidences:", confidences);
+      devLog("Confidences:", confidences);
       
       const lowConfidenceFields = Object.entries(confidences)
         .filter(([_, conf]) => typeof conf === 'number' && conf < 50)
@@ -290,7 +301,7 @@ export function useBusinessCardScanner() {
       if (lowConfidenceFields.length > 0) {
         console.warn("Some fields have low confidence:", lowConfidenceFields);
         // Log which fields are actually present
-        console.log("Fields with data:", {
+        devLog("Fields with data:", {
           hasName: !!contact.name && contact.name.length > 0,
           hasEmail: !!contact.email && contact.email.length > 0,
           hasPhone: !!contact.phone && contact.phone.length > 0,
@@ -300,7 +311,7 @@ export function useBusinessCardScanner() {
       }
 
       setScannedContact(contact);
-      console.log("Set scannedContact state:", contact);
+      devLog("Set scannedContact state:", contact);
       return contact;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to scan business card. Please try again.";

@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { devLog } from "@/lib/devLog";
 
 import { useGoogleContacts } from "@/hooks/useGoogleContacts";
 import { useFileContacts } from "@/hooks/useFileContacts";
@@ -83,8 +84,8 @@ export function ImportContactsDialog({
   // Update edited contact when scanned contact changes
   useEffect(() => {
     if (scanner.scannedContact) {
-      console.log("=== ImportContactsDialog: Updating editedContact from scannedContact ===");
-      console.log("scanner.scannedContact:", JSON.stringify(scanner.scannedContact, null, 2));
+      devLog("=== ImportContactsDialog: Updating editedContact from scannedContact ===");
+      devLog("scanner.scannedContact:", JSON.stringify(scanner.scannedContact, null, 2));
       const newEditedContact = { 
         ...scanner.scannedContact,
         description: "",
@@ -92,7 +93,7 @@ export function ImportContactsDialog({
         avatar: undefined,
         folderId: defaultFolderId || undefined,
       };
-      console.log("New editedContact:", JSON.stringify(newEditedContact, null, 2));
+      devLog("New editedContact:", JSON.stringify(newEditedContact, null, 2));
       setEditedContact(newEditedContact);
     }
   }, [scanner.scannedContact, defaultFolderId]);

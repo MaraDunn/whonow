@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { devLog } from "@/lib/devLog";
 
 // Load pdfjs-dist from CDN using unpkg (more reliable)
 // Using a stable version that's known to work
@@ -35,7 +36,7 @@ async function loadPDFJS(): Promise<PDFJSLib> {
     const unpkgUrl = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.js`;
     const workerUrl = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.js`;
     
-    console.log('[AdminPdfImport] Loading PDF.js from:', unpkgUrl);
+    devLog('[AdminPdfImport] Loading PDF.js from:', unpkgUrl);
     
     // Load the main PDF.js library
     const script = document.createElement("script");
@@ -50,14 +51,14 @@ async function loadPDFJS(): Promise<PDFJSLib> {
       
       script.onload = () => {
         clearTimeout(timeout);
-        console.log('[AdminPdfImport] PDF.js script loaded, checking for pdfjsLib...');
+        devLog('[AdminPdfImport] PDF.js script loaded, checking for pdfjsLib...');
         
         // PDF.js from CDN exposes itself as pdfjsLib globally
         // Check multiple possible global names
         const pdfjsLib = globalWindow.pdfjsLib || globalWindow.pdfjs || (window as any).pdfjs;
         
         if (pdfjsLib && pdfjsLib.getDocument) {
-          console.log('[AdminPdfImport] PDF.js library found, configuring worker...');
+          devLog('[AdminPdfImport] PDF.js library found, configuring worker...');
           // Configure worker
           if (pdfjsLib.GlobalWorkerOptions) {
             pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -109,7 +110,6 @@ interface AdminPdfImportProps {
 }
 
 export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
-  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +148,7 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
       // For PDFs, extract text client-side using pdfjs-dist (CDN)
       if (file.type === 'application/pdf') {
         try {
-          console.log('[AdminPdfImport] Loading PDF.js from CDN...');
+          devLog('[AdminPdfImport] Loading PDF.js from CDN...');
           
           // Load PDF.js library from CDN
           const pdfjsLib = await loadPDFJS();
@@ -156,13 +156,13 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
             throw new Error('Failed to load PDF.js library');
           }
           
-          console.log('[AdminPdfImport] Extracting text from PDF using pdfjs-dist...');
+          devLog('[AdminPdfImport] Extracting text from PDF using pdfjs-dist...');
           
           // Load PDF from file
           const arrayBuffer = await file.arrayBuffer();
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           
-          console.log(`[AdminPdfImport] PDF loaded: ${pdf.numPages} page(s)`);
+          devLog(`[AdminPdfImport] PDF loaded: ${pdf.numPages} page(s)`);
           
           // Extract text from all pages, preserving structure for tables
           const textParts: string[] = [];
@@ -170,7 +170,7 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
             const page = await pdf.getPage(pageNum);
             const textContent = await page.getTextContent();
             
-            console.log(`[AdminPdfImport] Page ${pageNum} text items:`, textContent.items.length);
+            devLog(`[AdminPdfImport] Page ${pageNum} text items:`, textContent.items.length);
             
             // Fallback: Simple text extraction if structured extraction fails
             if (textContent.items.length === 0) {
@@ -217,7 +217,7 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
                 return a.x - b.x;
               });
             
-            console.log(`[AdminPdfImport] Page ${pageNum} sorted items:`, sortedItems.length);
+            devLog(`[AdminPdfImport] Page ${pageNum} sorted items:`, sortedItems.length);
             
             // Detect column boundaries for multi-column layouts
             // Group items by Y position first to analyze column structure
@@ -430,7 +430,7 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
                 .join(' ');
               if (simpleText.length > pageText.length) {
                 pageText = simpleText;
-                console.log(`[AdminPdfImport] Page ${pageNum} simple extraction produced ${simpleText.length} characters`);
+                devLog(`[AdminPdfImport] Page ${pageNum} simple extraction produced ${simpleText.length} characters`);
               }
             }
             
@@ -438,23 +438,23 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
               textParts.push(pageText);
             }
             
-            console.log(`[AdminPdfImport] Page ${pageNum}: extracted ${pageText.length} characters, ${lines.length} lines`);
+            devLog(`[AdminPdfImport] Page ${pageNum}: extracted ${pageText.length} characters, ${lines.length} lines`);
             if (lines.length > 0 && lines.length <= 20) {
-              console.log(`[AdminPdfImport] Page ${pageNum} all lines:`, lines);
+              devLog(`[AdminPdfImport] Page ${pageNum} all lines:`, lines);
             } else if (lines.length > 0) {
-              console.log(`[AdminPdfImport] Page ${pageNum} first 10 lines:`, lines.slice(0, 10));
+              devLog(`[AdminPdfImport] Page ${pageNum} first 10 lines:`, lines.slice(0, 10));
             }
           }
           
           extractedText = textParts.join('\n\n'); // Separate pages with double newline
           
-          console.log(`[AdminPdfImport] Total extracted text: ${extractedText.length} characters`);
-          console.log(`[AdminPdfImport] Text preview (first 1000 chars):`, extractedText.substring(0, 1000));
+          devLog(`[AdminPdfImport] Total extracted text: ${extractedText.length} characters`);
+          devLog(`[AdminPdfImport] Text preview (first 1000 chars):`, extractedText.substring(0, 1000));
           
           // Count emails and phones found
           const emailCount = (extractedText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi) || []).length;
           const phoneCount = (extractedText.match(/(?:\+\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}/g) || []).length;
-          console.log(`[AdminPdfImport] Found ${emailCount} emails and ${phoneCount} phones in extracted text`);
+          devLog(`[AdminPdfImport] Found ${emailCount} emails and ${phoneCount} phones in extracted text`);
           
           if (!extractedText || extractedText.trim().length === 0) {
             throw new Error('No text could be extracted from the PDF. The PDF might be image-based (scanned).');
@@ -472,8 +472,8 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
       }
 
       // Call edge function with extracted text
-      console.log('[AdminPdfImport] Sending extracted text to edge function, length:', extractedText.length);
-      console.log('[AdminPdfImport] Extracted text preview (first 500 chars):', extractedText.substring(0, 500));
+      devLog('[AdminPdfImport] Sending extracted text to edge function, length:', extractedText.length);
+      devLog('[AdminPdfImport] Extracted text preview (first 500 chars):', extractedText.substring(0, 500));
       
       const { data, error: fnError } = await supabase.functions.invoke('parse-contact-pdf', {
         body: { 
@@ -497,7 +497,7 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
         throw new Error(data.error || 'Failed to parse contacts');
       }
       
-      console.log('[AdminPdfImport] Edge function returned:', {
+      devLog('[AdminPdfImport] Edge function returned:', {
         success: data.success,
         contactCount: data.contacts?.length || 0,
         hasDebug: !!data.debug
@@ -609,10 +609,7 @@ export function AdminPdfImport({ onImport }: AdminPdfImportProps) {
       fileInputRef.current.value = '';
     }
 
-    toast({
-      title: "Contacts imported",
-      description: `Successfully imported ${contactsToImport.length} contact${contactsToImport.length === 1 ? '' : 's'}`,
-    });
+    toast.success(`Successfully imported ${contactsToImport.length} contact${contactsToImport.length === 1 ? '' : 's'}`);
   };
 
   const handleClear = () => {

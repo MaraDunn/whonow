@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { normalizeEmail, normalizePhone, findDuplicateContacts } from "@/utils/duplicateDetection";
+import { devLog } from "@/lib/devLog";
 
 /** First page size: smaller so first paint is fast. */
 const CONTACTS_INITIAL_PAGE_SIZE = 24;
@@ -484,7 +485,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkDeleteContacts] Attempting to delete", validIds.length, "contacts");
+      devLog("[bulkDeleteContacts] Attempting to delete", validIds.length, "contacts");
 
       // Delete in batches to avoid potential issues with large arrays or RLS limits
       const batchSize = 50;
@@ -504,7 +505,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkDeleteContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts deleted`);
+          devLog(`[bulkDeleteContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts deleted`);
         }
       }
 
@@ -546,7 +547,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkMoveToFolder] Attempting to move", validIds.length, "contacts to folder:", folderId);
+      devLog("[bulkMoveToFolder] Attempting to move", validIds.length, "contacts to folder:", folderId);
 
       // Update in batches to avoid potential issues with large arrays or RLS limits
       const batchSize = 50;
@@ -566,7 +567,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkMoveToFolder] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts moved`);
+          devLog(`[bulkMoveToFolder] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts moved`);
         }
       }
 
@@ -627,7 +628,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkRestoreContacts] Attempting to restore", validIds.length, "contacts");
+      devLog("[bulkRestoreContacts] Attempting to restore", validIds.length, "contacts");
 
       // Restore in batches to avoid potential issues with large arrays or RLS limits
       const batchSize = 50;
@@ -647,7 +648,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkRestoreContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts restored`);
+          devLog(`[bulkRestoreContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts restored`);
         }
       }
 
@@ -740,7 +741,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkUpdateLastContacted] Attempting to mark", validIds.length, "contacts as contacted");
+      devLog("[bulkUpdateLastContacted] Attempting to mark", validIds.length, "contacts as contacted");
 
       const timestamp = new Date().toISOString();
 
@@ -762,7 +763,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkUpdateLastContacted] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
+          devLog(`[bulkUpdateLastContacted] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
         }
       }
 
@@ -875,7 +876,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkToggleClientStatus] Attempting to mark", validIds.length, "contacts as", isClient ? "clients" : "non-clients");
+      devLog("[bulkToggleClientStatus] Attempting to mark", validIds.length, "contacts as", isClient ? "clients" : "non-clients");
 
       // Update in batches to avoid potential issues with large arrays or RLS limits
       const batchSize = 50;
@@ -895,7 +896,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkToggleClientStatus] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
+          devLog(`[bulkToggleClientStatus] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
         }
       }
 

@@ -17,6 +17,7 @@ const SAMPLE_CONTACT: Contact = {
   description: "This is what a contact card looks like. Add your own contacts to get started.",
 };
 import { ActionType } from "@/hooks/useActionSearch";
+import { devLog } from "@/lib/devLog";
 import { Button } from "@/components/ui/button";
 import { useResponsiveView } from "@/hooks/use-mobile";
 
@@ -155,7 +156,7 @@ export function ContactGrid({
   
   // Debug log to see what ContactGrid is receiving and rendering
   useEffect(() => {
-    console.log('[ContactGrid] Render state:', {
+    devLog('[ContactGrid] Render state:', {
       contactsLength: contacts.length,
       searchQuery,
       isTrashView,
@@ -263,23 +264,23 @@ export function ContactGrid({
   // Force virtualizer to measure when contacts change or virtualization toggles
   useEffect(() => {
     if (!useVirtualizedList) {
-      console.log('[ContactGrid] Not using virtualization');
+      devLog('[ContactGrid] Not using virtualization');
       return;
     }
     
-    console.log('[ContactGrid] Virtualization active, contacts:', contacts.length, 'rowCount:', rowCount);
+    devLog('[ContactGrid] Virtualization active, contacts:', contacts.length, 'rowCount:', rowCount);
     
     // Wait for next frame to ensure DOM is updated, then measure multiple times
     // to ensure the virtualizer has valid measurements
     requestAnimationFrame(() => {
       rowVirtualizer.measure();
-      console.log('[ContactGrid] Initial measure done');
+      devLog('[ContactGrid] Initial measure done');
       
       // Measure again after a short delay to handle async layout
       setTimeout(() => {
         rowVirtualizer.measure();
         const virtualItems = rowVirtualizer.getVirtualItems();
-        console.log('[ContactGrid] Second measure - virtual items:', virtualItems.length, 'totalSize:', rowVirtualizer.getTotalSize());
+        devLog('[ContactGrid] Second measure - virtual items:', virtualItems.length, 'totalSize:', rowVirtualizer.getTotalSize());
       }, 50);
     });
   }, [useVirtualizedList, contacts.length, rowCount]);
@@ -376,7 +377,7 @@ export function ContactGrid({
           >
             {(() => {
               const virtualItems = rowVirtualizer.getVirtualItems();
-              console.log('[ContactGrid] Rendering virtual items:', virtualItems.length, 'totalSize:', rowVirtualizer.getTotalSize());
+              devLog('[ContactGrid] Rendering virtual items:', virtualItems.length, 'totalSize:', rowVirtualizer.getTotalSize());
               return virtualItems.map((virtualRow) => {
               const start = virtualRow.index * columns;
               const rowContacts = contacts.slice(start, start + columns);

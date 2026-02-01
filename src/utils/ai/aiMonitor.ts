@@ -11,6 +11,7 @@
  */
 
 import { isDebugMode } from "./aiConfig";
+import { devLog } from "@/lib/devLog";
 
 export interface AIStats {
   // Usage stats
@@ -257,7 +258,7 @@ export async function trackQuery(
   
   // Debug logging
   if (isDebugMode()) {
-    console.log('[AI Monitor] Query tracked:', {
+    devLog('[AI Monitor] Query tracked:', {
       aiUsed: result.aiUsed,
       latencyMs: result.latencyMs,
       confidence: result.confidence,
@@ -382,7 +383,7 @@ export async function clearStats(): Promise<void> {
       }),
     ]);
     
-    console.log('[AI Monitor] Stats and events cleared');
+    devLog('[AI Monitor] Stats and events cleared');
   } catch (error) {
     console.warn('[AI Monitor] Failed to clear stats:', error);
   }
@@ -401,11 +402,11 @@ export function initializeDiagnostics(): void {
     clearStats: () => clearStats(),
     enableDebugMode: () => {
       localStorage.setItem('whonow_ai_debug_mode', 'true');
-      console.log('[AI Monitor] Debug mode enabled');
+      devLog('[AI Monitor] Debug mode enabled');
     },
     disableDebugMode: () => {
       localStorage.removeItem('whonow_ai_debug_mode');
-      console.log('[AI Monitor] Debug mode disabled');
+      devLog('[AI Monitor] Debug mode disabled');
     },
     printStats: () => {
       const s = getStats();
@@ -423,13 +424,13 @@ export function initializeDiagnostics(): void {
     },
   };
   
-  console.log('[AI Monitor] Diagnostics API initialized: window.__aiDiagnostics');
-  console.log('Available commands:');
-  console.log('  __aiDiagnostics.getStats()');
-  console.log('  __aiDiagnostics.printStats()');
-  console.log('  __aiDiagnostics.getRecentEvents()');
-  console.log('  __aiDiagnostics.clearStats()');
-  console.log('  __aiDiagnostics.enableDebugMode()');
+  devLog('[AI Monitor] Diagnostics API initialized: window.__aiDiagnostics');
+  devLog('Available commands:');
+  devLog('  __aiDiagnostics.getStats()');
+  devLog('  __aiDiagnostics.printStats()');
+  devLog('  __aiDiagnostics.getRecentEvents()');
+  devLog('  __aiDiagnostics.clearStats()');
+  devLog('  __aiDiagnostics.enableDebugMode()');
 }
 
 // Initialize on module load

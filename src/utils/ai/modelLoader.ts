@@ -11,6 +11,7 @@
 
 import { detectPlatform } from "../platformDetection";
 import { getAIConfig, isQueryParsingEnabled, isSemanticRankingEnabled } from "./aiConfig";
+import { devLog } from "@/lib/devLog";
 
 export interface ModelLoadProgress {
   modelName: string;
@@ -316,7 +317,7 @@ export async function clearModelCache(): Promise<void> {
       );
       
       await Promise.all(transformersCaches.map(name => caches.delete(name)));
-      console.log('[Model Loader] Cleared model cache:', transformersCaches);
+      devLog('[Model Loader] Cleared model cache:', transformersCaches);
     }
     
     // Clear IndexedDB cache if exists
@@ -336,7 +337,7 @@ export async function clearModelCache(): Promise<void> {
         }
       }
       
-      console.log('[Model Loader] Cleared IndexedDB:', transformersDBs.map(d => d.name));
+      devLog('[Model Loader] Cleared IndexedDB:', transformersDBs.map(d => d.name));
     }
   } catch (error) {
     console.warn('[Model Loader] Failed to clear cache:', error);

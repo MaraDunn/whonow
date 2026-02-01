@@ -1,28 +1,29 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, Suspense, lazy } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { SearchBar } from "@/components/SearchBar";
 import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
-import { ContactFormDialog } from "@/components/ContactFormDialog";
-import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
-import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
-import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
-import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
-import { SettingsDialog } from "@/components/SettingsDialog";
-import { HelpDialog } from "@/components/HelpDialog";
-import { ReportProblemDialog } from "@/components/ReportProblemDialog";
-import { ContactSupportDialog } from "@/components/ContactSupportDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
-import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
-import { ImportContactsDialog } from "@/components/ImportContactsDialog";
-import { CompanySetupDialog } from "@/components/CompanySetupDialog";
-import { OnboardingTutorial } from "@/components/OnboardingTutorial";
 import { onboardingSteps } from "@/config/onboardingSteps";
-import { SelectionToolbar } from "@/components/SelectionToolbar";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+
+const ContactFormDialog = lazy(() => import("@/components/ContactFormDialog").then((m) => ({ default: m.ContactFormDialog })));
+const ContactDetailsDialog = lazy(() => import("@/components/ContactDetailsDialog").then((m) => ({ default: m.ContactDetailsDialog })));
+const ShareToSlackDialog = lazy(() => import("@/components/ShareToSlackDialog").then((m) => ({ default: m.ShareToSlackDialog })));
+const ShareToTeamsDialog = lazy(() => import("@/components/ShareToTeamsDialog").then((m) => ({ default: m.ShareToTeamsDialog })));
+const ProfileEditorDialog = lazy(() => import("@/components/ProfileEditorDialog").then((m) => ({ default: m.ProfileEditorDialog })));
+const SettingsDialog = lazy(() => import("@/components/SettingsDialog").then((m) => ({ default: m.SettingsDialog })));
+const HelpDialog = lazy(() => import("@/components/HelpDialog").then((m) => ({ default: m.HelpDialog })));
+const ReportProblemDialog = lazy(() => import("@/components/ReportProblemDialog").then((m) => ({ default: m.ReportProblemDialog })));
+const ContactSupportDialog = lazy(() => import("@/components/ContactSupportDialog").then((m) => ({ default: m.ContactSupportDialog })));
+const TeamDirectoryGrid = lazy(() => import("@/components/TeamDirectoryGrid").then((m) => ({ default: m.TeamDirectoryGrid })));
+const ImportContactsDialog = lazy(() => import("@/components/ImportContactsDialog").then((m) => ({ default: m.ImportContactsDialog })));
+const CompanySetupDialog = lazy(() => import("@/components/CompanySetupDialog").then((m) => ({ default: m.CompanySetupDialog })));
+const OnboardingTutorial = lazy(() => import("@/components/OnboardingTutorial").then((m) => ({ default: m.OnboardingTutorial })));
+const SelectionToolbar = lazy(() => import("@/components/SelectionToolbar").then((m) => ({ default: m.SelectionToolbar })));
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts, fetchAllContactsForExport } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
@@ -36,6 +37,7 @@ import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { contactsToCsv, downloadCsv, sanitizeFilenameForContact } from "@/utils/exportContactsCsv";
+import { devLog } from "@/lib/devLog";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 
@@ -375,7 +377,7 @@ const IndexContent = () => {
       toast.error("No contacts selected");
       return;
     }
-    console.log("[handleBulkDelete] Deleting contacts:", ids.length, "contacts");
+    devLog("[handleBulkDelete] Deleting contacts:", ids.length, "contacts");
     bulkDeleteContacts(ids, {
       onSuccess: () => {
         setSelectedContactIds(new Set());
@@ -396,7 +398,7 @@ const IndexContent = () => {
     const folderName = folderId 
       ? (folders.find(f => f.id === folderId)?.name || "folder")
       : "No folder";
-    console.log("[handleBulkMoveToFolder] Moving contacts:", ids.length, "contacts to folder:", folderId);
+    devLog("[handleBulkMoveToFolder] Moving contacts:", ids.length, "contacts to folder:", folderId);
     bulkMoveToFolder({ ids, folderId, folderName }, {
       onSuccess: () => {
         setSelectedContactIds(new Set());
@@ -414,7 +416,7 @@ const IndexContent = () => {
       toast.error("No contacts selected");
       return;
     }
-    console.log("[handleBulkToggleClient] Marking contacts as client:", ids.length, "contacts, isClient:", isClient);
+    devLog("[handleBulkToggleClient] Marking contacts as client:", ids.length, "contacts, isClient:", isClient);
     bulkToggleClientStatus({ ids, isClient }, {
       onSuccess: () => {
         setSelectedContactIds(new Set());
@@ -432,7 +434,7 @@ const IndexContent = () => {
       toast.error("No contacts selected");
       return;
     }
-    console.log("[handleBulkMarkContacted] Marking contacts as contacted:", ids.length, "contacts");
+    devLog("[handleBulkMarkContacted] Marking contacts as contacted:", ids.length, "contacts");
     bulkUpdateLastContacted(ids, {
       onSuccess: () => {
         setSelectedContactIds(new Set());
@@ -450,7 +452,7 @@ const IndexContent = () => {
       toast.error("No contacts selected");
       return;
     }
-    console.log("[handleBulkRestore] Restoring contacts:", ids.length, "contacts");
+    devLog("[handleBulkRestore] Restoring contacts:", ids.length, "contacts");
     bulkRestoreContacts(ids, {
       onSuccess: () => {
         setSelectedContactIds(new Set());
@@ -578,7 +580,7 @@ const IndexContent = () => {
           batches.push(normalizedContacts.slice(i, i + BATCH_SIZE));
         }
 
-        console.log(`Importing ${normalizedContacts.length} contacts in ${batches.length} batches`);
+        devLog(`Importing ${normalizedContacts.length} contacts in ${batches.length} batches`);
 
         let totalInserted = 0;
         let totalMerged = 0;
@@ -588,7 +590,7 @@ const IndexContent = () => {
         // Process batches sequentially to avoid overwhelming the browser
         for (let i = 0; i < batches.length; i++) {
           const batch = batches[i];
-          console.log(`Processing batch ${i + 1}/${batches.length} (${batch.length} contacts)`);
+          devLog(`Processing batch ${i + 1}/${batches.length} (${batch.length} contacts)`);
           
           try {
             // Use direct fetch to get better error details
@@ -642,7 +644,7 @@ const IndexContent = () => {
             totalInserted += data.inserted || 0;
             totalMerged += data.merged || 0;
             totalSkipped += data.skipped || 0;
-            console.log(`Batch ${i + 1} completed: ${data.inserted || 0} inserted, ${data.merged || 0} merged, ${data.skipped || 0} skipped`);
+            devLog(`Batch ${i + 1} completed: ${data.inserted || 0} inserted, ${data.merged || 0} merged, ${data.skipped || 0} skipped`);
             
             // Add a small delay between batches to avoid rate limiting and give the database time to process
             // Longer delay after every 5 batches to prevent timeouts
@@ -696,7 +698,7 @@ const IndexContent = () => {
         console.error("Error details:", error);
         toast.error(message);
         // Fall back to individual inserts if bulk insert fails
-        console.log("Falling back to individual inserts...");
+        devLog("Falling back to individual inserts...");
         contacts.forEach((contact) => addContact(contact));
       }
     } else {
@@ -869,7 +871,8 @@ const IndexContent = () => {
                 const allSelected = currentContacts.length > 0 && currentContacts.every(c => selectedContactIds.has(c.id));
                 
                 return (
-                  <SelectionToolbar
+                  <Suspense fallback={null}>
+                    <SelectionToolbar
                     selectedCount={selectedContactIds.size}
                     allSelected={allSelected}
                     onSelectAll={handleSelectAll}
@@ -884,6 +887,7 @@ const IndexContent = () => {
                     onToggleSelectionMode={handleToggleSelectionMode}
                     isTrashView={showTrash}
                   />
+                  </Suspense>
                 );
               })()}
 
@@ -895,7 +899,8 @@ const IndexContent = () => {
                       {company?.name} • {searchQuery ? filteredContacts.length : filteredTeamContacts.length} member{(searchQuery ? filteredContacts.length : filteredTeamContacts.length) !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <TeamDirectoryGrid 
+                  <Suspense fallback={null}>
+                    <TeamDirectoryGrid 
                     members={searchQuery ? filteredContacts : filteredTeamContacts}
                     searchQuery={searchQuery}
                     action={action}
@@ -917,6 +922,7 @@ const IndexContent = () => {
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
                   />
+                  </Suspense>
                 </>
               ) : showClientDirectory ? (
                 <>
@@ -1006,7 +1012,8 @@ const IndexContent = () => {
                 />
               )}
 
-              <ContactFormDialog
+              <Suspense fallback={null}>
+                <ContactFormDialog
                 open={dialogOpen}
                 onOpenChange={(open) => {
                   setDialogOpen(open);
@@ -1024,7 +1031,7 @@ const IndexContent = () => {
                 hasCompany={!!company}
               />
 
-              <ProfileEditorDialog
+                <ProfileEditorDialog
                 open={profileEditorOpen}
                 onOpenChange={setProfileEditorOpen}
               />
@@ -1050,7 +1057,7 @@ const IndexContent = () => {
                 teamsComingSoon={TEAMS_COMING_SOON}
               />
 
-              <ShareToSlackDialog
+                <ShareToSlackDialog
                 open={!!shareSlackContact}
                 onOpenChange={(open) => !open && setShareSlackContact(null)}
                 contact={shareSlackContact}
@@ -1062,9 +1069,9 @@ const IndexContent = () => {
                   onOpenChange={(open) => !open && setShareTeamsContact(null)}
                   contact={shareTeamsContact}
                 />
-              )}
+                )}
 
-              <HelpDialog
+                <HelpDialog
                 open={helpDialogOpen}
                 onOpenChange={setHelpDialogOpen}
                 onOpenReport={() => {
@@ -1077,7 +1084,7 @@ const IndexContent = () => {
                 }}
               />
 
-              <ReportProblemDialog
+                <ReportProblemDialog
                 open={reportDialogOpen}
                 onOpenChange={setReportDialogOpen}
               />
@@ -1087,7 +1094,7 @@ const IndexContent = () => {
                 onOpenChange={setContactDialogOpen}
               />
 
-              <SettingsDialog
+                <SettingsDialog
                 open={settingsOpen}
                 onOpenChange={setSettingsOpen}
                 keywords={keywords}
@@ -1115,20 +1122,21 @@ const IndexContent = () => {
                 defaultFolderId={selectedFolderId}
               />
 
-              <CompanySetupDialog
+                <CompanySetupDialog
                 open={needsCompanySetup}
                 onCreateCompany={createCompany}
                 onJoinCompany={joinCompany}
                 onSkipCompanySetup={skipCompanySetup}
               />
 
-              {showOnboardingTutorial && needsOnboarding && (
+                {showOnboardingTutorial && needsOnboarding && (
                 <OnboardingTutorial
                   steps={onboardingSteps}
                   onComplete={() => completeOnboarding()}
                   onSkip={() => completeOnboarding()}
                 />
-              )}
+                )}
+              </Suspense>
             </div>
           </div>
         </div>

@@ -13,6 +13,7 @@ import { ParsedQuery } from "./searchQueryParser";
 import { SearchQuery } from "@/types/searchQuery";
 import { getContactEmbedding, getContactEmbeddings } from "./contactEmbeddings";
 import { RESPONSIBILITIES } from "@/data/responsibilities";
+import { devLog } from "@/lib/devLog";
 
 // Field weights for scoring
 const FIELD_WEIGHTS = {
@@ -604,7 +605,7 @@ async function loadQueryEmbeddingModel(): Promise<any> {
       //   }
       // );
 
-      console.log("[Embeddings] Temporarily disabled - using keyword search only");
+      devLog("[Embeddings] Temporarily disabled - using keyword search only");
       return null;
     } catch (error) {
       console.warn("Failed to load query embedding model:", error);
@@ -745,9 +746,9 @@ export function searchContacts(
     .filter(s => s.score >= adjustedMinScore)
     .sort((a, b) => b.score - a.score);
   
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Scored contacts count:', scored.length);
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Adjusted min score:', adjustedMinScore);
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Top scored contacts:', scored.slice(0, 5).map(s => ({ 
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Scored contacts count:', scored.length);
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Adjusted min score:', adjustedMinScore);
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Top scored contacts:', scored.slice(0, 5).map(s => ({ 
     name: s.contact.name, 
     company: s.contact.company, 
     score: s.score,
@@ -755,8 +756,8 @@ export function searchContacts(
   })));
   
   const results = scored.slice(0, maxResults).map(s => s.contact);
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Final results count:', results.length);
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Results:', results.map(c => ({ name: c.name, company: c.company })));
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Final results count:', results.length);
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Results:', results.map(c => ({ name: c.name, company: c.company })));
   return results;
 }
 
@@ -768,8 +769,8 @@ export function searchWithParsedQuery(
   parsedQuery: ParsedQuery,
   options: { maxResults?: number } = {}
 ): Contact[] {
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Starting search');
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Parsed query:', {
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Starting search');
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Parsed query:', {
     companies: parsedQuery.entities.companies,
     roles: parsedQuery.entities.roles,
     keywords: parsedQuery.keywords,
@@ -791,7 +792,7 @@ export function searchWithParsedQuery(
   const hasNeedsFollowUp = parsedQuery.needsFollowUp === true;
   const hasResponsibilityFilter = !!parsedQuery.responsibility;
   
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Active filters:', {
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Active filters:', {
     hasCompanyFilter,
     hasRoleFilter,
     hasBusinessFilter,
@@ -820,11 +821,11 @@ export function searchWithParsedQuery(
   // IMPORTANT: If we have responsibility filters, don't use keyword matching
   // The responsibility filter is precise and should be sufficient
   if (searchQuery.filters.responsibilities && searchQuery.filters.responsibilities.length > 0) {
-    console.log('[SEARCH DEBUG] Responsibility filter present, clearing keyword search terms');
+    devLog('[SEARCH DEBUG] Responsibility filter present, clearing keyword search terms');
     searchTerms = [];
   }
   
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Search terms:', searchTerms);
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Search terms:', searchTerms);
   
   // No minimum score threshold - trust LLM-extracted filters
   
@@ -832,10 +833,10 @@ export function searchWithParsedQuery(
                        hasLocationFilter || hasRelationshipFilter || hasInteractionFilter ||
                        hasInteractionTimeFilter || hasNeedsFollowUp || hasResponsibilityFilter;
   
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - hasAnyFilter:', hasAnyFilter, 'searchTerms.length:', searchTerms.length);
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - hasAnyFilter:', hasAnyFilter, 'searchTerms.length:', searchTerms.length);
   
   if (searchTerms.length === 0 && !hasAnyFilter) {
-    console.log('[SEARCH DEBUG] searchWithParsedQuery - No filters and no search terms, falling back');
+    devLog('[SEARCH DEBUG] searchWithParsedQuery - No filters and no search terms, falling back');
     // Fall back to original query terms
     return searchContacts(contacts, parsedQuery.searchTerms, { maxResults });
   }
@@ -1260,30 +1261,30 @@ export function searchWithParsedQuery(
         const contactBusinessName = contact.businessName || "";
         const contactDescription = contact.description || "";
         
-        console.log('[SEARCH DEBUG] Checking company match for contact:', contact.name);
-        console.log('[SEARCH DEBUG] Contact fields - company:', contactCompany, 'businessName:', contactBusinessName, 'description:', contactDescription?.substring(0, 50));
+        devLog('[SEARCH DEBUG] Checking company match for contact:', contact.name);
+        devLog('[SEARCH DEBUG] Contact fields - company:', contactCompany, 'businessName:', contactBusinessName, 'description:', contactDescription?.substring(0, 50));
         
         for (const company of parsedQuery.entities.companies) {
-          console.log('[SEARCH DEBUG] Comparing search company:', company);
+          devLog('[SEARCH DEBUG] Comparing search company:', company);
           
           // Check company field
           let matches = companyMatches(contactCompany, company);
-          console.log('[SEARCH DEBUG] Company field match:', matches);
+          devLog('[SEARCH DEBUG] Company field match:', matches);
           
           // Check businessName field if company field doesn't match
           if (!matches && contactBusinessName) {
             matches = companyMatches(contactBusinessName, company);
-            console.log('[SEARCH DEBUG] BusinessName field match:', matches);
+            devLog('[SEARCH DEBUG] BusinessName field match:', matches);
           }
           
           // Check description field if still no match
           if (!matches && contactDescription) {
             matches = companyMatches(contactDescription, company);
-            console.log('[SEARCH DEBUG] Description field match:', matches);
+            devLog('[SEARCH DEBUG] Description field match:', matches);
           }
           
           if (matches) {
-            console.log('[SEARCH DEBUG] Company matched! Adding score boost. Current score:', result.score);
+            devLog('[SEARCH DEBUG] Company matched! Adding score boost. Current score:', result.score);
             result.score += 20; // Strong boost for company match
             if (!result.matchedFields.includes("company")) {
               result.matchedFields.push("company");
@@ -1293,7 +1294,7 @@ export function searchWithParsedQuery(
             if (result.score < adjustedMinScore) {
               result.score = Math.max(adjustedMinScore, result.score);
             }
-            console.log('[SEARCH DEBUG] Final score after company match:', result.score, 'threshold:', adjustedMinScore);
+            devLog('[SEARCH DEBUG] Final score after company match:', result.score, 'threshold:', adjustedMinScore);
           }
         }
       }
@@ -1442,9 +1443,9 @@ export function searchWithParsedQuery(
     .filter(s => s.score >= adjustedMinScore)
     .sort((a, b) => b.score - a.score);
   
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Scored contacts count:', scored.length);
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Adjusted min score:', adjustedMinScore);
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Top scored contacts:', scored.slice(0, 5).map(s => ({ 
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Scored contacts count:', scored.length);
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Adjusted min score:', adjustedMinScore);
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Top scored contacts:', scored.slice(0, 5).map(s => ({ 
     name: s.contact.name, 
     company: s.contact.company, 
     score: s.score,
@@ -1452,8 +1453,8 @@ export function searchWithParsedQuery(
   })));
   
   const results = scored.slice(0, maxResults).map(s => s.contact);
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Final results count:', results.length);
-  console.log('[SEARCH DEBUG] searchWithParsedQuery - Results:', results.map(c => ({ name: c.name, company: c.company })));
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Final results count:', results.length);
+  devLog('[SEARCH DEBUG] searchWithParsedQuery - Results:', results.map(c => ({ name: c.name, company: c.company })));
   return results;
 }
 
@@ -1480,13 +1481,13 @@ export async function executeSearchQuery(
   const { maxResults = MAX_RESULTS, originalQuery } = options;
   const { filters, semantic_hint } = searchQuery;
   
-  console.log('[SEARCH DEBUG] executeSearchQuery - Starting search');
-  console.log('[SEARCH DEBUG] executeSearchQuery - Contacts count:', contacts.length);
-  console.log('[SEARCH DEBUG] executeSearchQuery - SearchQuery:', JSON.stringify(searchQuery, null, 2));
+  devLog('[SEARCH DEBUG] executeSearchQuery - Starting search');
+  devLog('[SEARCH DEBUG] executeSearchQuery - Contacts count:', contacts.length);
+  devLog('[SEARCH DEBUG] executeSearchQuery - SearchQuery:', JSON.stringify(searchQuery, null, 2));
   
   // Early return if no contacts
   if (contacts.length === 0) {
-    console.log('[SEARCH DEBUG] executeSearchQuery - No contacts provided');
+    devLog('[SEARCH DEBUG] executeSearchQuery - No contacts provided');
     return [];
   }
 
@@ -1511,7 +1512,7 @@ export async function executeSearchQuery(
   // IMPORTANT: If we have responsibility filters, don't use keyword matching
   // The responsibility filter is precise and should be sufficient
   if (filters.responsibilities && filters.responsibilities.length > 0) {
-    console.log('[SEARCH DEBUG] Responsibility filter present, clearing keyword search terms');
+    devLog('[SEARCH DEBUG] Responsibility filter present, clearing keyword search terms');
     searchTerms.length = 0; // Clear the array
   }
 
@@ -1549,22 +1550,22 @@ export async function executeSearchQuery(
   // Apply deterministic filters first to reduce dataset before scoring
   if (filters.company) {
     const searchCompany = filters.company.toLowerCase().trim();
-    console.log('[SEARCH DEBUG] executeSearchQuery - Filtering by company:', searchCompany);
+    devLog('[SEARCH DEBUG] executeSearchQuery - Filtering by company:', searchCompany);
     const beforeFilter = filteredContacts.length;
     filteredContacts = filteredContacts.filter(contact => {
       const contactCompany = (contact.company || "").toLowerCase().trim();
       const matches = companyMatches(contactCompany, searchCompany);
       if (matches) {
-        console.log('[SEARCH DEBUG] executeSearchQuery - Company match:', contactCompany, 'matches', searchCompany);
+        devLog('[SEARCH DEBUG] executeSearchQuery - Company match:', contactCompany, 'matches', searchCompany);
       }
       return matches;
     });
-    console.log('[SEARCH DEBUG] executeSearchQuery - Company filter:', beforeFilter, '->', filteredContacts.length, 'contacts');
+    devLog('[SEARCH DEBUG] executeSearchQuery - Company filter:', beforeFilter, '->', filteredContacts.length, 'contacts');
   }
 
   if (filters.job_title) {
     const searchRole = filters.job_title.toLowerCase();
-    console.log('[SEARCH DEBUG] executeSearchQuery - Filtering by role:', searchRole);
+    devLog('[SEARCH DEBUG] executeSearchQuery - Filtering by role:', searchRole);
     const beforeFilter = filteredContacts.length;
     filteredContacts = filteredContacts.filter(contact => {
       const contactRole = (contact.role || "").toLowerCase();
@@ -1572,7 +1573,7 @@ export async function executeSearchQuery(
       // This handles "ops directors" matching "Operations Director" or "Director of Operations"
       const roleMatchesResult = roleMatches(contactRole, searchRole);
       if (roleMatchesResult) {
-        console.log('[SEARCH DEBUG] executeSearchQuery - Role match:', contactRole, 'matches', searchRole);
+        devLog('[SEARCH DEBUG] executeSearchQuery - Role match:', contactRole, 'matches', searchRole);
         return true;
       }
       
@@ -1585,12 +1586,12 @@ export async function executeSearchQuery(
         )
       );
       if (hasMatchingWord) {
-        console.log('[SEARCH DEBUG] executeSearchQuery - Role word match:', contactRole, 'contains word from', searchRole);
+        devLog('[SEARCH DEBUG] executeSearchQuery - Role word match:', contactRole, 'contains word from', searchRole);
         return true;
       }
       return false;
     });
-    console.log('[SEARCH DEBUG] executeSearchQuery - Role filter:', beforeFilter, '->', filteredContacts.length, 'contacts');
+    devLog('[SEARCH DEBUG] executeSearchQuery - Role filter:', beforeFilter, '->', filteredContacts.length, 'contacts');
   }
 
   if (filters.name) {
@@ -1650,7 +1651,7 @@ export async function executeSearchQuery(
 
   // Filter by responsibilities
   if (filters.responsibilities && filters.responsibilities.length > 0) {
-    console.log('[SEARCH DEBUG] Applying responsibility filter:', filters.responsibilities);
+    devLog('[SEARCH DEBUG] Applying responsibility filter:', filters.responsibilities);
     filteredContacts = filteredContacts.filter(contact => {
       // Check each responsibility ID
       return filters.responsibilities!.some(respId => {
@@ -1697,13 +1698,13 @@ export async function executeSearchQuery(
         return matches;
       });
     });
-    console.log('[SEARCH DEBUG] After responsibility filter, contacts:', filteredContacts.length);
+    devLog('[SEARCH DEBUG] After responsibility filter, contacts:', filteredContacts.length);
   }
 
   // Check if we have entity filters
   const hasEntityFilters = !!(filters.company || filters.job_title || filters.name || filters.location || filters.responsibilities);
   
-  console.log('[SEARCH DEBUG] executeSearchQuery - After filtering:', {
+  devLog('[SEARCH DEBUG] executeSearchQuery - After filtering:', {
     hasEntityFilters,
     searchTermsCount: searchTerms.length,
     filteredContactsCount: filteredContacts.length,
@@ -1713,11 +1714,11 @@ export async function executeSearchQuery(
   // If we have entity filters but no search terms, we should return all filtered contacts
   // (they've already been filtered by the entity criteria)
   if (hasEntityFilters && searchTerms.length === 0) {
-    console.log('[SEARCH DEBUG] executeSearchQuery - Entity filters only, no search terms. Filtered contacts:', filteredContacts.length);
+    devLog('[SEARCH DEBUG] executeSearchQuery - Entity filters only, no search terms. Filtered contacts:', filteredContacts.length);
     
     // CRITICAL: If entity filters resulted in 0 contacts, try more lenient matching
     if (filteredContacts.length === 0) {
-      console.log('[SEARCH DEBUG] executeSearchQuery - Entity filters too strict, trying lenient matching');
+      devLog('[SEARCH DEBUG] executeSearchQuery - Entity filters too strict, trying lenient matching');
       // Try lenient matching - check if any contact partially matches
       filteredContacts = contacts.filter(contact => {
         if (filters.company) {
@@ -1755,7 +1756,7 @@ export async function executeSearchQuery(
         }
         return false;
       });
-      console.log('[SEARCH DEBUG] executeSearchQuery - After lenient matching:', filteredContacts.length, 'contacts');
+      devLog('[SEARCH DEBUG] executeSearchQuery - After lenient matching:', filteredContacts.length, 'contacts');
     }
     
     // Return filtered contacts directly, sorted by semantic score if available
@@ -1821,9 +1822,9 @@ export async function executeSearchQuery(
       return b.score - a.score;
     });
 
-  console.log('[SEARCH DEBUG] executeSearchQuery - Scored contacts:', scored.length, 'out of', filteredContacts.length, 'filtered');
-  console.log('[SEARCH DEBUG] executeSearchQuery - Search terms:', searchTerms);
-  console.log('[SEARCH DEBUG] executeSearchQuery - Entity filters:', { 
+  devLog('[SEARCH DEBUG] executeSearchQuery - Scored contacts:', scored.length, 'out of', filteredContacts.length, 'filtered');
+  devLog('[SEARCH DEBUG] executeSearchQuery - Search terms:', searchTerms);
+  devLog('[SEARCH DEBUG] executeSearchQuery - Entity filters:', { 
     company: filters.company, 
     job_title: filters.job_title, 
     name: filters.name, 
@@ -1833,7 +1834,7 @@ export async function executeSearchQuery(
   // If we have entity filters but no scored results, try a more lenient threshold
   // But still require some minimum relevance (not just any filtered contact)
   if (scored.length === 0 && hasEntityFilters && filteredContacts.length > 0) {
-    console.log('[SEARCH DEBUG] executeSearchQuery - No results with strict threshold, trying lenient scoring for filtered contacts');
+    devLog('[SEARCH DEBUG] executeSearchQuery - No results with strict threshold, trying lenient scoring for filtered contacts');
     // Re-score with lower threshold, but still require some match
     const LENIENT_THRESHOLD = 0.5; // Much lower, but not zero
     const lenientScored = filteredContacts
@@ -1865,7 +1866,7 @@ export async function executeSearchQuery(
       });
     
     if (lenientScored.length > 0) {
-      console.log('[SEARCH DEBUG] executeSearchQuery - Found', lenientScored.length, 'results with lenient threshold');
+      devLog('[SEARCH DEBUG] executeSearchQuery - Found', lenientScored.length, 'results with lenient threshold');
       return lenientScored.slice(0, maxResults).map(s => s.contact);
     }
   }
@@ -1873,7 +1874,7 @@ export async function executeSearchQuery(
   // If we have no entity filters and no results, but we have search terms,
   // try a more lenient threshold (for plain language queries without entity extraction)
   if (scored.length === 0 && !hasEntityFilters && searchTerms.length > 0) {
-    console.log('[SEARCH DEBUG] executeSearchQuery - No results with search terms, trying lenient threshold');
+    devLog('[SEARCH DEBUG] executeSearchQuery - No results with search terms, trying lenient threshold');
     const lenientScored = filteredContacts
       .map(contact => {
         const result = scoreContact(contact, searchTerms);
@@ -1903,7 +1904,7 @@ export async function executeSearchQuery(
       });
     
     if (lenientScored.length > 0) {
-      console.log('[SEARCH DEBUG] executeSearchQuery - Found', lenientScored.length, 'results with lenient threshold');
+      devLog('[SEARCH DEBUG] executeSearchQuery - Found', lenientScored.length, 'results with lenient threshold');
       return lenientScored.slice(0, maxResults).map(s => s.contact);
     }
   }

@@ -16,6 +16,7 @@ import {
   cacheParsedQuery,
 } from "./modelCache";
 import { enhanceQueryWithClassicalNLP } from "./classicalNLP";
+import { devLog } from "@/lib/devLog";
 
 /**
  * Main entry point - semantic assist with classical NLP
@@ -28,20 +29,20 @@ export async function semanticAssistUnified(
     // Check if AI is enabled
     if (!isQueryParsingEnabled()) {
       if (isDebugMode()) {
-        console.log('[Semantic] Query enhancement not enabled');
+        devLog('[Semantic] Query enhancement not enabled');
       }
       return fallback;
     }
     
     if (isDebugMode()) {
-      console.log('[Semantic] Processing query:', query);
+      devLog('[Semantic] Processing query:', query);
     }
 
     // Check cache first
     const cached = await getCachedParsedQuery(query);
     if (cached) {
       if (isDebugMode()) {
-        console.log('[Semantic] Using cached result');
+        devLog('[Semantic] Using cached result');
       }
       return cached;
     }
@@ -55,7 +56,7 @@ export async function semanticAssistUnified(
     }
 
     if (isDebugMode()) {
-      console.log('[Semantic] Enhanced query:', enhanced);
+      devLog('[Semantic] Enhanced query:', enhanced);
     }
 
     return enhanced;

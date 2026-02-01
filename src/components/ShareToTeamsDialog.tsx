@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Loader2, Share2, Video } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface ShareToTeamsDialogProps {
   open: boolean;
@@ -37,7 +37,6 @@ export function ShareToTeamsDialog({
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [selectedChannelId, setSelectedChannelId] = useState<string>("");
   const [isSharing, setIsSharing] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
@@ -61,11 +60,7 @@ export function ShareToTeamsDialog({
 
   const handleShare = async () => {
     if (!contact || !selectedTeamId || !selectedChannelId) {
-      toast({
-        title: "Missing information",
-        description: "Please select a team and channel to share to",
-        variant: "destructive",
-      });
+      toast.error("Please select a team and channel to share to");
       return;
     }
 

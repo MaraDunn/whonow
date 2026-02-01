@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
+import { devLog } from "@/lib/devLog";
 
 interface TeamsStatus {
   connected: boolean;
@@ -35,7 +36,6 @@ export function useTeamsIntegration() {
   const [status, setStatus] = useState<TeamsStatus | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
-  const { toast } = useToast();
 
   const getStatus = useCallback(async () => {
     try {
@@ -73,7 +73,7 @@ export function useTeamsIntegration() {
 
       if (error) {
         // Handle auth errors silently - user may not be authenticated
-        console.log("Teams status check failed:", error.message);
+        devLog("Teams status check failed:", error.message);
         setStatus({ connected: false });
         return { connected: false };
       }
@@ -96,28 +96,20 @@ export function useTeamsIntegration() {
       const { data: { session: refreshedSession }, error: sessionError } = await supabase.auth.refreshSession();
       
       if (sessionError || !refreshedSession) {
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to connect Microsoft Teams",
-          variant: "destructive",
-        });
+        toast.error("Please sign in to connect Microsoft Teams");
         return;
       }
 
       // Use the refreshed session token
       const accessToken = refreshedSession.access_token;
-      console.log("Calling teams-integration with fresh token (length:", accessToken.length, ")");
-      console.log("Token starts with:", accessToken.substring(0, 50));
-      console.log("Token ends with:", accessToken.substring(accessToken.length - 50));
+      devLog("Calling teams-integration with fresh token (length:", accessToken.length, ")");
+      devLog("Token starts with:", accessToken.substring(0, 50));
+      devLog("Token ends with:", accessToken.substring(accessToken.length - 50));
       
       // Validate token format (should be JWT: header.payload.signature)
       if (!accessToken || accessToken.split('.').length !== 3) {
         console.error("Invalid token format - not a valid JWT");
-        toast({
-          title: "Authentication error",
-          description: "Invalid session token. Please log out and log back in.",
-          variant: "destructive",
-        });
+        toast.error("Invalid session token. Please log out and log back in.");
         return;
       }
 
@@ -132,13 +124,13 @@ export function useTeamsIntegration() {
         return;
       }
 
-      console.log("Sending request to teams-integration with JWT in both header and body");
+      devLog("Sending request to teams-integration with JWT in both header and body");
       const requestBody = JSON.stringify({ 
         action: "get-oauth-url", 
         origin: window.location.origin,
         jwt: accessToken, // Function code reads from here
       });
-      console.log("Request body (first 100 chars):", requestBody.substring(0, 100));
+      devLog("Request body (first 100 chars):", requestBody.substring(0, 100));
 
       const resp = await fetch(`${supabaseUrl}/functions/v1/teams-integration`, {
         method: "POST",
@@ -150,9 +142,9 @@ export function useTeamsIntegration() {
         body: requestBody,
       });
 
-      console.log("Response status:", resp.status);
+      devLog("Response status:", resp.status);
       const responseText = await resp.text();
-      console.log("Response body:", responseText);
+      devLog("Response body:", responseText);
 
       let data;
       try {
@@ -165,11 +157,7 @@ export function useTeamsIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Configuration required",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return;
       }
 
@@ -218,10 +206,7 @@ export function useTeamsIntegration() {
       setStatus({ connected: false });
       setTeams([]);
       setChannels([]);
-      toast({
-        title: "Disconnected",
-        description: "Microsoft Teams has been disconnected",
-      });
+      toast.success("Microsoft Teams has been disconnected");
     } catch (error) {
       console.error("Error disconnecting Teams:", error);
       toast({
@@ -263,11 +248,7 @@ export function useTeamsIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Failed to load teams",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return [];
       }
 
@@ -316,11 +297,7 @@ export function useTeamsIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Failed to load channels",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return [];
       }
 
@@ -344,11 +321,7 @@ export function useTeamsIntegration() {
       setIsLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to import Teams members",
-          variant: "destructive",
-        });
+        toast.error("Please sign in to import Teams members");
         return null;
       }
 
@@ -375,11 +348,7 @@ export function useTeamsIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Import failed",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return null;
       }
 
@@ -390,11 +359,7 @@ export function useTeamsIntegration() {
       return data;
     } catch (error) {
       console.error("Error importing Teams members:", error);
-      toast({
-        title: "Import failed",
-        description: "Could not import Teams members",
-        variant: "destructive",
-      });
+      toast.error("Could not import Teams members");
       return null;
     } finally {
       setIsLoading(false);
@@ -433,11 +398,7 @@ export function useTeamsIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Send failed",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return null;
       }
 
@@ -448,11 +409,7 @@ export function useTeamsIntegration() {
       return data;
     } catch (error) {
       console.error("Error sending to channel:", error);
-      toast({
-        title: "Send failed",
-        description: "Could not send message to channel",
-        variant: "destructive",
-      });
+      toast.error("Could not send message to channel");
       return null;
     } finally {
       setIsLoading(false);
@@ -491,11 +448,7 @@ export function useTeamsIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Sharing failed",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return false;
       }
 
@@ -507,11 +460,7 @@ export function useTeamsIntegration() {
     } catch (error) {
       console.error("Error sharing contact to Teams:", error);
       const message = error instanceof Error ? error.message : "Could not share contact to Teams";
-      toast({
-        title: "Sharing failed",
-        description: message,
-        variant: "destructive",
-      });
+      toast.error(message);
       return false;
     } finally {
       setIsLoading(false);
@@ -548,26 +497,15 @@ export function useTeamsIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Meeting creation failed",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return null;
       }
 
-      toast({
-        title: "Meeting created",
-        description: "Teams meeting has been scheduled",
-      });
+      toast.success("Teams meeting has been scheduled");
       return data;
     } catch (error) {
       console.error("Error creating meeting:", error);
-      toast({
-        title: "Meeting creation failed",
-        description: "Could not create Teams meeting",
-        variant: "destructive",
-      });
+      toast.error("Could not create Teams meeting");
       return null;
     } finally {
       setIsLoading(false);

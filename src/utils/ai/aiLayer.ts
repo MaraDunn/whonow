@@ -18,6 +18,7 @@ import { getAIConfig, isQueryParsingEnabled } from "./aiConfig";
 import { trackQuery, shouldTripCircuitBreaker, resetCircuitBreaker, updateModelStatus } from "./aiMonitor";
 import { semanticAssistUnified } from "../semanticAssist/unifiedLLMAdapter";
 import { parseSearchQueryToSchema } from "../searchQueryParser";
+import { devLog } from "@/lib/devLog";
 
 export interface AIMetadata {
   aiUsed: boolean;
@@ -47,7 +48,7 @@ function checkCircuitBreaker(): boolean {
   
   // Reset circuit breaker after interval
   if (circuitBreakerTripped && now - lastCircuitBreakerCheck > CIRCUIT_BREAKER_RESET_INTERVAL) {
-    console.log('[AI Layer] Circuit breaker reset after cooldown');
+    devLog('[AI Layer] Circuit breaker reset after cooldown');
     circuitBreakerTripped = false;
     resetCircuitBreaker();
   }
@@ -277,5 +278,5 @@ export function getAIStatus(): {
 export function forceResetCircuitBreaker(): void {
   circuitBreakerTripped = false;
   resetCircuitBreaker();
-  console.log('[AI Layer] Circuit breaker manually reset');
+  devLog('[AI Layer] Circuit breaker manually reset');
 }

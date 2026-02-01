@@ -7,6 +7,7 @@
 import { ParsedContactData } from "./contactTextParser";
 import { parseContactText } from "./contactTextParser";
 import { parseContactWithLLM } from "./contactLLMParser";
+import { devLog } from "@/lib/devLog";
 
 /**
  * Parse contact text with LLM-first approach
@@ -37,7 +38,7 @@ export async function parseContactUnified(
     const llmResult = await parseContactWithLLM(trimmedInput);
     
     if (llmResult) {
-      console.log("[Unified Contact Parser] ✓ Using LLM parsing result");
+      devLog("[Unified Contact Parser] ✓ Using LLM parsing result");
       return llmResult;
     }
   } catch (error) {
@@ -47,6 +48,6 @@ export async function parseContactUnified(
   // Fallback to deterministic parsing
   // This is expected in many browser environments due to CORS/network restrictions
   // The deterministic parser works well for most contact formats
-  console.log("[Unified Contact Parser] Using deterministic parsing (LLM not available)");
+  devLog("[Unified Contact Parser] Using deterministic parsing (LLM not available)");
   return parseContactText(trimmedInput);
 }

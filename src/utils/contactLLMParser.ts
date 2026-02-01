@@ -12,6 +12,7 @@ import {
   isModelLoadFailed,
   markModelLoadFailed,
 } from "./contactLLMCache";
+import { devLog } from "@/lib/devLog";
 
 let llmModel: any = null;
 let modelLoading: Promise<any> | null = null;
@@ -53,22 +54,22 @@ async function loadLLMModel(): Promise<any> {
   // FIRST: Try to reuse model from search parser if it's already loaded
   // This is the key fix - if search parser successfully loaded the model, reuse it!
   try {
-    console.log("[Contact LLM] Checking if search parser has model available...");
+    devLog("[Contact LLM] Checking if search parser has model available...");
     const searchAdapter = await import("./semanticAssist/unifiedLLMAdapter");
     
     // Check if model is already loaded
     const searchModel = searchAdapter.getLoadedModel();
     if (searchModel) {
-      console.log("[Contact LLM] ✓ Found loaded model from search parser, reusing it!");
+      devLog("[Contact LLM] ✓ Found loaded model from search parser, reusing it!");
       llmModel = searchModel;
       return llmModel;
     }
     
-    console.log("[Contact LLM] Search parser model not loaded yet");
+    devLog("[Contact LLM] Search parser model not loaded yet");
     
     // If search parser is currently loading, wait for it to complete
     if (searchAdapter.isModelLoading()) {
-      console.log("[Contact LLM] Search parser is loading model, waiting to reuse it...");
+      devLog("[Contact LLM] Search parser is loading model, waiting to reuse it...");
       // Wait for the search parser's loading to complete (with timeout)
       let attempts = 0;
       const maxAttempts = 50; // 5 seconds max wait
@@ -77,38 +78,38 @@ async function loadLLMModel(): Promise<any> {
         attempts++;
         const model = searchAdapter.getLoadedModel();
         if (model) {
-          console.log("[Contact LLM] ✓ Reusing model instance from search parser (after wait)");
+          devLog("[Contact LLM] ✓ Reusing model instance from search parser (after wait)");
           llmModel = model;
           return llmModel;
         }
       }
-      console.log("[Contact LLM] Search parser finished loading, checking for model again...");
+      devLog("[Contact LLM] Search parser finished loading, checking for model again...");
       const finalModel = searchAdapter.getLoadedModel();
       if (finalModel) {
-        console.log("[Contact LLM] ✓ Found model after search parser finished loading!");
+        devLog("[Contact LLM] ✓ Found model after search parser finished loading!");
         llmModel = finalModel;
         return llmModel;
       }
     }
     
     // Try to trigger search parser's model loading
-    console.log("[Contact LLM] Attempting to trigger search parser model loading...");
+    devLog("[Contact LLM] Attempting to trigger search parser model loading...");
     try {
       const triggeredModel = await searchAdapter.ensureModelLoaded();
       if (triggeredModel) {
-        console.log("[Contact LLM] ✓ Successfully triggered and reused search parser model!");
+        devLog("[Contact LLM] ✓ Successfully triggered and reused search parser model!");
         llmModel = triggeredModel;
         return llmModel;
       } else {
-        console.log("[Contact LLM] Search parser model loading failed or not available");
+        devLog("[Contact LLM] Search parser model loading failed or not available");
       }
     } catch (triggerError) {
-      console.log("[Contact LLM] Could not trigger search parser model loading:", triggerError);
+      devLog("[Contact LLM] Could not trigger search parser model loading:", triggerError);
     }
     
-    console.log("[Contact LLM] Search parser model not available, will load our own");
+    devLog("[Contact LLM] Search parser model not available, will load our own");
   } catch (error) {
-    console.log("[Contact LLM] Could not access search parser:", error);
+    devLog("[Contact LLM] Could not access search parser:", error);
     // Continue to load our own model
   }
   
@@ -116,19 +117,19 @@ async function loadLLMModel(): Promise<any> {
   // Check persistent failure state (IndexedDB)
   const persistentFailure = await isModelLoadFailed();
   if (persistentFailure && hasRetriedThisSession) {
-    console.log("[Contact LLM] Model loading previously failed (persistent) and already retried this session, skipping");
+    devLog("[Contact LLM] Model loading previously failed (persistent) and already retried this session, skipping");
     modelLoadFailed = true;
     return null;
   }
   
   // Allow one retry per session even if it previously failed
   if (persistentFailure && !hasRetriedThisSession) {
-    console.log("[Contact LLM] Model loading previously failed, but allowing one retry this session");
+    devLog("[Contact LLM] Model loading previously failed, but allowing one retry this session");
     hasRetriedThisSession = true;
   }
   
   if (modelLoadFailed && hasRetriedThisSession) {
-    console.log("[Contact LLM] Model loading failed this session, skipping retry");
+    devLog("[Contact LLM] Model loading failed this session, skipping retry");
     return null;
   }
   if (modelLoading) return modelLoading;
@@ -159,7 +160,7 @@ async function loadLLMModel(): Promise<any> {
         }
       }
 
-      console.log(`[Contact LLM] Loading model: ${config.modelName}`);
+      devLog(`[Contact LLM] Loading model: ${config.modelName}`);
       
       // List of models to try (primary + fallbacks, avoiding duplicates)
       const modelsToTry = [
@@ -168,7 +169,7 @@ async function loadLLMModel(): Promise<any> {
       ];
       
       for (const modelName of modelsToTry) {
-        console.log(`[Contact LLM] Attempting to load: ${modelName}`);
+        devLog(`[Contact LLM] Attempting to load: ${modelName}`);
         
         // Try quantized first (smaller, faster)
         try {
@@ -179,9 +180,9 @@ async function loadLLMModel(): Promise<any> {
               quantized: true,
             }
           );
-          console.log(`[Contact LLM] Successfully loaded quantized model: ${modelName}`);
+          devLog(`[Contact LLM] Successfully loaded quantized model: ${modelName}`);
           if (modelName !== config.modelName) {
-            console.log(`[Contact LLM] Note: Using fallback model ${modelName} instead of ${config.modelName}`);
+            devLog(`[Contact LLM] Note: Using fallback model ${modelName} instead of ${config.modelName}`);
           }
           return llmModel;
         } catch (quantizedError: any) {
@@ -197,9 +198,9 @@ async function loadLLMModel(): Promise<any> {
                   quantized: false,
                 }
               );
-              console.log(`[Contact LLM] Successfully loaded non-quantized model: ${modelName}`);
+              devLog(`[Contact LLM] Successfully loaded non-quantized model: ${modelName}`);
               if (modelName !== config.modelName) {
-                console.log(`[Contact LLM] Note: Using fallback model ${modelName} instead of ${config.modelName}`);
+                devLog(`[Contact LLM] Note: Using fallback model ${modelName} instead of ${config.modelName}`);
               }
               return llmModel;
             } catch (nonQuantizedError: any) {
@@ -218,7 +219,7 @@ async function loadLLMModel(): Promise<any> {
       console.warn("  - Models are not available in your environment");
       console.warn("  - Network/CORS restrictions prevent model downloads");
       console.warn("  - Browser doesn't support the required features");
-      console.log("[Contact LLM] Using deterministic parsing instead. This works well for most contact formats.");
+      devLog("[Contact LLM] Using deterministic parsing instead. This works well for most contact formats.");
       modelLoadFailed = true;
       await markModelLoadFailed();
       return null;
@@ -226,8 +227,8 @@ async function loadLLMModel(): Promise<any> {
       console.error("Failed to load LLM model for contact parsing:", error);
       if (error.message) {
         if (isModelInaccessibleError(error)) {
-          console.log("[Contact LLM] Model repository not accessible (this is normal in some environments).");
-          console.log("[Contact LLM] Using deterministic parsing instead - works well for most contact formats.");
+          devLog("[Contact LLM] Model repository not accessible (this is normal in some environments).");
+          devLog("[Contact LLM] Using deterministic parsing instead - works well for most contact formats.");
           modelLoadFailed = true;
           await markModelLoadFailed();
         }

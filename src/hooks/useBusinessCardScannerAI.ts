@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { devLog } from "@/lib/devLog";
 
 interface ScannedContact {
   name: string;
@@ -104,15 +105,15 @@ export function useBusinessCardScannerAI() {
     setScannedContact(null);
 
     try {
-      console.log("=== Starting AI OCR (PaddleOCR) ===");
+      devLog("=== Starting AI OCR (PaddleOCR) ===");
       
       // Validate image before sending
       if (!imageBase64 || typeof imageBase64 !== 'string' || imageBase64.trim().length === 0) {
         throw new Error("Invalid image data. Please capture or upload a valid image.");
       }
       
-      console.log("Image data length:", imageBase64.length);
-      console.log("Image preview:", imageBase64.substring(0, 50) + "...");
+      devLog("Image data length:", imageBase64.length);
+      devLog("Image preview:", imageBase64.substring(0, 50) + "...");
       
       // Call the new AI-powered edge function
       const { data, error: functionError } = await supabase.functions.invoke(
@@ -158,8 +159,8 @@ export function useBusinessCardScannerAI() {
         throw new Error(errorMessage);
       }
 
-      console.log("=== AI OCR Complete ===");
-      console.log("Extracted contact:", data);
+      devLog("=== AI OCR Complete ===");
+      devLog("Extracted contact:", data);
 
       const contact: ScannedContact = {
         name: data.name || "",

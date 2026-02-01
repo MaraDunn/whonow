@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Loader2, Share2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface ShareToSlackDialogProps {
   open: boolean;
@@ -35,7 +35,6 @@ export function ShareToSlackDialog({
   const { status, channels, getStatus, getChannels, shareContact, isLoading } = useSlackIntegration();
   const [selectedChannelId, setSelectedChannelId] = useState<string>("");
   const [isSharing, setIsSharing] = useState(false);
-  const { toast } = useToast();
 
   // Refresh status when dialog opens (picks up org-level or user-level connection)
   useEffect(() => {
@@ -53,11 +52,7 @@ export function ShareToSlackDialog({
 
   const handleShare = async () => {
     if (!contact || !selectedChannelId) {
-      toast({
-        title: "Missing information",
-        description: "Please select a channel to share to",
-        variant: "destructive",
-      });
+      toast.error("Please select a channel to share to");
       return;
     }
 

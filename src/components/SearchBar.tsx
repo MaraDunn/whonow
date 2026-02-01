@@ -1,6 +1,7 @@
 import { Search, X } from "lucide-react";
 import { useRef, useEffect, useLayoutEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { devLog } from "@/lib/devLog";
 
 interface SearchBarProps {
   value: string;
@@ -45,12 +46,12 @@ export function SearchBar({ value, onChange, placeholder = "Search contacts...",
     if (!isComposingRef.current) {
       cursorPosRef.current = e.target.selectionStart;
     }
-    console.log('[SearchBar] handleChange:', e.target.value);
+    devLog('[SearchBar] handleChange:', e.target.value);
     onChange(e.target.value);
   };
 
   const handleClear = () => {
-    console.log('[SearchBar] handleClear called');
+    devLog('[SearchBar] handleClear called');
     onChange("");
     inputRef.current?.focus();
   };

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
+import { devLog } from "@/lib/devLog";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { generateAutoKeywords } from "@/utils/autoKeywords";
 import { toast } from "sonner";
@@ -317,7 +318,7 @@ export function ContactFormDialog({
       } catch (e) {
         // Permissions API might not be fully supported or geolocation not in the spec
         // This is fine - we'll rely on the error callback instead
-        console.log("Permissions API check not available, will use error callback");
+        devLog("Permissions API check not available, will use error callback");
       }
     }
 

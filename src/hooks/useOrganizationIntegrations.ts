@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { devLog } from "@/lib/devLog";
 
 interface IntegrationStatus {
   connected: boolean;
@@ -26,7 +27,6 @@ export function useOrganizationIntegrations() {
   const [isLoading, setIsLoading] = useState(false);
   const [slackStatus, setSlackStatus] = useState<IntegrationStatus | null>(null);
   const [teamsStatus, setTeamsStatus] = useState<IntegrationStatus | null>(null);
-  const { toast } = useToast();
   const { user } = useAuth();
   const { isAdmin, company } = useProfile(user?.id);
 
@@ -35,7 +35,7 @@ export function useOrganizationIntegrations() {
    */
   const getStatus = useCallback(async (provider: Provider) => {
     if (!user || !company?.id) {
-      console.log("No user or company found");
+      devLog("No user or company found");
       return { connected: false };
     }
 
@@ -103,20 +103,12 @@ export function useOrganizationIntegrations() {
    */
   const connect = useCallback(async (provider: Provider) => {
     if (!isAdmin) {
-      toast({
-        title: "Permission denied",
-        description: "Only organization admins can manage integrations",
-        variant: "destructive",
-      });
+      toast.error("Only organization admins can manage integrations");
       return;
     }
 
     if (!company?.id) {
-      toast({
-        title: "No organization",
-        description: "You must be part of an organization to use this feature",
-        variant: "destructive",
-      });
+      toast.error("You must be part of an organization to use this feature");
       return;
     }
 
@@ -126,11 +118,7 @@ export function useOrganizationIntegrations() {
       const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
       
       if (sessionError || !session) {
-        toast({
-          title: "Authentication required",
-          description: `Please sign in to connect ${provider}`,
-          variant: "destructive",
-        });
+        toast.error(`Please sign in to connect ${provider}`);
         return;
       }
 
@@ -141,11 +129,7 @@ export function useOrganizationIntegrations() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
       if (!supabaseUrl || !supabaseAnonKey) {
-        toast({
-          title: "Configuration error",
-          description: "Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY",
-          variant: "destructive",
-        });
+        toast.error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY");
         return;
       }
 
@@ -169,29 +153,17 @@ export function useOrganizationIntegrations() {
         const msg =
           (data && (data.error || data.message)) ||
           `Edge function error (${resp.status})`;
-        toast({
-          title: "Connection failed",
-          description: msg,
-          variant: "destructive",
-        });
+        toast.error(msg);
         return;
       }
 
       if (data?.error) {
-        toast({
-          title: "Configuration required",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return;
       }
 
       if (!data?.url) {
-        toast({
-          title: "Connection failed",
-          description: "No OAuth URL returned from server",
-          variant: "destructive",
-        });
+        toast.error("No OAuth URL returned from server");
         return;
       }
 
@@ -200,26 +172,18 @@ export function useOrganizationIntegrations() {
     } catch (error: unknown) {
       console.error(`Error connecting ${provider}:`, error);
       const errorMsg = error instanceof Error ? error.message : `Could not initiate ${provider} connection`;
-      toast({
-        title: "Connection failed",
-        description: errorMsg,
-        variant: "destructive",
-      });
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
-  }, [isAdmin, company, toast]);
+  }, [isAdmin, company]);
 
   /**
    * Disconnect organization-level integration (admin only)
    */
   const disconnect = useCallback(async (provider: Provider) => {
     if (!isAdmin) {
-      toast({
-        title: "Permission denied",
-        description: "Only organization admins can manage integrations",
-        variant: "destructive",
-      });
+      toast.error("Only organization admins can manage integrations");
       return;
     }
 
@@ -262,32 +226,21 @@ export function useOrganizationIntegrations() {
         setTeamsStatus({ connected: false });
       }
 
-      toast({
-        title: "Disconnected",
-        description: `${provider === 'slack' ? 'Slack' : 'Microsoft Teams'} has been disconnected from your organization`,
-      });
+      toast.success(`${provider === 'slack' ? 'Slack' : 'Microsoft Teams'} has been disconnected from your organization`);
     } catch (error) {
       console.error(`Error disconnecting ${provider}:`, error);
-      toast({
-        title: "Disconnection failed",
-        description: `Could not disconnect ${provider}`,
-        variant: "destructive",
-      });
+      toast.error(`Could not disconnect ${provider}`);
     } finally {
       setIsLoading(false);
     }
-  }, [isAdmin, company, toast]);
+  }, [isAdmin, company]);
 
   /**
    * Import members from integration (uses org-level token)
    */
   const importMembers = useCallback(async (provider: Provider) => {
     if (!company?.id) {
-      toast({
-        title: "No organization",
-        description: "You must be part of an organization to import members",
-        variant: "destructive",
-      });
+      toast.error("You must be part of an organization to import members");
       return null;
     }
 
@@ -296,11 +249,7 @@ export function useOrganizationIntegrations() {
       
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to import members",
-          variant: "destructive",
-        });
+        toast.error("Please sign in to import members");
         return null;
       }
 
@@ -328,33 +277,22 @@ export function useOrganizationIntegrations() {
       }
 
       if (data.error) {
-        toast({
-          title: "Import failed",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return null;
       }
 
       const skippedMsg = data.skipped > 0 ? ` (${data.skipped} duplicates skipped)` : "";
-      toast({
-        title: "Import successful",
-        description: `Imported ${data.imported} contacts from ${provider === 'slack' ? 'Slack' : 'Teams'}${skippedMsg}`,
-      });
+      toast.success(`Imported ${data.imported} contacts from ${provider === 'slack' ? 'Slack' : 'Teams'}${skippedMsg}`);
       
       return data;
     } catch (error) {
       console.error(`Error importing ${provider} members:`, error);
-      toast({
-        title: "Import failed",
-        description: `Could not import ${provider} members`,
-        variant: "destructive",
-      });
+      toast.error(`Could not import ${provider} members`);
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, [company, toast]);
+  }, [company]);
 
   return {
     isLoading,

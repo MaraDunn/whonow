@@ -13,6 +13,7 @@ import {
 } from "./semanticAssist/modelCache";
 import { getLLMConfig, isLLMParsingEnabled } from "./llmConfig";
 import { ensureModelLoaded, resetInMemoryFailureState } from "./semanticAssist/unifiedLLMAdapter";
+import { devLog } from "@/lib/devLog";
 
 export interface DiagnosticResult {
   success: boolean;
@@ -206,8 +207,8 @@ export async function testModelLoading(): Promise<DiagnosticResult> {
   try {
     const config = getLLMConfig();
     
-    console.log("[LLM Diagnostics] Testing model loading...");
-    console.log("[LLM Diagnostics] Model:", config.modelName);
+    devLog("[LLM Diagnostics] Testing model loading...");
+    devLog("[LLM Diagnostics] Model:", config.modelName);
     
     // Clear any previous failure state for testing
     await clearModelLoadFailure();
@@ -293,7 +294,7 @@ export async function runDiagnostics(): Promise<{
   modelLoading: DiagnosticResult;
   status: LLMStatus;
 }> {
-  console.log("[LLM Diagnostics] Starting comprehensive diagnostics...");
+  devLog("[LLM Diagnostics] Starting comprehensive diagnostics...");
   
   const wasm = await checkWASMAvailability();
   const network = await checkHuggingFaceConnectivity();
@@ -477,8 +478,8 @@ if (typeof window !== "undefined") {
     forceModelRetry,
   };
   
-  console.log("[LLM Diagnostics] Diagnostic tools available at window.llmDiagnostics");
-  console.log("[LLM Diagnostics] Quick retry: await llmDiagnostics.clearAllFailureStates()");
-  console.log("[LLM Diagnostics] Force retry: await llmDiagnostics.forceModelRetry()");
-  console.log("[LLM Diagnostics] Full report: await llmDiagnostics.getDiagnosticReport()");
+  devLog("[LLM Diagnostics] Diagnostic tools available at window.llmDiagnostics");
+  devLog("[LLM Diagnostics] Quick retry: await llmDiagnostics.clearAllFailureStates()");
+  devLog("[LLM Diagnostics] Force retry: await llmDiagnostics.forceModelRetry()");
+  devLog("[LLM Diagnostics] Full report: await llmDiagnostics.getDiagnosticReport()");
 }

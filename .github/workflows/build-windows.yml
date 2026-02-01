@@ -1,0 +1,39 @@
+# Build Tauri Windows installer (MSI/EXE) on GitHub-hosted Windows runner.
+# Trigger manually from Actions tab, or run locally: npm run build:windows
+name: Build Windows
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri (Windows)
+        run: npm run tauri:build:win
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/

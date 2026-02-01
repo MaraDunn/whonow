@@ -5,6 +5,7 @@ import { enhanceQuery, type AIMetadata } from "@/utils/ai";
 import { SearchQuery } from "@/types/searchQuery";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { devLog } from "@/lib/devLog";
 
 export type { ActionType };
 
@@ -238,7 +239,7 @@ export function useSmartSearch(
   // This ensures clearing the search immediately shows the full list without state sync issues
   const effectiveContacts = useMemo(() => {
     const result = hasActiveQuery ? searchResults : contacts;
-    console.log('[useSmartSearch] effectiveContacts:', 
+    devLog('[useSmartSearch] effectiveContacts:', 
       'hasQuery:', hasActiveQuery,
       'searchResults:', searchResults.length,
       'contacts:', contacts.length,

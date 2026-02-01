@@ -10,6 +10,7 @@ import {
 } from "./responsibilityIndex";
 import { RESPONSIBILITIES } from "@/data/responsibilities";
 import { SearchQuery, SearchIntent, RelationshipType, DateRange } from "@/types/searchQuery";
+import { devLog } from "@/lib/devLog";
 
 // Build responsibility index at module load time
 const RESPONSIBILITY_INDEX = buildResponsibilityIndex();
@@ -2034,44 +2035,44 @@ function extractKeywords(words: string[]): string[] {
  * Uses the ORIGINAL query (not normalized) to preserve structure
  */
 function extractCompanyFromQuestionPatterns(query: string): string | null {
-  console.log('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - Input query:', query);
+  devLog('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - Input query:', query);
   
   // Try multiple specific patterns in order of specificity
   
   // Pattern 1: "who do I know at [company]" - most specific
   // Improved regex to capture company names including suffixes like "inc", "llc", etc.
   let match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 1 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 1 match:', match);
   if (match && match[1]) {
-    console.log('[SEARCH DEBUG] Pattern 1 captured:', match[1]);
+    devLog('[SEARCH DEBUG] Pattern 1 captured:', match[1]);
     const company = cleanCompanyName(match[1]);
-    console.log('[SEARCH DEBUG] Pattern 1 cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 1 cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 1b: More specific pattern that handles "at tech solutions inc" better
   match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*(?:\s+(?:inc|llc|ltd|corp|company|co)\.?)?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 1b match:', match);
+  devLog('[SEARCH DEBUG] Pattern 1b match:', match);
   if (match && match[1]) {
-    console.log('[SEARCH DEBUG] Pattern 1b captured:', match[1]);
+    devLog('[SEARCH DEBUG] Pattern 1b captured:', match[1]);
     const company = cleanCompanyName(match[1]);
-    console.log('[SEARCH DEBUG] Pattern 1b cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 1b cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 2: "who do I know at [company]?" - alternative word order
   match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]+)/i);
-  console.log('[SEARCH DEBUG] Pattern 2 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 2 match:', match);
   if (match && match[1]) {
-    console.log('[SEARCH DEBUG] Pattern 2 captured:', match[1]);
+    devLog('[SEARCH DEBUG] Pattern 2 captured:', match[1]);
     const company = cleanCompanyName(match[1]);
-    console.log('[SEARCH DEBUG] Pattern 2 cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 2 cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 3: "who works at [company]"
   match = query.match(/who\s+(?:works?|work)\s+(?:at|for|@)\s+([^?]+?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 3 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 3 match:', match);
   if (match && match[1]) {
     const company = cleanCompanyName(match[1]);
     if (company) return company;
@@ -2079,7 +2080,7 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   
   // Pattern 4: "who is at [company]"
   match = query.match(/who\s+(?:is|are)\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 4 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 4 match:', match);
   if (match && match[1]) {
     const company = cleanCompanyName(match[1]);
     if (company) return company;
@@ -2090,34 +2091,34 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   // Look for "at" as a word boundary (not part of another word)
   // Improved regex to capture multi-word company names including suffixes
   const atMatch = query.match(/\b(at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 5 (generic at) match:', atMatch);
+  devLog('[SEARCH DEBUG] Pattern 5 (generic at) match:', atMatch);
   if (atMatch && atMatch[2]) {
-    console.log('[SEARCH DEBUG] Pattern 5 captured:', atMatch[2]);
+    devLog('[SEARCH DEBUG] Pattern 5 captured:', atMatch[2]);
     const company = cleanCompanyName(atMatch[2]);
-    console.log('[SEARCH DEBUG] Pattern 5 cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 5 cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 5b: More specific "at [company]" with better word boundary handling
   // This handles "at tech solutions inc" more reliably
   const atMatch2 = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*(?:\s+(?:inc|llc|ltd|corp|company|co))?\.?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 5b (enhanced at) match:', atMatch2);
+  devLog('[SEARCH DEBUG] Pattern 5b (enhanced at) match:', atMatch2);
   if (atMatch2 && atMatch2[1]) {
-    console.log('[SEARCH DEBUG] Pattern 5b captured:', atMatch2[1]);
+    devLog('[SEARCH DEBUG] Pattern 5b captured:', atMatch2[1]);
     const company = cleanCompanyName(atMatch2[1]);
-    console.log('[SEARCH DEBUG] Pattern 5b cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 5b cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 6: "at [company]" at start or with word boundary
   match = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 6 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 6 match:', match);
   if (match && match[1]) {
     const company = cleanCompanyName(match[1]);
     if (company) return company;
   }
   
-  console.log('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - No company found');
+  devLog('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - No company found');
   return null;
 }
 
@@ -2125,17 +2126,17 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
  * Clean and validate company name extracted from query
  */
 function cleanCompanyName(rawCompany: string): string | null {
-  console.log('[SEARCH DEBUG] cleanCompanyName - Input:', rawCompany);
+  devLog('[SEARCH DEBUG] cleanCompanyName - Input:', rawCompany);
   if (!rawCompany) return null;
   
   // Remove trailing punctuation
   let cleaned = rawCompany.trim().replace(/[?!.,;:]+$/, "").trim();
-  console.log('[SEARCH DEBUG] cleanCompanyName - After punctuation removal:', cleaned);
+  devLog('[SEARCH DEBUG] cleanCompanyName - After punctuation removal:', cleaned);
   if (!cleaned) return null;
   
   // Split into words and filter
   const words = cleaned.split(/\s+/);
-  console.log('[SEARCH DEBUG] cleanCompanyName - Split words:', words);
+  devLog('[SEARCH DEBUG] cleanCompanyName - Split words:', words);
   const filtered: string[] = [];
   
   for (const word of words) {
@@ -2143,7 +2144,7 @@ function cleanCompanyName(rawCompany: string): string | null {
     
     // Always keep company suffixes
     if (COMPANY_SUFFIXES.has(wLower)) {
-      console.log('[SEARCH DEBUG] cleanCompanyName - Keeping suffix:', word);
+      devLog('[SEARCH DEBUG] cleanCompanyName - Keeping suffix:', word);
       filtered.push(word);
       continue;
     }
@@ -2159,28 +2160,28 @@ function cleanCompanyName(rawCompany: string): string | null {
     ]);
     
     if (skipWords.has(wLower)) {
-      console.log('[SEARCH DEBUG] cleanCompanyName - Skipping query word:', word);
+      devLog('[SEARCH DEBUG] cleanCompanyName - Skipping query word:', word);
       continue; // Skip this word
     }
     
     // Filter out action keywords
     if (ACTION_KEYWORDS[wLower]) {
-      console.log('[SEARCH DEBUG] cleanCompanyName - Skipping action word:', word);
+      devLog('[SEARCH DEBUG] cleanCompanyName - Skipping action word:', word);
       continue; // Skip action words
     }
     
     // Keep everything else (likely part of company name)
     // Note: "solutions", "technologies", etc. are in COMPANY_SUFFIXES but they're also valid company name words
     // So we keep them here - they'll be handled properly in matching
-    console.log('[SEARCH DEBUG] cleanCompanyName - Keeping word:', word);
+    devLog('[SEARCH DEBUG] cleanCompanyName - Keeping word:', word);
     filtered.push(word);
   }
   
-  console.log('[SEARCH DEBUG] cleanCompanyName - Filtered words:', filtered);
+  devLog('[SEARCH DEBUG] cleanCompanyName - Filtered words:', filtered);
   if (filtered.length === 0) return null;
   
   const result = filtered.join(" ").trim();
-  console.log('[SEARCH DEBUG] cleanCompanyName - Final result:', result);
+  devLog('[SEARCH DEBUG] cleanCompanyName - Final result:', result);
   
   // Final validation: make sure we have at least one meaningful word (not just suffixes)
   const meaningfulWords = filtered.filter(w => {
@@ -2191,7 +2192,7 @@ function cleanCompanyName(rawCompany: string): string | null {
   });
   
   if (meaningfulWords.length === 0) {
-    console.log('[SEARCH DEBUG] cleanCompanyName - No meaningful words, returning null');
+    devLog('[SEARCH DEBUG] cleanCompanyName - No meaningful words, returning null');
     return null;
   }
   
@@ -2223,17 +2224,17 @@ export function parseSearchQuery(query: string): ParsedQuery {
   
   // PRIORITY 1: Extract company from natural language question patterns FIRST
   // This handles "who do I know at X" patterns explicitly before any other logic
-  console.log('[SEARCH DEBUG] parseSearchQuery - Starting parse for query:', query);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Normalized:', normalized);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Words:', words);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Remaining words:', remainingWords);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Starting parse for query:', query);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Normalized:', normalized);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Words:', words);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Remaining words:', remainingWords);
   
   const questionCompany = extractCompanyFromQuestionPatterns(query);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Question company extracted:', questionCompany);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Question company extracted:', questionCompany);
   
   // Extract entities from remaining words (with semantic verb hints)
   const entities = extractEntities(remainingWords);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Entities extracted:', {
+  devLog('[SEARCH DEBUG] parseSearchQuery - Entities extracted:', {
     companies: entities.companies,
     roles: entities.roles,
     names: entities.names,
@@ -2242,10 +2243,10 @@ export function parseSearchQuery(query: string): ParsedQuery {
   
   // If we extracted a company from question patterns, add it (highest priority)
   if (questionCompany && !entities.companies.includes(questionCompany)) {
-    console.log('[SEARCH DEBUG] parseSearchQuery - Adding question company to entities');
+    devLog('[SEARCH DEBUG] parseSearchQuery - Adding question company to entities');
     entities.companies.unshift(questionCompany); // Add to front to prioritize
   }
-  console.log('[SEARCH DEBUG] parseSearchQuery - Final companies:', entities.companies);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Final companies:', entities.companies);
   
   // Special case: If still no company was found and query contains "at [words]", try direct extraction
   // This handles queries like "who do I know at quantum solutions?" where the question structure
