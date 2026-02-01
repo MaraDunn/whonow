@@ -111,7 +111,7 @@ export const WaitlistPricingSection = () => {
 
         <p className="text-center text-sm text-muted-foreground mt-8">
           All prices in USD. Cancel anytime. Need custom pricing?{" "}
-          <a href="mailto:sales@whonow.com" className="text-primary hover:underline">
+          <a href="mailto:sales@whonow.co" className="text-primary hover:underline">
             Contact us
           </a>
         </p>

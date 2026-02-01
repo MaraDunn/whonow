@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { z } from "zod";
-import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, X } from "lucide-react";
+import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, X, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +32,16 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [signUpEmailSent, setSignUpEmailSent] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setInterval(() => setResendCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resendCooldown]);
 
   if (!isOpen) return null;
 
@@ -95,9 +104,21 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
         toast.error(error.message);
       }
     } else {
-      toast.success("Account created! Setting up your workspace...");
-      onClose();
-      navigate("/app");
+      toast.success("Check your email to verify your account.");
+      setSignUpEmailSent(email);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!signUpEmailSent || resendCooldown > 0 || isResending) return;
+    setIsResending(true);
+    const { error } = await supabase.auth.resend({ email: signUpEmailSent, type: "signup" });
+    setIsResending(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Verification email sent. Check your inbox.");
+      setResendCooldown(60);
     }
   };
 
@@ -128,6 +149,8 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
     setEmail("");
     setPassword("");
     setFullName("");
+    setSignUpEmailSent(null);
+    setResendCooldown(0);
     setErrors({});
     setShowPassword(false);
   };
@@ -164,7 +187,44 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
         </CardHeader>
 
         <CardContent>
-          {showForgotPassword ? (
+          {signUpEmailSent ? (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-4 text-center">
+                <Mail className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+                <p className="font-medium">Check your email</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  We sent a verification link to <strong>{signUpEmailSent}</strong>. Click the link to verify your account, then sign in.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setSignUpEmailSent(null);
+                    setResendCooldown(0);
+                  }}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Use a different email
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={handleResendVerification}
+                  disabled={resendCooldown > 0 || isResending}
+                >
+                  {isResending
+                    ? "Sending..."
+                    : resendCooldown > 0
+                      ? `Resend available in ${resendCooldown}s`
+                      : "Resend verification email"}
+                </Button>
+              </div>
+            </div>
+          ) : showForgotPassword ? (
             <form onSubmit={handleForgotPassword} className="space-y-4">
               <div className="text-center mb-4">
                 <h3 className="font-semibold text-lg">Reset Password</h3>

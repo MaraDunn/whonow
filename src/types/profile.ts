@@ -9,6 +9,7 @@ export interface Profile {
   description?: string;
   isVisibleInDirectory: boolean;
   hasCompletedCompanySetup: boolean;
+  hasCompletedOnboarding: boolean;
   createdAt: string;
   updatedAt: string;
 }

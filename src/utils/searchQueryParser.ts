@@ -10,6 +10,7 @@ import {
 } from "./responsibilityIndex";
 import { RESPONSIBILITIES } from "@/data/responsibilities";
 import { SearchQuery, SearchIntent, RelationshipType, DateRange } from "@/types/searchQuery";
+import { devLog } from "@/lib/devLog";
 
 // Build responsibility index at module load time
 const RESPONSIBILITY_INDEX = buildResponsibilityIndex();
@@ -1025,14 +1026,36 @@ function extractNeedsFollowUp(query: string): boolean {
 }
 
 /**
+ * Clean extracted phrase before responsibility matching.
+ * Strips leading articles/wrappers and caps length to avoid over-matching.
+ * Returns null if result is too short or too long (skip this match).
+ */
+function cleanResponsibilityPhrase(raw: string): string | null {
+  let s = raw
+    .trim()
+    .replace(/[?!.,;:'"]+$/g, "")
+    .trim();
+  s = s.replace(/^\s*(?:a|an|the)\s+/i, "").trim();
+  s = s.replace(
+    /^\s*(?:someone in|someone who can (?:do|make|create|design|build)\s+|someone who does\s+|somebody in|somebody who can (?:do|make|create|design|build)\s+|anyone who (?:can do|does)\s+|anybody who (?:can do|does)\s+)/i,
+    ""
+  ).trim();
+  const words = s.split(/\s+/).filter((w) => w.length > 0);
+  const capped = words.slice(0, 6).join(" ");
+  if (capped.length < 2 || capped.length > 50) return null;
+  return capped;
+}
+
+/**
  * Extract responsibility intent from query
- * Detects patterns like "who handles X", "who is responsible for X", etc.
+ * Detects patterns like "who handles X", "who is responsible for X", etc.,
+ * plus request phrasings: "I need a logo", "find me a designer", "who do I contact for legal?", etc.
  * Returns the matched responsibility or null if no match found
  */
 function extractResponsibility(query: string): { match: ResponsibilityMatch | null; phrase: string | null } {
   const normalized = normalizeQuery(query);
-  
-  // Responsibility intent patterns
+
+  // Block 1: Existing "who..." patterns (unchanged behavior)
   const responsibilityPatterns: Array<{ pattern: RegExp; phraseIndex: number }> = [
     { pattern: /who\s+(handles|manages|owns)\s+(.+)/i, phraseIndex: 2 },
     { pattern: /who\s+is\s+responsible\s+for\s+(.+)/i, phraseIndex: 1 },
@@ -1040,16 +1063,15 @@ function extractResponsibility(query: string): { match: ResponsibilityMatch | nu
     { pattern: /who\s+do\s+i\s+talk\s+to\s+about\s+(.+)/i, phraseIndex: 1 },
     { pattern: /who\s+should\s+i\s+contact\s+for\s+(.+)/i, phraseIndex: 1 },
     { pattern: /who\s+can\s+i\s+talk\s+to\s+about\s+(.+)/i, phraseIndex: 1 },
+    { pattern: /who\s+(?:can|could)\s+(?:make|create|design|help\s+(?:me\s+)?with|build|do)\s+(?:me\s+)?(?:a\s+)?(.+)/i, phraseIndex: 1 },
+    { pattern: /who\s+(?:can|could)\s+(.+)/i, phraseIndex: 1 },
   ];
-  
+
   for (const { pattern, phraseIndex } of responsibilityPatterns) {
     const match = normalized.match(pattern);
     if (match && match[phraseIndex]) {
       const responsibilityPhrase = match[phraseIndex].trim();
-      
-      // Match against responsibility aliases
       const matchResult = matchResponsibility(responsibilityPhrase, RESPONSIBILITY_INDEX);
-      
       if (matchResult) {
         const responsibility = RESPONSIBILITIES[matchResult.responsibilityId];
         if (responsibility) {
@@ -1063,15 +1085,64 @@ function extractResponsibility(query: string): { match: ResponsibilityMatch | nu
           };
         }
       }
-      
-      // If pattern matched but no responsibility found, return phrase for fallback
-      return {
-        match: null,
-        phrase: responsibilityPhrase,
-      };
+      return { match: null, phrase: responsibilityPhrase };
     }
   }
-  
+
+  // Block 2: Request-phrase patterns (run only when Block 1 found nothing)
+  // More specific patterns first; only return when matchResponsibility returns a hit
+  const requestPatterns: Array<{ pattern: RegExp; phraseIndex: number }> = [
+    { pattern: /(?:i\s+)?need\s+(?:a\s+)?contact\s+for\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?need\s+(?:a\s+)?person\s+for\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who\s+(?:do i|should i)\s+(?:contact|reach out to|talk to)\s+(?:for|about)\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who(?:'s|s)\s+responsible\s+for\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who\s+takes\s+care\s+of\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who\s+knows\s+about\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /who\s+deals\s+with\s+(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?want\s+to\s+(?:make|create|build|do|get)\s+(?:a\s+)?(?:new\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i'?m|i\s+am)\s+looking\s+for\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:find|get|show)\s+(?:me\s+)(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:can you|could you)\s+(?:find|get|show)\s+(?:me\s+)?(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /help\s+me\s+(?:find|get)\s+(?:(?:a\s+)?(?:someone\s+in\s+)?)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:get in touch with|reach out to)\s+(?:someone in\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:connect me with|connect me to|put me in touch with)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:intro to|introduce me to)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:point me to|direct me to)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i'?m\s+)?(?:trying\s+to\s+)?(?:find|get)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i'?m\s+)?searching\s+for\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:in\s+)?search\s+for\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:someone|somebody|anyone|anybody)\s+who\s+(?:can\s+(?:do|make|create|design|build)\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?need\s+(?:someone|somebody)\s+(?:to\s+(?:do|make|create|design|build)\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:do you\s+)?know\s+(?:anybody|anyone)\s+(?:who\s+(?:does|can do)\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /track\s+down\s+(?:our\s+|a\s+)?(.+?)(?:\s*(?:contact|person|team))?(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?need\s+to\s+(?:find|get)\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+    { pattern: /(?:i\s+)?need\s+(?:a\s+)?(.+?)(?:\s*[.?]|\s*$)/i, phraseIndex: 1 },
+  ];
+
+  for (const { pattern, phraseIndex } of requestPatterns) {
+    const match = normalized.match(pattern);
+    if (!match || !match[phraseIndex]) continue;
+    const cleaned = cleanResponsibilityPhrase(match[phraseIndex]);
+    if (!cleaned) continue;
+    const matchResult = matchResponsibility(cleaned, RESPONSIBILITY_INDEX);
+    if (matchResult) {
+      const responsibility = RESPONSIBILITIES[matchResult.responsibilityId];
+      if (responsibility) {
+        return {
+          match: {
+            responsibilityId: matchResult.responsibilityId,
+            matchedAlias: matchResult.matchedAlias,
+            filters: responsibility.filters,
+          },
+          phrase: cleaned,
+        };
+      }
+    }
+    // Phrase matched pattern but no predefined responsibility (e.g. "I need a driver" → "driver").
+    // Return phrase so caller can use it as job_title for role/company/tag ILIKE matching.
+    return { match: null, phrase: cleaned };
+  }
+
   return { match: null, phrase: null };
 }
 
@@ -1964,44 +2035,44 @@ function extractKeywords(words: string[]): string[] {
  * Uses the ORIGINAL query (not normalized) to preserve structure
  */
 function extractCompanyFromQuestionPatterns(query: string): string | null {
-  console.log('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - Input query:', query);
+  devLog('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - Input query:', query);
   
   // Try multiple specific patterns in order of specificity
   
   // Pattern 1: "who do I know at [company]" - most specific
   // Improved regex to capture company names including suffixes like "inc", "llc", etc.
   let match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 1 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 1 match:', match);
   if (match && match[1]) {
-    console.log('[SEARCH DEBUG] Pattern 1 captured:', match[1]);
+    devLog('[SEARCH DEBUG] Pattern 1 captured:', match[1]);
     const company = cleanCompanyName(match[1]);
-    console.log('[SEARCH DEBUG] Pattern 1 cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 1 cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 1b: More specific pattern that handles "at tech solutions inc" better
   match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*(?:\s+(?:inc|llc|ltd|corp|company|co)\.?)?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 1b match:', match);
+  devLog('[SEARCH DEBUG] Pattern 1b match:', match);
   if (match && match[1]) {
-    console.log('[SEARCH DEBUG] Pattern 1b captured:', match[1]);
+    devLog('[SEARCH DEBUG] Pattern 1b captured:', match[1]);
     const company = cleanCompanyName(match[1]);
-    console.log('[SEARCH DEBUG] Pattern 1b cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 1b cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 2: "who do I know at [company]?" - alternative word order
   match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]+)/i);
-  console.log('[SEARCH DEBUG] Pattern 2 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 2 match:', match);
   if (match && match[1]) {
-    console.log('[SEARCH DEBUG] Pattern 2 captured:', match[1]);
+    devLog('[SEARCH DEBUG] Pattern 2 captured:', match[1]);
     const company = cleanCompanyName(match[1]);
-    console.log('[SEARCH DEBUG] Pattern 2 cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 2 cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 3: "who works at [company]"
   match = query.match(/who\s+(?:works?|work)\s+(?:at|for|@)\s+([^?]+?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 3 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 3 match:', match);
   if (match && match[1]) {
     const company = cleanCompanyName(match[1]);
     if (company) return company;
@@ -2009,7 +2080,7 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   
   // Pattern 4: "who is at [company]"
   match = query.match(/who\s+(?:is|are)\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 4 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 4 match:', match);
   if (match && match[1]) {
     const company = cleanCompanyName(match[1]);
     if (company) return company;
@@ -2020,34 +2091,34 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   // Look for "at" as a word boundary (not part of another word)
   // Improved regex to capture multi-word company names including suffixes
   const atMatch = query.match(/\b(at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 5 (generic at) match:', atMatch);
+  devLog('[SEARCH DEBUG] Pattern 5 (generic at) match:', atMatch);
   if (atMatch && atMatch[2]) {
-    console.log('[SEARCH DEBUG] Pattern 5 captured:', atMatch[2]);
+    devLog('[SEARCH DEBUG] Pattern 5 captured:', atMatch[2]);
     const company = cleanCompanyName(atMatch[2]);
-    console.log('[SEARCH DEBUG] Pattern 5 cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 5 cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 5b: More specific "at [company]" with better word boundary handling
   // This handles "at tech solutions inc" more reliably
   const atMatch2 = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*(?:\s+(?:inc|llc|ltd|corp|company|co))?\.?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 5b (enhanced at) match:', atMatch2);
+  devLog('[SEARCH DEBUG] Pattern 5b (enhanced at) match:', atMatch2);
   if (atMatch2 && atMatch2[1]) {
-    console.log('[SEARCH DEBUG] Pattern 5b captured:', atMatch2[1]);
+    devLog('[SEARCH DEBUG] Pattern 5b captured:', atMatch2[1]);
     const company = cleanCompanyName(atMatch2[1]);
-    console.log('[SEARCH DEBUG] Pattern 5b cleaned company:', company);
+    devLog('[SEARCH DEBUG] Pattern 5b cleaned company:', company);
     if (company) return company;
   }
   
   // Pattern 6: "at [company]" at start or with word boundary
   match = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*?)(?:\s*\?|$)/i);
-  console.log('[SEARCH DEBUG] Pattern 6 match:', match);
+  devLog('[SEARCH DEBUG] Pattern 6 match:', match);
   if (match && match[1]) {
     const company = cleanCompanyName(match[1]);
     if (company) return company;
   }
   
-  console.log('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - No company found');
+  devLog('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - No company found');
   return null;
 }
 
@@ -2055,17 +2126,17 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
  * Clean and validate company name extracted from query
  */
 function cleanCompanyName(rawCompany: string): string | null {
-  console.log('[SEARCH DEBUG] cleanCompanyName - Input:', rawCompany);
+  devLog('[SEARCH DEBUG] cleanCompanyName - Input:', rawCompany);
   if (!rawCompany) return null;
   
   // Remove trailing punctuation
   let cleaned = rawCompany.trim().replace(/[?!.,;:]+$/, "").trim();
-  console.log('[SEARCH DEBUG] cleanCompanyName - After punctuation removal:', cleaned);
+  devLog('[SEARCH DEBUG] cleanCompanyName - After punctuation removal:', cleaned);
   if (!cleaned) return null;
   
   // Split into words and filter
   const words = cleaned.split(/\s+/);
-  console.log('[SEARCH DEBUG] cleanCompanyName - Split words:', words);
+  devLog('[SEARCH DEBUG] cleanCompanyName - Split words:', words);
   const filtered: string[] = [];
   
   for (const word of words) {
@@ -2073,7 +2144,7 @@ function cleanCompanyName(rawCompany: string): string | null {
     
     // Always keep company suffixes
     if (COMPANY_SUFFIXES.has(wLower)) {
-      console.log('[SEARCH DEBUG] cleanCompanyName - Keeping suffix:', word);
+      devLog('[SEARCH DEBUG] cleanCompanyName - Keeping suffix:', word);
       filtered.push(word);
       continue;
     }
@@ -2089,28 +2160,28 @@ function cleanCompanyName(rawCompany: string): string | null {
     ]);
     
     if (skipWords.has(wLower)) {
-      console.log('[SEARCH DEBUG] cleanCompanyName - Skipping query word:', word);
+      devLog('[SEARCH DEBUG] cleanCompanyName - Skipping query word:', word);
       continue; // Skip this word
     }
     
     // Filter out action keywords
     if (ACTION_KEYWORDS[wLower]) {
-      console.log('[SEARCH DEBUG] cleanCompanyName - Skipping action word:', word);
+      devLog('[SEARCH DEBUG] cleanCompanyName - Skipping action word:', word);
       continue; // Skip action words
     }
     
     // Keep everything else (likely part of company name)
     // Note: "solutions", "technologies", etc. are in COMPANY_SUFFIXES but they're also valid company name words
     // So we keep them here - they'll be handled properly in matching
-    console.log('[SEARCH DEBUG] cleanCompanyName - Keeping word:', word);
+    devLog('[SEARCH DEBUG] cleanCompanyName - Keeping word:', word);
     filtered.push(word);
   }
   
-  console.log('[SEARCH DEBUG] cleanCompanyName - Filtered words:', filtered);
+  devLog('[SEARCH DEBUG] cleanCompanyName - Filtered words:', filtered);
   if (filtered.length === 0) return null;
   
   const result = filtered.join(" ").trim();
-  console.log('[SEARCH DEBUG] cleanCompanyName - Final result:', result);
+  devLog('[SEARCH DEBUG] cleanCompanyName - Final result:', result);
   
   // Final validation: make sure we have at least one meaningful word (not just suffixes)
   const meaningfulWords = filtered.filter(w => {
@@ -2121,7 +2192,7 @@ function cleanCompanyName(rawCompany: string): string | null {
   });
   
   if (meaningfulWords.length === 0) {
-    console.log('[SEARCH DEBUG] cleanCompanyName - No meaningful words, returning null');
+    devLog('[SEARCH DEBUG] cleanCompanyName - No meaningful words, returning null');
     return null;
   }
   
@@ -2153,17 +2224,17 @@ export function parseSearchQuery(query: string): ParsedQuery {
   
   // PRIORITY 1: Extract company from natural language question patterns FIRST
   // This handles "who do I know at X" patterns explicitly before any other logic
-  console.log('[SEARCH DEBUG] parseSearchQuery - Starting parse for query:', query);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Normalized:', normalized);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Words:', words);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Remaining words:', remainingWords);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Starting parse for query:', query);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Normalized:', normalized);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Words:', words);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Remaining words:', remainingWords);
   
   const questionCompany = extractCompanyFromQuestionPatterns(query);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Question company extracted:', questionCompany);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Question company extracted:', questionCompany);
   
   // Extract entities from remaining words (with semantic verb hints)
   const entities = extractEntities(remainingWords);
-  console.log('[SEARCH DEBUG] parseSearchQuery - Entities extracted:', {
+  devLog('[SEARCH DEBUG] parseSearchQuery - Entities extracted:', {
     companies: entities.companies,
     roles: entities.roles,
     names: entities.names,
@@ -2172,10 +2243,10 @@ export function parseSearchQuery(query: string): ParsedQuery {
   
   // If we extracted a company from question patterns, add it (highest priority)
   if (questionCompany && !entities.companies.includes(questionCompany)) {
-    console.log('[SEARCH DEBUG] parseSearchQuery - Adding question company to entities');
+    devLog('[SEARCH DEBUG] parseSearchQuery - Adding question company to entities');
     entities.companies.unshift(questionCompany); // Add to front to prioritize
   }
-  console.log('[SEARCH DEBUG] parseSearchQuery - Final companies:', entities.companies);
+  devLog('[SEARCH DEBUG] parseSearchQuery - Final companies:', entities.companies);
   
   // Special case: If still no company was found and query contains "at [words]", try direct extraction
   // This handles queries like "who do I know at quantum solutions?" where the question structure
@@ -2396,7 +2467,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
   const uniqueKeywords = Array.from(new Set(keywords));
   
   // Extract time range if present (for creation date)
-  const timeRange = extractTimeRange(query);
+  let timeRange = extractTimeRange(query);
   
   // Extract comparative filters
   const comparativeFilters = extractComparativeFilters(query);
@@ -2411,18 +2482,24 @@ export function parseSearchQuery(query: string): ParsedQuery {
   const hasAddKeyword = normalized.includes("add") || normalized.includes("added");
   
   // If query has "add"/"added" and a time range, prioritize creation date over interaction date
-  // This handles queries like "who did I add today?" vs "who did I meet today?"
+  // This handles queries like "who did I add today?" vs "who did I call today?"
   // When "add" is present, we want creation date, not interaction date
   if (hasAddKeyword && timeRange) {
     // Clear interaction filters - user is asking about when contacts were added, not when they interacted
     interactionType = null;
     interactionTimeRange = undefined;
-  } else if (interactionType && timeRange && !hasAddKeyword) {
-    // If query has interaction keywords and time range but no "add"/"added",
-    // it's ambiguous. Default to creation date since that's what we're tracking.
-    // This handles "who did I meet today?" - treat as "who did I add today?"
+  } else if (interactionTimeRange && !hasAddKeyword) {
+    // If we successfully extracted an interaction time range (e.g., "call last week"),
+    // this is clearly an interaction-based query, not a creation date query
+    // Clear the creation date time range and use the interaction time range instead
+    // This handles queries like "who did I call last week?" or "who did I email yesterday?"
+    timeRange = undefined;
+    // Keep interactionType and interactionTimeRange - they're correctly set
+  } else if (interactionType && timeRange && !hasAddKeyword && !interactionTimeRange) {
+    // Edge case: interaction keyword present but no clear interaction time pattern extracted
+    // This might be ambiguous, but if there's a time range, default to creation date
+    // This handles queries like "who did I meet?" with a time range but no clear interaction time pattern
     interactionType = null;
-    interactionTimeRange = undefined;
   }
   
   // Extract needs follow-up
@@ -2647,73 +2724,100 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
  * LLM handles complex entity extraction (company, role, location, etc.)
  */
 export function parseSearchQueryToSchema(query: string): SearchQuery {
-  // Extract time range (this works well with regex)
+  const normalized = normalizeQuery(query);
+  const hasAddKeyword = normalized.includes("add") || normalized.includes("added");
+
+  // Extract time ranges: creation (add) vs interaction (call/email/meet)
   const timeRange = extractTimeRange(query);
-  
+  const interactionTimeRange = extractInteractionTimeRange(query);
+
+  // Resolve add vs interaction: same logic as parseSearchQuery
+  let useCreationRange: { start: Date; end: Date } | undefined = undefined;
+  let useInteractionRange: { start: Date; end: Date } | undefined = undefined;
+  if (hasAddKeyword && timeRange) {
+    useCreationRange = timeRange;
+  } else if (interactionTimeRange && !hasAddKeyword) {
+    useInteractionRange = interactionTimeRange;
+  } else if (timeRange) {
+    useCreationRange = timeRange;
+  }
+
   // Extract responsibility (this works well)
   const responsibilityResult = extractResponsibility(query);
-  
+
   // Create minimal SearchQuery - LLM will enhance it with entities
   const filters: SearchQuery["filters"] = {};
-  
-  // Add time range if found
-  if (timeRange) {
+
+  if (useCreationRange) {
     filters.date_range = {
-      from: timeRange.start.toISOString(),
-      to: timeRange.end.toISOString(),
+      from: useCreationRange.start.toISOString(),
+      to: useCreationRange.end.toISOString(),
     };
   }
-  
+  if (useInteractionRange) {
+    filters.interaction_date_range = {
+      from: useInteractionRange.start.toISOString(),
+      to: useInteractionRange.end.toISOString(),
+    };
+  }
+
   // Add responsibility filters if found
   if (responsibilityResult.match) {
     const responsibility = responsibilityResult.match;
     if (responsibility.filters.departments && responsibility.filters.departments.length > 0) {
-      // Map first department to job_title (simplified)
       filters.job_title = responsibility.filters.departments[0];
-    }
-    if (responsibility.filters.roles && responsibility.filters.roles.length > 0) {
+    } else if (responsibility.filters.roles && responsibility.filters.roles.length > 0) {
       filters.job_title = responsibility.filters.roles[0];
     }
     if (responsibility.filters.tags && responsibility.filters.tags.length > 0) {
       filters.tags = responsibility.filters.tags;
     }
+  } else if (responsibilityResult.phrase) {
+    // Pattern matched (e.g. "I need a driver") but no predefined responsibility.
+    // Use the extracted phrase as job_title so server can match role/company/tags (e.g. role ILIKE '%driver%').
+    filters.job_title = responsibilityResult.phrase;
   }
-  
+
   // Simple name extraction: if query is 1-3 words and looks like a name, extract it
-  // This handles simple queries like "james", "john smith", etc.
-  const normalized = normalizeQuery(query);
   const words = normalized.split(/\s+/).filter(w => w.length > 0);
-  
-  // If query is 1-3 words, no time/responsibility patterns, and looks like a name
-  // (not a question word, not a common verb), treat it as a name
-  if (words.length >= 1 && words.length <= 3 && !timeRange && !responsibilityResult.match && !filters.name) {
-    // Check if it looks like a name (not a question word, not a common verb)
+  const hasTimeFilter = !!filters.date_range || !!filters.interaction_date_range;
+  if (words.length >= 1 && words.length <= 3 && !hasTimeFilter && !responsibilityResult.match && !filters.name) {
     const questionWords = ["who", "what", "where", "when", "why", "how", "do", "does", "did", "i", "you", "we", "they"];
     const commonVerbs = ["find", "show", "get", "search", "look", "list", "display", "know", "knows"];
     const firstWord = words[0].toLowerCase();
-    
-    // Also check original query to see if it starts with capital (more likely a name)
     const originalWords = query.trim().split(/\s+/);
     const originalFirstWord = originalWords[0] || "";
     const startsWithCapital = originalFirstWord.length > 0 && originalFirstWord[0] === originalFirstWord[0].toUpperCase();
-    
     if (!questionWords.includes(firstWord) && !commonVerbs.includes(firstWord)) {
-      // If it starts with capital OR is a single word (likely a name), extract it
       if (startsWithCapital || words.length === 1) {
-        // Use original query capitalization for the name
         filters.name = originalWords.slice(0, words.length).join(" ");
       }
     }
   }
-  
-  // Create minimal query - LLM will enhance with entities
+
+  // For interaction-date-only queries, omit semantic_hint so the RPC doesn't require
+  // full-text match on "who did i call last week" (which would return no results).
+  const interactionOnly = !!filters.interaction_date_range && !filters.date_range && !filters.job_title && !filters.name && !filters.company && !filters.location;
+  const semantic_hint = interactionOnly ? undefined : query;
+
+  let explanation: string;
+  if (filters.name) {
+    explanation = `Searching for contacts named "${filters.name}"`;
+  } else if (filters.interaction_date_range) {
+    explanation = "Searching contacts you contacted in that time range";
+  } else if (filters.date_range) {
+    explanation = "Searching contacts with time filter";
+  } else if (responsibilityResult.match) {
+    explanation = "Searching contacts for responsibility";
+  } else {
+    explanation = "Searching contacts";
+  }
+
   return {
     intent: "search_contacts",
     filters,
-    semantic_hint: query, // Use original query for semantic matching
-    confidence: filters.name ? 0.7 : 0.5, // Higher confidence if we extracted a name
-    explanation: filters.name 
-      ? `Searching for contacts named "${filters.name}"`
-      : `Searching contacts${timeRange ? " with time filter" : ""}${responsibilityResult.match ? " for responsibility" : ""}`,
+    semantic_hint,
+    confidence: filters.name ? 0.7 : 0.5,
+    explanation,
   };
 }

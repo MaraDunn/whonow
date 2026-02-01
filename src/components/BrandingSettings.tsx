@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { FEATURE_ACCESS } from "@/types/subscription";
 import { FeatureGate } from "@/components/FeatureGate";
+import { devLog } from "@/lib/devLog";
 
 export function BrandingSettings() {
   const { user } = useAuth();
@@ -141,7 +142,7 @@ export function BrandingSettings() {
     const normalizedPrimary = primaryColor?.trim() || null;
     const normalizedSecondary = secondaryColor?.trim() || null;
 
-    console.log("Saving colors:", { 
+    devLog("Saving colors:", { 
       companyId: company.id, 
       primaryColor: normalizedPrimary, 
       secondaryColor: normalizedSecondary,
@@ -167,7 +168,7 @@ export function BrandingSettings() {
       });
       toast.error(`Failed to save colors: ${error.message || "Unknown error"}`);
     } else {
-      console.log("Colors saved successfully:", data);
+      devLog("Colors saved successfully:", data);
       
       // Update local state immediately with saved values for instant UI feedback
       if (data && data[0]) {

@@ -19,6 +19,8 @@ export interface SearchQueryFilters {
   introduced_by?: string;
   relationship_type?: RelationshipType;
   date_range?: DateRange;
+  /** When set, filter by last_contacted_at (e.g. "who did I call last week") */
+  interaction_date_range?: DateRange;
   location?: string;
   tags?: string[];
 }

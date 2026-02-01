@@ -45,13 +45,15 @@ export const isDevelopmentMode = (): boolean => {
  */
 export const IS_WAITLIST_MODE_EFFECTIVE = IS_WAITLIST_MODE && !isDevelopmentMode();
 
+import { devLog } from "@/lib/devLog";
+
 // Debug: Log launch mode (remove after verification)
-if (typeof window !== "undefined") {
-  console.log("[LaunchMode] VITE_APP_LAUNCH_MODE:", import.meta.env.VITE_APP_LAUNCH_MODE);
-  console.log("[LaunchMode] LAUNCH_MODE:", LAUNCH_MODE);
-  console.log("[LaunchMode] IS_WAITLIST_MODE:", IS_WAITLIST_MODE);
-  console.log("[LaunchMode] isDevelopmentMode:", isDevelopmentMode());
-  console.log("[LaunchMode] IS_WAITLIST_MODE_EFFECTIVE:", IS_WAITLIST_MODE_EFFECTIVE);
+if (typeof window !== "undefined" && import.meta.env.DEV) {
+  devLog("[LaunchMode] VITE_APP_LAUNCH_MODE:", import.meta.env.VITE_APP_LAUNCH_MODE);
+  devLog("[LaunchMode] LAUNCH_MODE:", LAUNCH_MODE);
+  devLog("[LaunchMode] IS_WAITLIST_MODE:", IS_WAITLIST_MODE);
+  devLog("[LaunchMode] isDevelopmentMode:", isDevelopmentMode());
+  devLog("[LaunchMode] IS_WAITLIST_MODE_EFFECTIVE:", IS_WAITLIST_MODE_EFFECTIVE);
 }
 
 /**
@@ -67,19 +69,19 @@ export const isDesktopOrNativeApp = (): boolean => {
     
     // Method 1: Check for __TAURI_INTERNALS__ which is always available in Tauri v2
     if (win.__TAURI_INTERNALS__) {
-      console.log('[Tauri Detection] Found __TAURI_INTERNALS__');
+      devLog('[Tauri Detection] Found __TAURI_INTERNALS__');
       return true;
     }
     
     // Method 2: Check for __TAURI__ global (if withGlobalTauri is enabled)
     if (win.__TAURI__) {
-      console.log('[Tauri Detection] Found __TAURI__');
+      devLog('[Tauri Detection] Found __TAURI__');
       return true;
     }
     
     // Method 3: Check for Tauri-specific window properties
     if (win.__TAURI_METADATA__) {
-      console.log('[Tauri Detection] Found __TAURI_METADATA__');
+      devLog('[Tauri Detection] Found __TAURI_METADATA__');
       return true;
     }
     
@@ -87,20 +89,20 @@ export const isDesktopOrNativeApp = (): boolean => {
     // Tauri injects certain APIs that aren't in regular browsers
     if (typeof win.__TAURI__ !== 'undefined' || 
         typeof win.__TAURI_INTERNALS__ !== 'undefined') {
-      console.log('[Tauri Detection] Found Tauri API via typeof check');
+      devLog('[Tauri Detection] Found Tauri API via typeof check');
       return true;
     }
     
     // Method 5: Check user agent (Tauri apps have a specific user agent)
     const userAgent = navigator.userAgent;
     if (userAgent.includes('Tauri') || userAgent.includes('tauri')) {
-      console.log('[Tauri Detection] Found Tauri in user agent:', userAgent);
+      devLog('[Tauri Detection] Found Tauri in user agent:', userAgent);
       return true;
     }
     
     // Method 6: Check for Tauri environment variable (set during build)
     if (import.meta.env.VITE_TAURI_PLATFORM) {
-      console.log('[Tauri Detection] Found VITE_TAURI_PLATFORM:', import.meta.env.VITE_TAURI_PLATFORM);
+      devLog('[Tauri Detection] Found VITE_TAURI_PLATFORM:', import.meta.env.VITE_TAURI_PLATFORM);
       return true;
     }
   } catch (e) {
@@ -110,11 +112,11 @@ export const isDesktopOrNativeApp = (): boolean => {
   // Check for React Native or other native app indicators
   // Add more checks here as needed for future mobile apps
   if ((window as any).ReactNativeWebView) {
-    console.log('[Tauri Detection] Found ReactNativeWebView');
+    devLog('[Tauri Detection] Found ReactNativeWebView');
     return true;
   }
   
-  console.log('[Tauri Detection] Not detected as desktop/native app. Window properties:', {
+  devLog('[Tauri Detection] Not detected as desktop/native app. Window properties:', {
     hasTAURI: '__TAURI__' in window,
     hasTAURI_INTERNALS: '__TAURI_INTERNALS__' in window,
     hasTAURI_METADATA: '__TAURI_METADATA__' in window,

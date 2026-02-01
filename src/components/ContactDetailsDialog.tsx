@@ -1,6 +1,6 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, FileDown, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera, MessageSquare, Video, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +24,21 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
+import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
 import { useState, useEffect, useRef } from "react";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
@@ -80,8 +92,10 @@ interface ContactDetailsDialogProps {
   presetKeywords?: string[];
   showOwnershipBadge?: boolean;
   hasCompany?: boolean;
+  teamsComingSoon?: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onExportContact?: (contact: Contact) => void;
   onSave?: (contact: Contact) => void;
 }
 
@@ -94,11 +108,14 @@ export function ContactDetailsDialog({
   presetKeywords = [],
   showOwnershipBadge = false,
   hasCompany = false,
+  teamsComingSoon = false,
   onEdit,
   onDelete,
+  onExportContact,
   onSave,
 }: ContactDetailsDialogProps) {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareTeamsDialogOpen, setShareTeamsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [folderPopoverOpen, setFolderPopoverOpen] = useState(false);
   const slack = useSlackIntegration();
@@ -142,6 +159,7 @@ export function ContactDetailsDialog({
   const [workOpen, setWorkOpen] = useState(false);
   const [keywordsOpen, setKeywordsOpen] = useState(false);
   const [addressOpen, setAddressOpen] = useState(false);
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
 
   // Check Slack connection status when dialog opens (non-blocking)
   useEffect(() => {
@@ -159,6 +177,7 @@ export function ContactDetailsDialog({
       setWorkOpen(false);
       setKeywordsOpen(false);
       setAddressOpen(false);
+      setDescriptionOpen(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -343,9 +362,12 @@ export function ContactDetailsDialog({
 
   const handleEditClick = () => {
     setIsEditing(true);
-    // Open relevant accordions in edit mode
-    setContactOpen(true);
-    setWorkOpen(true);
+    // Edit mode: description and keywords expanded by default; others collapsed (matches view layout order)
+    setDescriptionOpen(true);
+    setKeywordsOpen(true);
+    setContactOpen(false);
+    setWorkOpen(false);
+    setAddressOpen(false);
     onEdit();
   };
 
@@ -359,6 +381,7 @@ export function ContactDetailsDialog({
     setWorkOpen(false);
     setKeywordsOpen(false);
     setAddressOpen(false);
+    setDescriptionOpen(false);
   };
 
   const handleSave = () => {
@@ -435,35 +458,73 @@ export function ContactDetailsDialog({
             {isEditing ? "Edit Contact" : "Contact Details"}
           </h2>
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {!isEditing && slack.status?.connected && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShareDialogOpen(true)}
-                className="h-8 w-8"
-                title="Share to Slack"
-              >
-                <Share2 className="h-4 w-4" />
-              </Button>
-            )}
             {!isEditing && (
               <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleEditClick}
-                  className="h-8 w-8"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onDelete}
-                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Share</TooltipContent>
+                  </Tooltip>
+                  <DropdownMenuContent align="end" side="bottom">
+                    <DropdownMenuItem onClick={() => setShareDialogOpen(true)}>
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Share to Slack
+                    </DropdownMenuItem>
+                    {teamsComingSoon ? (
+                      <DropdownMenuItem className="cursor-default" disabled>
+                        <Video className="h-4 w-4 mr-2" />
+                        Share to Teams (coming soon)
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={() => setShareTeamsDialogOpen(true)}>
+                        <Video className="h-4 w-4 mr-2" />
+                        Share to Teams
+                      </DropdownMenuItem>
+                    )}
+                    {onExportContact && contact && (
+                      <DropdownMenuItem onClick={() => onExportContact(contact)}>
+                        <FileDown className="h-4 w-4 mr-2" />
+                        Export to CSV
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleEditClick}
+                      className="h-8 w-8"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Edit</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={onDelete}
+                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Delete</TooltipContent>
+                </Tooltip>
               </>
             )}
             {isEditing && (
@@ -504,25 +565,25 @@ export function ContactDetailsDialog({
         {/* Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-3 space-y-4">
           {isEditing ? (
-            /* EDIT MODE */
+            /* EDIT MODE - Layout matches Contact Details (view) */
             <>
-              {/* Avatar Upload */}
-              <div className="flex flex-col items-center gap-3">
-                <div 
-                  className="relative cursor-pointer group"
+              {/* Avatar + Name - Compact row like view */}
+              <div className="flex items-start gap-3">
+                <div
+                  className="relative cursor-pointer group flex-shrink-0"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Avatar className="h-20 w-20 border-2 border-border">
+                  <Avatar className="h-14 w-14 border-2 border-border">
                     <AvatarImage src={avatar} alt={name || "Avatar"} />
-                    <AvatarFallback className="text-xl bg-gradient-to-br from-primary to-primary/60 text-primary-foreground font-display font-semibold">
+                    <AvatarFallback className="text-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground font-display font-semibold">
                       {name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
                     </AvatarFallback>
                   </Avatar>
                   <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
                     {uploading ? (
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     ) : (
-                      <Camera className="h-6 w-6 text-muted-foreground" />
+                      <Camera className="h-5 w-5 text-muted-foreground" />
                     )}
                   </div>
                 </div>
@@ -534,24 +595,44 @@ export function ContactDetailsDialog({
                   onChange={handleFileChange}
                   disabled={uploading}
                 />
-                <span className="text-xs text-muted-foreground">Click to upload photo</span>
+                <div className="flex-1 min-w-0 space-y-2">
+                  <Label htmlFor="edit-name" className="sr-only">Name *</Label>
+                  <Input
+                    id="edit-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Name *"
+                    required
+                    className="font-display font-semibold text-lg"
+                  />
+                  <span className="text-xs text-muted-foreground">Click avatar to upload photo</span>
+                </div>
               </div>
 
-              {/* Name */}
+              {/* Email & Phone - Plain fields like view contact info */}
               <div className="space-y-2">
-                <Label htmlFor="edit-name">Name *</Label>
+                <Label htmlFor="edit-email">Email</Label>
                 <Input
-                  id="edit-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="John Doe"
-                  required
+                  id="edit-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="john@example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+1 (555) 000-0000"
                 />
               </div>
 
-              {/* Description */}
-              <div className="space-y-2">
-                <Label htmlFor="edit-description">Description</Label>
+              {/* Description - Collapsible, expanded by default in edit */}
+              <CollapsibleSection title="Description" open={descriptionOpen} onOpenChange={setDescriptionOpen}>
+                <Label htmlFor="edit-description" className="sr-only">Description</Label>
                 <Textarea
                   id="edit-description"
                   value={description}
@@ -559,6 +640,83 @@ export function ContactDetailsDialog({
                   placeholder="What do they handle? e.g. 'Handles all marketing campaigns'"
                   rows={2}
                 />
+              </CollapsibleSection>
+
+              {/* Keywords - Collapsible, expanded by default, highlighted as quickest way to enrich */}
+              <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-3">
+                <div className="flex items-center gap-2 text-primary">
+                  <Sparkles className="h-4 w-4 shrink-0" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">
+                    Quickest way to enrich contacts
+                  </span>
+                </div>
+                <CollapsibleSection title="Keywords" open={keywordsOpen} onOpenChange={setKeywordsOpen}>
+                  {autoTags.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-xs text-muted-foreground">Suggested keywords:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {autoTags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className="cursor-pointer border-dashed hover:bg-destructive/10"
+                            onClick={() => removeAutoTag(tag)}
+                          >
+                            {tag}
+                            <X className="h-3 w-3 ml-1" />
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {presetKeywords.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {presetKeywords.map((preset) => {
+                        const isSelected = tags.includes(preset);
+                        return (
+                          <Badge
+                            key={preset}
+                            variant={isSelected ? "default" : "outline"}
+                            className={`cursor-pointer transition-colors ${
+                              isSelected
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-accent hover:text-accent-foreground"
+                            }`}
+                            onClick={() => togglePresetTag(preset)}
+                          >
+                            {isSelected && <Check className="h-3 w-3 mr-1" />}
+                            {preset}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <Input
+                    id="edit-tags"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleAddTag}
+                    placeholder="Type custom keywords and press Enter..."
+                  />
+
+                  {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="secondary"
+                          className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={() => removeTag(tag)}
+                        >
+                          {tag}
+                          <X className="h-3 w-3 ml-1" />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </CollapsibleSection>
               </div>
 
               {/* Share toggle */}
@@ -588,29 +746,6 @@ export function ContactDetailsDialog({
                   />
                 </div>
               )}
-
-              {/* Contact Details Accordion */}
-              <CollapsibleSection title="Contact Details" open={contactOpen} onOpenChange={setContactOpen}>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-email">Email</Label>
-                  <Input
-                    id="edit-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="john@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-phone">Phone</Label>
-                  <Input
-                    id="edit-phone"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-              </CollapsibleSection>
 
               {/* Work Info Accordion */}
               <CollapsibleSection title="Work Info" open={workOpen} onOpenChange={setWorkOpen}>
@@ -847,75 +982,6 @@ export function ContactDetailsDialog({
                   </div>
                 )}
               </CollapsibleSection>
-
-              {/* Keywords Accordion */}
-              <CollapsibleSection title="Keywords" open={keywordsOpen} onOpenChange={setKeywordsOpen}>
-                {autoTags.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="text-xs text-muted-foreground">Suggested keywords:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {autoTags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="outline"
-                          className="cursor-pointer border-dashed hover:bg-destructive/10"
-                          onClick={() => removeAutoTag(tag)}
-                        >
-                          {tag}
-                          <X className="h-3 w-3 ml-1" />
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {presetKeywords.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {presetKeywords.map((preset) => {
-                      const isSelected = tags.includes(preset);
-                      return (
-                        <Badge
-                          key={preset}
-                          variant={isSelected ? "default" : "outline"}
-                          className={`cursor-pointer transition-colors ${
-                            isSelected
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-accent hover:text-accent-foreground"
-                          }`}
-                          onClick={() => togglePresetTag(preset)}
-                        >
-                          {isSelected && <Check className="h-3 w-3 mr-1" />}
-                          {preset}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                )}
-                
-                <Input
-                  id="edit-tags"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleAddTag}
-                  placeholder="Type custom keywords and press Enter..."
-                />
-                
-                {tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
-                        onClick={() => removeTag(tag)}
-                      >
-                        {tag}
-                        <X className="h-3 w-3 ml-1" />
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </CollapsibleSection>
             </>
           ) : (
             /* VIEW MODE */
@@ -996,17 +1062,33 @@ export function ContactDetailsDialog({
                 </div>
               )}
 
-              {/* Description - More Compact */}
+              {/* Description - Collapsible, collapsed by default */}
               {contact.description && (
-                <div className="space-y-1.5">
-                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wide">
-                    Description
-                  </h4>
+                <CollapsibleSection title="Description" open={descriptionOpen} onOpenChange={setDescriptionOpen}>
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     {contact.description}
                   </p>
-                </div>
+                </CollapsibleSection>
               )}
+
+              {/* Keywords - Directly beneath Description */}
+              <CollapsibleSection title="Keywords" open={keywordsOpen} onOpenChange={setKeywordsOpen}>
+                {contact.tags && contact.tags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {contact.tags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className="px-2 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No keywords added</p>
+                )}
+              </CollapsibleSection>
 
               {/* Work Info Accordion - Always visible in view mode */}
               <CollapsibleSection title="Work Info" open={workOpen} onOpenChange={setWorkOpen}>
@@ -1160,25 +1242,6 @@ export function ContactDetailsDialog({
                   <p className="text-xs text-muted-foreground">No address information available</p>
                 )}
               </CollapsibleSection>
-
-              {/* Keywords Accordion - Always visible in view mode */}
-              <CollapsibleSection title="Keywords" open={keywordsOpen} onOpenChange={setKeywordsOpen}>
-                {contact.tags && contact.tags.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {contact.tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="px-2 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium"
-                      >
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No keywords added</p>
-                )}
-              </CollapsibleSection>
             </>
           )}
         </div>
@@ -1186,6 +1249,11 @@ export function ContactDetailsDialog({
       <ShareToSlackDialog
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
+        contact={contact}
+      />
+      <ShareToTeamsDialog
+        open={shareTeamsDialogOpen}
+        onOpenChange={setShareTeamsDialogOpen}
         contact={contact}
       />
     </Dialog>

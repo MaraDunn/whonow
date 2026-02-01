@@ -1,10 +1,18 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Contact } from "@/types/contact";
+import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { normalizeEmail, normalizePhone, findDuplicateContacts } from "@/utils/duplicateDetection";
+import { devLog } from "@/lib/devLog";
+
+/** First page size: smaller so first paint is fast. */
+const CONTACTS_INITIAL_PAGE_SIZE = 24;
+/** Page size for "load more" (and used to detect has-next). */
+const CONTACTS_PAGE_SIZE = 50;
+const CONTACTS_STALE_TIME_MS = 120_000;
 
 type DbContact = {
   id: string;
@@ -58,6 +66,7 @@ const mapDbToContact = (db: DbContact): ContactWithMeta => ({
   ownerId: db.owner_id || undefined,
   lastContactedAt: db.last_contacted_at || undefined,
   isClient: db.is_client || false,
+  companyId: db.company_id || undefined,
   createdAt: db.created_at || undefined, // Include timestamp for time-based searches
   address: db.address || undefined,
   city: db.city || undefined,
@@ -99,10 +108,20 @@ const mapContactToDb = (
   business_type: contact.businessType || null,
 });
 
-export const useContacts = () => {
+export type UseContactsListOptions = {
+  folderId?: string | null;
+  showClientDirectory?: boolean;
+  ownershipFilter?: ContactOwnershipFilter;
+};
+
+export const useContacts = (options?: UseContactsListOptions) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
+
+  const folderId = options?.folderId ?? null;
+  const showClientDirectory = options?.showClientDirectory ?? false;
+  const ownershipFilter = options?.ownershipFilter ?? "all";
 
   // Fetch total count of active contacts (not limited by 1000 row default)
   // Exclude "my-profile" contacts to match the contacts array filtering
@@ -177,31 +196,93 @@ export const useContacts = () => {
     enabled: !!user,
   });
 
-  // Fetch active contacts (not deleted)
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["contacts", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("contacts")
-        .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+  // Cursor for list_contacts_slim RPC keyset pagination.
+  type ListCursor = { created_at: string; id: string } | null;
 
+  // Fetch active contacts via list_contacts_slim (slim payload = faster load more).
+  const {
+    data: listData,
+    isLoading,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+    isError: isListError,
+    refetch: refetchList,
+  } = useInfiniteQuery({
+    queryKey: ["contacts", "list", user?.id, folderId, showClientDirectory, ownershipFilter],
+    queryFn: async ({ pageParam }: { pageParam: ListCursor }) => {
+      if (!user?.id) return [];
+      const limit = pageParam === null ? CONTACTS_INITIAL_PAGE_SIZE : CONTACTS_PAGE_SIZE;
+      const { data, error } = await supabase.rpc("list_contacts_slim", {
+        _user_id: user.id,
+        _cursor_created_at: pageParam?.created_at ?? null,
+        _cursor_id: pageParam?.id ?? null,
+        _limit: limit,
+        _folder_id: folderId ?? null,
+        _client_only: showClientDirectory ?? false,
+        _ownership_filter: ownershipFilter,
+      });
       if (error) throw error;
-      // Filter out contacts with "my-profile" tag (profile contact cards)
-      // Optimize: filter during map to avoid second pass
-      const contacts: ContactWithMeta[] = [];
-      for (const dbContact of data as DbContact[]) {
-        const contact = mapDbToContact(dbContact);
-        // Only add if not a profile contact
-        if (!contact.tags?.includes("my-profile")) {
-          contacts.push(contact);
-        }
+      const out: ContactWithMeta[] = [];
+      for (const row of (data ?? []) as Record<string, unknown>[]) {
+        const contact = mapDbToContact({ ...row } as DbContact);
+        if (!contact.tags?.includes("my-profile")) out.push(contact);
       }
-      return contacts;
+      return out;
+    },
+    initialPageParam: null as ListCursor,
+    getNextPageParam: (lastPage, allPages): ListCursor => {
+      const isFirstPage = allPages.length === 1;
+      const pageSize = isFirstPage ? CONTACTS_INITIAL_PAGE_SIZE : CONTACTS_PAGE_SIZE;
+      if (lastPage.length < pageSize) return undefined;
+      const last = lastPage[lastPage.length - 1];
+      const created_at = last.createdAt;
+      if (!created_at || !last.id) return undefined;
+      return { created_at, id: last.id };
     },
     enabled: !!user,
+    staleTime: CONTACTS_STALE_TIME_MS,
+    placeholderData: keepPreviousData,
   });
+
+  const flatPages = (listData?.pages ?? []).flat() as ContactWithMeta[];
+  const lastKnownGoodRef = useRef<ContactWithMeta[]>([]);
+  if (flatPages.length > 0) lastKnownGoodRef.current = flatPages;
+  // Never show fewer contacts than we've already loaded (avoids grid clearing on fetch error or race).
+  const contacts: ContactWithMeta[] = useMemo(() => {
+    if (flatPages.length > 0) return flatPages;
+    if (lastKnownGoodRef.current.length > 0) return lastKnownGoodRef.current;
+    return flatPages;
+  }, [flatPages]);
+
+  const loadMoreContacts = useCallback(() => {
+    fetchNextPage();
+  }, [fetchNextPage]);
+
+  // Fetch full contact by id (for detail view when list only has slim rows).
+  const getContactById = useCallback(
+    async (id: string): Promise<ContactWithMeta | null> => {
+      const { data, error } = await supabase.from("contacts").select("*").eq("id", id).single();
+      if (error || !data) return null;
+      return mapDbToContact(data as DbContact);
+    },
+    []
+  );
+
+  // Prefetch the next page as soon as we have data and there is more to load,
+  // so "Load more" feels instant (data is often already in cache).
+  useEffect(() => {
+    const pageCount = listData?.pages?.length ?? 0;
+    if (pageCount >= 1 && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [listData?.pages?.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  useEffect(() => {
+    if (isListError) {
+      toast.error("Failed to load contacts. Try refreshing.");
+    }
+  }, [isListError]);
 
   // Fetch count of trashed contacts (accurate count, not limited by 1000)
   const { data: trashCount = 0 } = useQuery({
@@ -404,7 +485,7 @@ export const useContacts = () => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkDeleteContacts] Attempting to delete", validIds.length, "contacts");
+      devLog("[bulkDeleteContacts] Attempting to delete", validIds.length, "contacts");
 
       // Delete in batches to avoid potential issues with large arrays or RLS limits
       const batchSize = 50;
@@ -424,7 +505,7 @@ export const useContacts = () => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkDeleteContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts deleted`);
+          devLog(`[bulkDeleteContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts deleted`);
         }
       }
 
@@ -466,7 +547,7 @@ export const useContacts = () => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkMoveToFolder] Attempting to move", validIds.length, "contacts to folder:", folderId);
+      devLog("[bulkMoveToFolder] Attempting to move", validIds.length, "contacts to folder:", folderId);
 
       // Update in batches to avoid potential issues with large arrays or RLS limits
       const batchSize = 50;
@@ -486,7 +567,7 @@ export const useContacts = () => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkMoveToFolder] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts moved`);
+          devLog(`[bulkMoveToFolder] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts moved`);
         }
       }
 
@@ -547,7 +628,7 @@ export const useContacts = () => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkRestoreContacts] Attempting to restore", validIds.length, "contacts");
+      devLog("[bulkRestoreContacts] Attempting to restore", validIds.length, "contacts");
 
       // Restore in batches to avoid potential issues with large arrays or RLS limits
       const batchSize = 50;
@@ -567,7 +648,7 @@ export const useContacts = () => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkRestoreContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts restored`);
+          devLog(`[bulkRestoreContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts restored`);
         }
       }
 
@@ -660,7 +741,7 @@ export const useContacts = () => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkUpdateLastContacted] Attempting to mark", validIds.length, "contacts as contacted");
+      devLog("[bulkUpdateLastContacted] Attempting to mark", validIds.length, "contacts as contacted");
 
       const timestamp = new Date().toISOString();
 
@@ -682,7 +763,7 @@ export const useContacts = () => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkUpdateLastContacted] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
+          devLog(`[bulkUpdateLastContacted] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
         }
       }
 
@@ -721,11 +802,63 @@ export const useContacts = () => {
         .eq("id", id);
       if (error) throw error;
     },
+    onMutate: async ({ id, isClient }) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ["contacts"] });
+
+      // Snapshot the previous value
+      const previousContacts = queryClient.getQueriesData({ queryKey: ["contacts"] });
+
+      // Optimistically update the contact in all contact queries
+      queryClient.setQueriesData<{ pages?: Array<{ data?: Contact[] }> } | Contact[]>(
+        { queryKey: ["contacts"] },
+        (old) => {
+          if (!old) return old;
+          
+          // Handle infinite query structure (pages array)
+          if (old && typeof old === 'object' && 'pages' in old && Array.isArray(old.pages)) {
+            return {
+              ...old,
+              pages: old.pages.map((page) => {
+                if (!page || !page.data || !Array.isArray(page.data)) {
+                  return page;
+                }
+                return {
+                  ...page,
+                  data: page.data.map((contact) =>
+                    contact?.id === id ? { ...contact, isClient } : contact
+                  ),
+                };
+              }),
+            };
+          }
+          
+          // Handle array structure (direct contacts array)
+          if (Array.isArray(old)) {
+            return old.map((contact) =>
+              contact?.id === id ? { ...contact, isClient } : contact
+            );
+          }
+          
+          return old;
+        }
+      );
+
+      return { previousContacts };
+    },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       toast.success(variables.isClient ? "Marked as client" : "Removed from clients");
     },
-    onError: (error) => {
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousContacts && Array.isArray(context.previousContacts)) {
+        context.previousContacts.forEach(([queryKey, data]) => {
+          if (queryKey && data !== undefined) {
+            queryClient.setQueryData(queryKey, data);
+          }
+        });
+      }
       toast.error("Failed to update contact: " + error.message);
     },
   });
@@ -743,7 +876,7 @@ export const useContacts = () => {
         throw new Error("No valid contact IDs provided");
       }
 
-      console.log("[bulkToggleClientStatus] Attempting to mark", validIds.length, "contacts as", isClient ? "clients" : "non-clients");
+      devLog("[bulkToggleClientStatus] Attempting to mark", validIds.length, "contacts as", isClient ? "clients" : "non-clients");
 
       // Update in batches to avoid potential issues with large arrays or RLS limits
       const batchSize = 50;
@@ -763,7 +896,7 @@ export const useContacts = () => {
           errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
         } else {
           successCount += data?.length || 0;
-          console.log(`[bulkToggleClientStatus] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
+          devLog(`[bulkToggleClientStatus] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts updated`);
         }
       }
 
@@ -855,6 +988,11 @@ export const useContacts = () => {
     clientCount,
     isLoading,
     trashLoading,
+    hasMoreContacts: hasNextPage ?? false,
+    loadMoreContacts,
+    isLoadingMoreContacts: isFetchingNextPage,
+    refetchContacts: refetchList,
+    getContactById,
     addContact: addContact.mutate,
     updateContact: updateContact.mutate,
     deleteContact: deleteContact.mutate,
@@ -873,3 +1011,75 @@ export const useContacts = () => {
     isMerging: mergeContact.isPending,
   };
 };
+
+/** Cursor for list_contacts_slim keyset pagination (export). */
+type ExportListCursor = { created_at: string; id: string } | null;
+
+/** Map a slim RPC row (snake_case) to Contact for export. */
+function mapSlimRowToContact(row: Record<string, unknown>): Contact {
+  return {
+    id: String(row.id ?? ""),
+    name: String(row.name ?? ""),
+    email: String(row.email ?? ""),
+    phone: String(row.phone ?? ""),
+    company: String(row.company ?? ""),
+    role: String(row.role ?? ""),
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    avatar: row.avatar != null ? String(row.avatar) : undefined,
+    folderId: row.folder_id != null ? String(row.folder_id) : undefined,
+    isShared: Boolean(row.is_shared),
+    ownerId: row.owner_id != null ? String(row.owner_id) : undefined,
+    lastContactedAt: row.last_contacted_at != null ? String(row.last_contacted_at) : undefined,
+    isClient: Boolean(row.is_client),
+    companyId: row.company_id != null ? String(row.company_id) : undefined,
+    createdAt: row.created_at != null ? String(row.created_at) : undefined,
+  };
+}
+
+export type FetchAllContactsForExportOptions = {
+  folderId?: string | null;
+  clientOnly?: boolean;
+  ownershipFilter?: ContactOwnershipFilter;
+};
+
+/**
+ * Fetch all contacts for export (cursor loop over list_contacts_slim).
+ * Use folderId: null for all contacts, or a folder id for folder-scoped export.
+ */
+export async function fetchAllContactsForExport(
+  client: { rpc: (name: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }> },
+  userId: string,
+  options: FetchAllContactsForExportOptions = {}
+): Promise<Contact[]> {
+  const { folderId = null, clientOnly = false, ownershipFilter = "all" } = options;
+  const limit = CONTACTS_PAGE_SIZE;
+  const results: Contact[] = [];
+  let cursor: ExportListCursor = null;
+
+  for (;;) {
+    const { data, error } = await client.rpc("list_contacts_slim", {
+      _user_id: userId,
+      _cursor_created_at: cursor?.created_at ?? null,
+      _cursor_id: cursor?.id ?? null,
+      _limit: limit,
+      _folder_id: folderId ?? null,
+      _client_only: clientOnly,
+      _ownership_filter: ownershipFilter,
+    });
+
+    if (error) throw new Error(error.message ?? "Failed to fetch contacts");
+    const rows = (data ?? []) as Record<string, unknown>[];
+    for (const row of rows) {
+      const contact = mapSlimRowToContact(row);
+      if (!contact.tags?.includes("my-profile")) results.push(contact);
+    }
+    if (rows.length < limit) break;
+    const lastRow = rows[rows.length - 1];
+    const created_at = lastRow?.created_at != null ? String(lastRow.created_at) : null;
+    const id = lastRow?.id != null ? String(lastRow.id) : null;
+    if (created_at == null || id == null) break;
+    cursor = { created_at, id };
+  }
+
+  return results;
+}

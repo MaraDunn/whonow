@@ -6,6 +6,9 @@
   VITE_APP_LAUNCH_MODE = "waitlist"
   # Note: VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY should be set in Netlify UI
   # (Site settings → Environment variables) for security, but can be added here if needed
+  # For landing page download buttons, set in Netlify UI (Build environment variables):
+  #   VITE_DOWNLOAD_URL_WINDOWS = full URL to .msi or .exe
+  #   VITE_DOWNLOAD_URL_MAC     = full URL to .dmg
 
 # Block common exploit paths and bot scanners (return 404 before catch-all)
 # These are clearly exploit attempts and should be blocked explicitly

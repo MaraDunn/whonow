@@ -5,6 +5,7 @@
  */
 
 import { Contact } from "@/types/contact";
+import { devLog } from "@/lib/devLog";
 
 const DB_NAME = "contact_embeddings";
 const DB_VERSION = 1;
@@ -69,7 +70,7 @@ async function loadEmbeddingModel(): Promise<any> {
       //   }
       // );
 
-      console.log("[Embeddings] Temporarily disabled - using deterministic search only");
+      devLog("[Embeddings] Temporarily disabled - using deterministic search only");
       return null;
     } catch (error) {
       console.warn("Failed to load embedding model:", error);

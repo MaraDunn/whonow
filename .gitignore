@@ -27,3 +27,8 @@ src-tauri/target/
 
 # Local Netlify folder
 .netlify
+
+# ML model caches and large ONNX binaries (use scripts/download-models.js to fetch)
+.model-cache/
+onnx-models/
+src-tauri/models/

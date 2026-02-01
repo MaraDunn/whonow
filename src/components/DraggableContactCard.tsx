@@ -11,6 +11,9 @@ export interface DraggableContactCardProps {
   onView?: () => void;
   isTrashView?: boolean;
   onDelete?: () => void;
+  onExportContact?: (contact: Contact) => void;
+  onShareToSlack?: (contact: Contact) => void;
+  onShareToTeams?: (contact: Contact) => void;
   onRestore?: () => void;
   onPermanentlyDelete?: () => void;
   folder?: Folder;
@@ -20,6 +23,8 @@ export interface DraggableContactCardProps {
   onMarkContacted?: () => void;
   onToggleClient?: (isClient: boolean) => void;
   hasClientAccess?: boolean;
+  isInternal?: boolean;
+  isCurrentUser?: boolean;
   // Mobile/Tablet compact mode props
   compact?: boolean;
   isExpanded?: boolean;
@@ -38,6 +43,9 @@ export function DraggableContactCard({
   onView,
   isTrashView = false,
   onDelete,
+  onExportContact,
+  onShareToSlack,
+  onShareToTeams,
   onRestore,
   onPermanentlyDelete,
   folder,
@@ -47,6 +55,8 @@ export function DraggableContactCard({
   onMarkContacted,
   onToggleClient,
   hasClientAccess = false,
+  isInternal = false,
+  isCurrentUser = false,
   compact = false,
   isExpanded = false,
   onToggleExpand,
@@ -63,6 +73,9 @@ export function DraggableContactCard({
       onView={onView}
       isTrashView={isTrashView}
       onDelete={onDelete}
+      onExportContact={onExportContact}
+      onShareToSlack={onShareToSlack}
+      onShareToTeams={onShareToTeams}
       onRestore={onRestore}
       onPermanentlyDelete={onPermanentlyDelete}
       folder={folder}
@@ -72,6 +85,8 @@ export function DraggableContactCard({
       onMarkContacted={onMarkContacted}
       onToggleClient={onToggleClient}
       hasClientAccess={hasClientAccess}
+      isInternal={isInternal}
+      isCurrentUser={isCurrentUser}
       compact={compact}
       isExpanded={isExpanded}
       onToggleExpand={onToggleExpand}

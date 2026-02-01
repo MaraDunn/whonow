@@ -1,8 +1,12 @@
 """
 PaddleOCR Service - Fast, accurate OCR for business cards
 """
+from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import base64
 import io
@@ -18,11 +22,34 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
+# Used for eager init at startup (blocks 30-90s, so run in thread)
+_startup_executor = ThreadPoolExecutor(max_workers=1)
+
+
+def _load_ocr_in_background():
+    """Run in background thread so server can respond to health checks within 5s."""
+    try:
+        get_ocr_instance()
+        logger.info("Background startup: PaddleOCR ready")
+    except Exception as e:
+        logger.error(f"Background OCR init failed: {e}", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start PaddleOCR load in background; yield immediately so server responds to health checks within 5s."""
+    logger.info("Starting up: loading PaddleOCR in background...")
+    _startup_executor.submit(_load_ocr_in_background)
+    yield
+    _startup_executor.shutdown(wait=False)
+
+
+# Initialize FastAPI app with lifespan for eager OCR load
 app = FastAPI(
     title="PaddleOCR Service",
     description="High-accuracy OCR service for business cards",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -34,8 +61,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Lazy initialization of PaddleOCR (initializes on first request, not at startup)
-# This prevents startup timeouts and crashes on Render free tier
+# PaddleOCR instance: filled at startup (eager) or on first request (fallback if startup failed)
 ocr = None
 ocr_lock = threading.Lock()
 ocr_initializing = False
@@ -70,8 +96,8 @@ def get_ocr_instance():
         
         try:
             ocr_initializing = True
-            logger.info("Initializing PaddleOCR (lazy initialization)...")
-            logger.info("This may take 30-60 seconds on first request while models download...")
+            logger.info("Initializing PaddleOCR...")
+            logger.info("This may take 30-90 seconds (loading models from disk)...")
             
             ocr = PaddleOCR(
                 use_angle_cls=True,
@@ -173,14 +199,17 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Detailed health check"""
-    return {
-        "status": "healthy",
+    """Readiness: 503 until OCR is loaded so Render does not route traffic; 200 when ready."""
+    body = {
+        "status": "healthy" if ocr is not None else "starting",
         "ocr_initialized": ocr is not None,
         "ocr_initializing": ocr_initializing,
         "ocr_init_error": ocr_init_error,
-        "gpu_available": False  # Update if using GPU
+        "gpu_available": False,
     }
+    if ocr is None:
+        return JSONResponse(status_code=503, content=body)
+    return body
 
 
 @app.post("/ocr", response_model=OCRResponse)

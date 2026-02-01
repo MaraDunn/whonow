@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 import type { Plugin } from "vite";
 
 // Plugin to inject noindex meta tag in waitlist mode
@@ -48,9 +47,8 @@ export default defineConfig(({ mode }) => {
     envPrefix: ["VITE_", "TAURI_"],
     plugins: [
       react(),
-      mode === "development" && componentTagger(),
       waitlistMetaTags(),
-    ].filter(Boolean),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

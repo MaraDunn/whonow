@@ -5,6 +5,7 @@
 
 import { SearchQuery, SearchQueryFilters } from "@/types/searchQuery";
 import { isDebugMode } from "@/utils/ai";
+import { devLog } from "@/lib/devLog";
 
 export interface MergeDecisions {
   conflictsDetected: string[];
@@ -31,7 +32,7 @@ export function mergeQueries(
   
   // Log merge decisions in debug mode
   if (isDebugMode() && semantic) {
-    console.log('[Merge] Merge decisions:', result.decisions);
+    devLog('[Merge] Merge decisions:', result.decisions);
   }
   
   return result.merged;
@@ -78,7 +79,7 @@ export function mergeQueriesWithMetadata(
     decisions.confidenceGate = 'failed';
     
     if (isDebugMode()) {
-      console.log(`[Merge] Confidence gate failed: ${semantic.confidence} < ${deterministic.confidence}`);
+      devLog(`[Merge] Confidence gate failed: ${semantic.confidence} < ${deterministic.confidence}`);
     }
     
     return { merged, decisions };
@@ -90,7 +91,7 @@ export function mergeQueriesWithMetadata(
     decisions.conflictsDetected = conflicts;
     
     if (isDebugMode()) {
-      console.log(`[Merge] Conflicts detected in fields: ${conflicts.join(', ')}`);
+      devLog(`[Merge] Conflicts detected in fields: ${conflicts.join(', ')}`);
     }
     
     // Keep deterministic filters, but allow semantic_hint
@@ -128,7 +129,7 @@ export function mergeQueriesWithMetadata(
     decisions.locationRemoved = true;
     
     if (isDebugMode()) {
-      console.log('[Merge] Removed semantic location (not in deterministic query)');
+      devLog('[Merge] Removed semantic location (not in deterministic query)');
     }
   }
 

@@ -80,7 +80,7 @@ export const FeatureGate = ({
         <div className="py-4">
           {isContactSalesFeature ? (
             <Button asChild className="w-full gradient-hero text-primary-foreground">
-              <a href="mailto:sales@whonow.com?subject=WhoNow%20Enterprise%20Feature%20Inquiry">
+              <a href="mailto:sales@whonow.co?subject=WhoNow%20Enterprise%20Feature%20Inquiry">
                 <Sparkles className="w-4 h-4 mr-2" />
                 Contact Sales
               </a>

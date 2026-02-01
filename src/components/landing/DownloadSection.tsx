@@ -1,4 +1,5 @@
-import { Monitor, Smartphone, Download, ExternalLink } from "lucide-react";
+import { useState } from "react";
+import { Monitor, Smartphone, Download, ExternalLink, BookmarkPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   detectPlatform,
@@ -7,6 +8,7 @@ import {
   getPlatformName,
   type Platform,
 } from "@/utils/downloadLinks";
+import { AddToHomeScreenDialog } from "@/components/landing/AddToHomeScreenDialog";
 
 interface PlatformConfig {
   platform: Platform;
@@ -56,6 +58,7 @@ const platforms: PlatformConfig[] = [
 
 export const DownloadSection = () => {
   const currentPlatform = detectPlatform();
+  const [addToHomeDialogOpen, setAddToHomeDialogOpen] = useState(false);
 
   const handleDownload = (platform: Platform) => {
     const url = getDownloadUrl(platform);
@@ -150,12 +153,12 @@ export const DownloadSection = () => {
           </div>
         </div>
 
-        {/* Mobile Downloads */}
+        {/* Mobile Downloads + Add to Home Screen */}
         <div>
           <h3 className="text-xl font-semibold mb-8 text-center text-foreground">
             Mobile Apps
           </h3>
-          <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {mobilePlatforms.map((platformConfig) => {
               const { platform, icon: Icon, label, description } = platformConfig;
               const isAvailable = hasDownloadUrl(platform);
@@ -217,9 +220,34 @@ export const DownloadSection = () => {
                 </div>
               );
             })}
+            {/* Add to Home Screen - bookmark / PWA icon without native app */}
+            <div className="group relative bg-card rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 border border-border/50 animate-fade-in">
+              <div className="w-12 h-12 rounded-xl gradient-hero flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                <BookmarkPlus className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <h4 className="font-display text-lg font-semibold mb-2 text-foreground">
+                Add to Home Screen
+              </h4>
+              <p className="text-sm text-muted-foreground mb-4">
+                Get a WhoNow icon on your phone or desktop. No app store required.
+              </p>
+              <Button
+                onClick={() => setAddToHomeDialogOpen(true)}
+                className="w-full gradient-hero text-primary-foreground hover:shadow-lg transition-shadow"
+                size="sm"
+              >
+                <BookmarkPlus className="mr-2 h-4 w-4" />
+                Add to Home Screen
+              </Button>
+              <div className="absolute inset-0 rounded-2xl bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            </div>
           </div>
         </div>
       </div>
+      <AddToHomeScreenDialog
+        open={addToHomeDialogOpen}
+        onOpenChange={setAddToHomeDialogOpen}
+      />
     </section>
   );
 };

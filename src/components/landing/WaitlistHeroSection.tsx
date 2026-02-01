@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { devLog } from "@/lib/devLog";
 
 export const WaitlistHeroSection = () => {
   const { user } = useAuth();
@@ -34,7 +35,7 @@ export const WaitlistHeroSection = () => {
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       
       // Debug: Log config status
-      console.log("🔍 Waitlist Config Check:", {
+      devLog("🔍 Waitlist Config Check:", {
         hasUrl: !!supabaseUrl,
         hasKey: !!supabaseAnonKey,
         urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : "❌ MISSING",

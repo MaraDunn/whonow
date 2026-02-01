@@ -15,19 +15,26 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
   console.log(`[CUSTOMER-PORTAL] ${step}${detailsStr}`);
 };
 
+function jsonError(message: string, status: number): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status,
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Check launch mode - block in waitlist mode
-  const { blocked } = checkLaunchMode();
-  if (blocked) {
-    const origin = req.headers.get("origin");
-    return waitlistModeBlockedResponse(origin);
-  }
-
   try {
+    // Check launch mode - block in waitlist mode
+    const { blocked } = checkLaunchMode();
+    if (blocked) {
+      const origin = req.headers.get("origin");
+      return waitlistModeBlockedResponse(origin);
+    }
+
     logStep("Function started");
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
@@ -55,7 +62,12 @@ serve(async (req) => {
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     if (customers.data.length === 0) {
-      throw new Error("No Stripe customer found for this user");
+      const msg = "No billing account found. Subscribe first to manage your subscription.";
+      logStep("No Stripe customer", { userId: user.id });
+      return new Response(
+        JSON.stringify({ error: msg }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
     }
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
@@ -78,16 +90,11 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in customer-portal", { message: errorMessage });
 
-    return new Response(
-      JSON.stringify({
-        error: errorMessage,
-        hint:
-          "Common causes: STRIPE_SECRET_KEY missing, no Stripe customer for this email, or Billing Portal not enabled in Stripe.",
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
-    );
+    const isConfig = /STRIPE_SECRET_KEY|Billing Portal|Customer Portal|not enabled|not set up/i.test(errorMessage);
+    const userMessage = isConfig
+      ? "Billing portal is not configured. Set STRIPE_SECRET_KEY in Supabase Edge Function secrets and enable Customer Portal in Stripe Dashboard → Settings → Billing."
+      : errorMessage;
+
+    return jsonError(userMessage, 500);
   }
 });

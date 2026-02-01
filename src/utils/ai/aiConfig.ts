@@ -11,6 +11,7 @@
  */
 
 import { detectPlatform } from "../platformDetection";
+import { devLog } from "@/lib/devLog";
 
 export interface AIFeatureFlags {
   // Master AI switch - disables all AI features
@@ -329,5 +330,5 @@ export function subscribeToConfigChanges(callback: (config: AIConfig) => void): 
 
 // Log configuration on module load (debug mode only)
 if (isDebugMode()) {
-  console.log('[AI Config] Configuration loaded:', getAIConfig());
+  devLog('[AI Config] Configuration loaded:', getAIConfig());
 }

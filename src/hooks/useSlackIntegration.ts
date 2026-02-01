@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
+import { devLog } from "@/lib/devLog";
 
 interface SlackChannel {
   id: string;
@@ -21,7 +22,6 @@ export function useSlackIntegration() {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<SlackStatus | null>(null);
   const [channels, setChannels] = useState<SlackChannel[]>([]);
-  const { toast } = useToast();
 
   const getStatus = useCallback(async () => {
     try {
@@ -60,7 +60,7 @@ export function useSlackIntegration() {
 
       if (error) {
         // Handle auth errors silently - user may not be authenticated
-        console.log("Slack status check failed:", error.message);
+        devLog("Slack status check failed:", error.message);
         setStatus({ connected: false });
         return { connected: false };
       }
@@ -84,36 +84,28 @@ export function useSlackIntegration() {
       
       if (sessionError || !refreshedSession) {
         console.error("Session refresh failed:", sessionError);
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to connect Slack",
-          variant: "destructive",
-        });
+        toast.error("Please sign in to connect Slack");
         return;
       }
 
       // Use the refreshed session token
       const accessToken = refreshedSession.access_token;
-      console.log("Calling slack-integration with fresh token (length:", accessToken.length, ")");
+      devLog("Calling slack-integration with fresh token (length:", accessToken.length, ")");
       
       // Use direct fetch to pass JWT in body (since Supabase strips Authorization header when verify_jwt=false)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
       if (!supabaseUrl || !supabaseAnonKey) {
-        toast({
-          title: "Configuration error",
-          description: "Missing Supabase configuration",
-          variant: "destructive",
-        });
+        toast.error("Missing Supabase configuration");
         return;
       }
 
-      console.log("Sending request to slack-integration with JWT in both header and body");
+      devLog("Sending request to slack-integration with JWT in both header and body");
       const requestBody = JSON.stringify({ 
         action: "get-oauth-url",
         jwt: accessToken,
       });
-      console.log("Request body (first 100 chars):", requestBody.substring(0, 100));
+      devLog("Request body (first 100 chars):", requestBody.substring(0, 100));
       
       const resp = await fetch(`${supabaseUrl}/functions/v1/slack-integration`, {
         method: "POST",
@@ -125,9 +117,9 @@ export function useSlackIntegration() {
         body: requestBody, // Function code reads from here
       });
       
-      console.log("Response status:", resp.status);
+      devLog("Response status:", resp.status);
       const responseText = await resp.text();
-      console.log("Response body:", responseText);
+      devLog("Response body:", responseText);
 
       let data;
       try {
@@ -137,53 +129,37 @@ export function useSlackIntegration() {
       }
       const error = !resp.ok ? new Error((data && (data.error || data.message)) || `Edge function error (${resp.status})`) : null;
 
-      console.log("Slack connect response:", { data, error });
+      devLog("Slack connect response:", { data, error });
 
       if (error) {
         console.error("Slack function error details:", error);
         const errorMsg = error.message || "Unknown error occurred";
-        toast({
-          title: "Connection failed",
-          description: errorMsg,
-          variant: "destructive",
-        });
+        toast.error(errorMsg);
         return;
       }
 
       if (data?.error) {
-        toast({
-          title: "Configuration required",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return;
       }
 
       if (!data?.url) {
-        toast({
-          title: "Connection failed",
-          description: "No OAuth URL returned from server",
-          variant: "destructive",
-        });
+        toast.error("No OAuth URL returned from server");
         return;
       }
 
       // Redirect to Slack OAuth
-      console.log("Redirecting to Slack OAuth:", data.url);
+      devLog("Redirecting to Slack OAuth:", data.url);
       window.location.href = data.url;
     } catch (error: unknown) {
       console.error("Error connecting Slack:", error);
       const errorMsg =
         error instanceof Error ? error.message : "Could not initiate Slack connection";
-      toast({
-        title: "Connection failed",
-        description: errorMsg,
-        variant: "destructive",
-      });
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const disconnect = useCallback(async () => {
     try {
@@ -215,21 +191,14 @@ export function useSlackIntegration() {
       if (error) throw error;
 
       setStatus({ connected: false });
-      toast({
-        title: "Disconnected",
-        description: "Slack has been disconnected",
-      });
+      toast.success("Slack has been disconnected");
     } catch (error) {
       console.error("Error disconnecting Slack:", error);
-      toast({
-        title: "Disconnection failed",
-        description: "Could not disconnect Slack",
-        variant: "destructive",
-      });
+      toast.error("Could not disconnect Slack");
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const importMembers = useCallback(async () => {
     try {
@@ -268,32 +237,21 @@ export function useSlackIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Import failed",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return null;
       }
 
       const skippedMsg = data.skipped > 0 ? ` (${data.skipped} duplicates skipped)` : "";
-      toast({
-        title: "Import successful",
-        description: `Imported ${data.imported} contacts from Slack${skippedMsg}`,
-      });
+      toast.success(`Imported ${data.imported} contacts from Slack${skippedMsg}`);
       return data;
     } catch (error) {
       console.error("Error importing Slack members:", error);
-      toast({
-        title: "Import failed",
-        description: "Could not import Slack members",
-        variant: "destructive",
-      });
+      toast.error("Could not import Slack members");
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const getChannels = useCallback(async () => {
     try {
@@ -325,11 +283,7 @@ export function useSlackIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Error",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return [];
       }
 
@@ -341,7 +295,7 @@ export function useSlackIntegration() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const shareContact = useCallback(async (contactId: string, channelId: string) => {
     try {
@@ -375,31 +329,21 @@ export function useSlackIntegration() {
       if (error) throw error;
 
       if (data.error) {
-        toast({
-          title: "Sharing failed",
-          description: data.error,
-          variant: "destructive",
-        });
+        toast.error(data.error);
         return false;
       }
 
-      toast({
-        title: "Shared",
-        description: "Contact shared to Slack channel",
-      });
+      toast.success("Contact shared to Slack channel");
       return true;
     } catch (error) {
       console.error("Error sharing contact:", error);
-      toast({
-        title: "Sharing failed",
-        description: "Could not share contact to Slack",
-        variant: "destructive",
-      });
+      const message = error instanceof Error ? error.message : "Could not share contact to Slack";
+      toast.error(message);
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const sendNotification = useCallback(async (
     webhookUrl: string,

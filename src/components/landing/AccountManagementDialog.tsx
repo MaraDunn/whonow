@@ -22,6 +22,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -29,10 +30,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -89,6 +88,15 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
   // Login history
   const [loginHistory, setLoginHistory] = useState<AuditLogEntry[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Side-nav section (matches app Settings layout)
+  const [selectedSection, setSelectedSection] = useState<"subscription" | "personal" | "security">("subscription");
+
+  const navItems = [
+    { id: "subscription" as const, label: "Subscription", icon: CreditCard },
+    { id: "personal" as const, label: "Personal Info", icon: User },
+    { id: "security" as const, label: "Security", icon: Shield },
+  ];
 
   // Sync profile data when it changes
   useEffect(() => {
@@ -230,34 +238,46 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="w-[95vw] sm:max-w-3xl max-w-3xl h-[85vh] sm:h-[80vh] max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b flex-shrink-0">
           <DialogTitle className="font-display text-xl">Account Management</DialogTitle>
+          <DialogDescription className="sr-only">
+            Manage your subscription, profile, and security settings.
+          </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="subscription" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="subscription" className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4" />
-              <span className="hidden sm:inline">Subscription</span>
-            </TabsTrigger>
-            <TabsTrigger value="personal" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">Personal Info</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="security" 
-              className="flex items-center gap-2"
-              onClick={fetchLoginHistory}
-            >
-              <Shield className="h-4 w-4" />
-              <span className="hidden sm:inline">Security</span>
-            </TabsTrigger>
-          </TabsList>
+        <div className="flex-1 flex flex-col sm:flex-row overflow-hidden min-h-0">
+          {/* Sidebar - matches app Settings layout */}
+          <div className="w-full sm:w-56 border-b sm:border-b-0 sm:border-r bg-muted/30 flex-shrink-0 flex flex-col">
+            <nav className="p-2 space-y-1">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedSection(item.id);
+                    if (item.id === "security") fetchLoginHistory();
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors relative ${
+                    selectedSection === item.id
+                      ? "bg-background text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  {selectedSection === item.id && (
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+                  )}
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="flex-1 text-left">{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
 
-          <ScrollArea className="flex-1 mt-4">
-            {/* Subscription Tab */}
-            <TabsContent value="subscription" className="space-y-6 mt-0 pr-4">
+          {/* Content area */}
+          <div className="flex-1 overflow-y-auto min-w-0">
+            {selectedSection === "subscription" && (
+            <div className="space-y-6 p-4 sm:p-6">
               {/* Current Plan */}
               <div className="space-y-4">
                 <Label className="text-base font-medium">Current Plan</Label>
@@ -366,10 +386,11 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                   ))}
                 </ul>
               </div>
-            </TabsContent>
+            </div>
+            )}
 
-            {/* Personal Info Tab */}
-            <TabsContent value="personal" className="space-y-6 mt-0 pr-4">
+            {selectedSection === "personal" && (
+            <div className="space-y-6 p-4 sm:p-6">
               {/* Email (read-only, editable in security) */}
               <div className="space-y-2">
                 <Label className="text-base font-medium">Email Address</Label>
@@ -425,10 +446,11 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                   {isSavingProfile ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
-            </TabsContent>
+            </div>
+            )}
 
-            {/* Security Tab */}
-            <TabsContent value="security" className="space-y-6 mt-0 pr-4">
+            {selectedSection === "security" && (
+            <div className="space-y-6 p-4 sm:p-6">
               {/* Change Password */}
               <div className="space-y-4">
                 <Label className="text-base font-medium">Change Password</Label>
@@ -625,11 +647,12 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                   )}
                 </div>
               </div>
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
+            </div>
+            )}
+          </div>
+        </div>
 
-        <div className="flex justify-end pt-4 border-t border-border mt-4">
+        <div className="flex justify-end px-4 sm:px-6 py-4 border-t border-border shrink-0">
           <Button onClick={() => onOpenChange(false)}>
             Done
           </Button>

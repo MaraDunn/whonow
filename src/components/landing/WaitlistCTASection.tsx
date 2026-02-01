@@ -3,6 +3,7 @@ import { Mail, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { devLog } from "@/lib/devLog";
 
 export const WaitlistCTASection = () => {
   const [email, setEmail] = useState("");
@@ -31,7 +32,7 @@ export const WaitlistCTASection = () => {
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       
       // Debug: Log config status
-      console.log("🔍 Waitlist Config Check:", {
+      devLog("🔍 Waitlist Config Check:", {
         hasUrl: !!supabaseUrl,
         hasKey: !!supabaseAnonKey,
         urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : "❌ MISSING",

@@ -36,8 +36,14 @@ verify_jwt = false
 [functions.waitlist]
 verify_jwt = false
 
+[functions.contact-share]
+verify_jwt = false
+
 [functions.bulk-insert-contacts]
 verify_jwt = true
 
 [functions.llm-proxy]
+verify_jwt = false
+
+[functions.help-email]
 verify_jwt = false

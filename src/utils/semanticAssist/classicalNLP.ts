@@ -12,6 +12,7 @@
 
 import { SearchQuery } from "@/types/searchQuery";
 import { isDebugMode } from "@/utils/ai";
+import { devLog } from "@/lib/devLog";
 
 /**
  * Comprehensive synonym maps for contact search
@@ -151,7 +152,7 @@ function inferResponsibilities(query: string): string[] {
   });
   
   if (isDebugMode() && responsibilities.size > 0) {
-    console.log('[ClassicalNLP] Inferred responsibilities:', Array.from(responsibilities));
+    devLog('[ClassicalNLP] Inferred responsibilities:', Array.from(responsibilities));
   }
   
   return Array.from(responsibilities);
@@ -165,7 +166,7 @@ function extractCapability(query: string): string | null {
     const match = query.match(regex);
     if (match && match[1]) {
       if (isDebugMode()) {
-        console.log(`[ClassicalNLP] Matched pattern: ${patternName}, extracted: "${match[1]}"`);
+        devLog(`[ClassicalNLP] Matched pattern: ${patternName}, extracted: "${match[1]}"`);
       }
       return match[1].trim();
     }
@@ -223,7 +224,7 @@ export function enhanceQueryWithClassicalNLP(
 ): SearchQuery {
   try {
     if (isDebugMode()) {
-      console.log('[ClassicalNLP] Processing query:', query);
+      devLog('[ClassicalNLP] Processing query:', query);
     }
     
     // Start with fallback
@@ -239,8 +240,8 @@ export function enhanceQueryWithClassicalNLP(
       const expandedTerms = expandSynonyms(capability);
       
       if (isDebugMode()) {
-        console.log('[ClassicalNLP] Capability:', capability);
-        console.log('[ClassicalNLP] Expanded terms:', expandedTerms);
+        devLog('[ClassicalNLP] Capability:', capability);
+        devLog('[ClassicalNLP] Expanded terms:', expandedTerms);
       }
       
       // Infer responsibilities
@@ -252,7 +253,7 @@ export function enhanceQueryWithClassicalNLP(
         enhanced.explanation = `Looking for contacts with skills: ${responsibilities.map(r => r.replace('RESP_', '').toLowerCase()).join(', ')}`;
         
         if (isDebugMode()) {
-          console.log('[ClassicalNLP] Enhanced with responsibilities:', responsibilities);
+          devLog('[ClassicalNLP] Enhanced with responsibilities:', responsibilities);
         }
       }
     }
@@ -274,12 +275,12 @@ export function enhanceQueryWithClassicalNLP(
       enhanced.semantic_hint = keyTerms.join(' ');
       
       if (isDebugMode()) {
-        console.log('[ClassicalNLP] Expanded semantic hint:', enhanced.semantic_hint);
+        devLog('[ClassicalNLP] Expanded semantic hint:', enhanced.semantic_hint);
       }
     }
     
     if (isDebugMode()) {
-      console.log('[ClassicalNLP] Enhanced query:', enhanced);
+      devLog('[ClassicalNLP] Enhanced query:', enhanced);
     }
     
     return enhanced;

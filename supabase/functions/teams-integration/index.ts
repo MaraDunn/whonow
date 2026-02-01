@@ -43,8 +43,8 @@ serve(async (req) => {
 
     const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID");
     const MICROSOFT_CLIENT_SECRET = Deno.env.get("MICROSOFT_CLIENT_SECRET");
-    // Teams access requires a work/school account; default to organizations (not "common") to avoid personal accounts.
-    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "organizations";
+    // "common" allows both personal (Outlook.com) and work/school accounts. Use MICROSOFT_TENANT_ID=organizations to restrict to work/school only.
+    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "common";
 
     // Check if this is an OAuth callback (GET request with code parameter)
     const url = new URL(req.url);
@@ -246,6 +246,31 @@ serve(async (req) => {
           if (!isAdminData) {
             return new Response(JSON.stringify({ 
               error: "Only organization admins can setup organization integrations" 
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+
+        // For user-level, require Pro tier or higher
+        if (scope === 'user') {
+          const { data: userTier } = await supabase.rpc('get_user_subscription_tier', { _user_id: user.id });
+          let effectiveTier = (userTier ?? 'starter') as string;
+          if (effectiveTier === 'starter' && profile?.company_id) {
+            const { data: companySub } = await supabase
+              .from('subscriptions')
+              .select('tier')
+              .eq('company_id', profile.company_id)
+              .eq('status', 'active')
+              .limit(1)
+              .maybeSingle();
+            if (companySub?.tier) effectiveTier = companySub.tier as string;
+          }
+          const allowedTiers = ['pro', 'team', 'business'];
+          if (!allowedTiers.includes(effectiveTier)) {
+            return new Response(JSON.stringify({
+              error: "Microsoft Teams integration requires a Pro subscription or higher.",
             }), {
               status: 403,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -561,6 +586,164 @@ serve(async (req) => {
         });
       }
 
+      case "share-contact": {
+        const { contactId, teamId, channelId } = params;
+
+        if (!contactId || !teamId || !channelId) {
+          return new Response(JSON.stringify({ error: "Contact ID, team ID, and channel ID are required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Resolve integration: org-first then user-level (mirror get-status)
+        let integration = null;
+        if (profile?.company_id) {
+          integration = await getValidIntegration(
+            supabase,
+            user.id,
+            MICROSOFT_CLIENT_ID,
+            MICROSOFT_CLIENT_SECRET,
+            MICROSOFT_TENANT_ID,
+            "organization",
+            profile.company_id
+          );
+        }
+        if (!integration) {
+          integration = await getValidIntegration(
+            supabase,
+            user.id,
+            MICROSOFT_CLIENT_ID,
+            MICROSOFT_CLIENT_SECRET,
+            MICROSOFT_TENANT_ID
+          );
+        }
+
+        if (!integration) {
+          return new Response(JSON.stringify({ error: "Teams not connected" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("*")
+          .eq("id", contactId)
+          .single();
+
+        if (!contact) {
+          return new Response(JSON.stringify({ error: "Contact not found" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const appUrl = (Deno.env.get("APP_URL") || "http://localhost:8080").replace(/\/$/, "");
+
+        const contactPayload = {
+          name: contact.name ?? "",
+          email: contact.email ?? "",
+          phone: contact.phone ?? "",
+          company: contact.company ?? "",
+          role: contact.role ?? "",
+          tags: contact.tags ?? [],
+          description: contact.description ?? "",
+          address: contact.address ?? "",
+          city: contact.city ?? "",
+          state: contact.state ?? "",
+          zipCode: contact.zip_code ?? "",
+          country: contact.country ?? "",
+          lastContactedAt: contact.last_contacted_at ?? "",
+          isClient: contact.is_client === true,
+        };
+
+        const tokenBytes = new Uint8Array(16);
+        crypto.getRandomValues(tokenBytes);
+        const shareToken = btoa(String.fromCharCode(...tokenBytes))
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { error: insertTokenError } = await supabase.from("contact_share_tokens").insert({
+          token: shareToken,
+          contact_payload: contactPayload,
+          expires_at: expiresAt,
+        });
+
+        if (insertTokenError) {
+          console.error("Failed to create share token:", insertTokenError);
+          return new Response(JSON.stringify({ error: "Failed to create share link" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const addToWhoNowUrl = `${appUrl}/import-contact?token=${shareToken}`;
+        const downloadCsvUrl = `${appUrl}/export-shared-contact?token=${shareToken}`;
+
+        const escapeHtml = (s: string) =>
+          String(s ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        const name = escapeHtml(contact.name ?? "");
+        const email = escapeHtml(contact.email || "N/A");
+        const phone = escapeHtml(contact.phone || "N/A");
+        const role = escapeHtml(contact.role || "N/A");
+        const company = escapeHtml(contact.company || "N/A");
+        const htmlContent = `
+<p><strong>${name}</strong></p>
+<p>Email: ${email}<br/>Phone: ${phone}<br/>Role: ${role}<br/>Company: ${company}</p>
+<p><a href="${addToWhoNowUrl}">Add to WhoNow</a> · <a href="${downloadCsvUrl}">Download CSV</a></p>
+`.trim();
+
+        const response = await fetch(
+          `${GRAPH_API_BASE}/teams/${teamId}/channels/${channelId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${integration.access_token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              body: {
+                contentType: "html",
+                content: htmlContent,
+              },
+            }),
+          }
+        );
+
+        const messageData = await response.json();
+
+        if (messageData.error) {
+          let userMessage = messageData.error.message || messageData.error.code || "Failed to post to channel";
+          if (messageData.error.code === "NotFound" || messageData.error.message?.includes("not found")) {
+            userMessage = "Channel not found. It may have been deleted or the app may not have access.";
+          } else if (messageData.error.code === "Forbidden" || messageData.error.message?.toLowerCase().includes("access")) {
+            userMessage = "The app doesn't have access to that channel. Add the app to the channel in Teams, then try again.";
+          }
+          return new Response(JSON.stringify({ error: userMessage }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        await supabase.from("integration_logs").insert({
+          integration_id: integration.id,
+          action: "share-contact",
+          status: "success",
+          details: { team_id: teamId, channel_id: channelId },
+        });
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       case "send-to-channel": {
         const { teamId, channelId, message } = params;
 
@@ -820,7 +1003,7 @@ async function getValidIntegration(
 
     // Refresh the token
     const tokenResponse = await fetch(
-      `https://login.microsoftonline.com/${tenantId || "organizations"}/oauth2/v2.0/token`,
+      `https://login.microsoftonline.com/${tenantId || "common"}/oauth2/v2.0/token`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },

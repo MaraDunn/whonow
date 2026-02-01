@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { devLog } from "@/lib/devLog";
 
 interface ScannedContact {
   name: string;
@@ -27,12 +28,22 @@ export function useBusinessCardScannerAI() {
   const startCamera = useCallback(async (videoElement: HTMLVideoElement) => {
     try {
       setError(null);
-      
+
+      // Stop any existing stream and clear the video first so a new load doesn't
+      // interrupt an in-flight play() ("play() request was interrupted by a new load").
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
       // Check if mediaDevices API is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Camera access is not supported in this browser. Please use a modern browser with HTTPS.");
       }
-      
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
       });
@@ -44,6 +55,7 @@ export function useBusinessCardScannerAI() {
       console.error("Camera error:", err);
       const e = typeof err === "object" && err !== null ? (err as { name?: string; message?: string }) : {};
       
+      const errMsg = String(e.message ?? "");
       let message = "Failed to access camera. ";
       if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
         message += "Please grant camera permission and try again.";
@@ -53,8 +65,10 @@ export function useBusinessCardScannerAI() {
         message += "Camera is already in use by another application.";
       } else if (e.name === "OverconstrainedError") {
         message += "No camera with requested capabilities found.";
+      } else if (errMsg.includes("interrupted") && errMsg.includes("load")) {
+        message += "Camera was restarted too soon. Please try again.";
       } else {
-        message += e.message || "Unknown error occurred.";
+        message += errMsg || "Unknown error occurred.";
       }
       
       setError(message);
@@ -72,7 +86,10 @@ export function useBusinessCardScannerAI() {
     }
   }, []);
 
-  const captureImage = useCallback((videoElement: HTMLVideoElement): string => {
+  const captureImage = useCallback((videoElement: HTMLVideoElement | null | undefined): string => {
+    if (!videoElement?.videoWidth || !videoElement?.videoHeight) {
+      throw new Error("Video not ready. Please wait for the camera to load before capturing.");
+    }
     const canvas = document.createElement("canvas");
     canvas.width = videoElement.videoWidth;
     canvas.height = videoElement.videoHeight;
@@ -88,15 +105,15 @@ export function useBusinessCardScannerAI() {
     setScannedContact(null);
 
     try {
-      console.log("=== Starting AI OCR (PaddleOCR) ===");
+      devLog("=== Starting AI OCR (PaddleOCR) ===");
       
       // Validate image before sending
       if (!imageBase64 || typeof imageBase64 !== 'string' || imageBase64.trim().length === 0) {
         throw new Error("Invalid image data. Please capture or upload a valid image.");
       }
       
-      console.log("Image data length:", imageBase64.length);
-      console.log("Image preview:", imageBase64.substring(0, 50) + "...");
+      devLog("Image data length:", imageBase64.length);
+      devLog("Image preview:", imageBase64.substring(0, 50) + "...");
       
       // Call the new AI-powered edge function
       const { data, error: functionError } = await supabase.functions.invoke(
@@ -142,8 +159,8 @@ export function useBusinessCardScannerAI() {
         throw new Error(errorMessage);
       }
 
-      console.log("=== AI OCR Complete ===");
-      console.log("Extracted contact:", data);
+      devLog("=== AI OCR Complete ===");
+      devLog("Extracted contact:", data);
 
       const contact: ScannedContact = {
         name: data.name || "",
@@ -167,9 +184,14 @@ export function useBusinessCardScannerAI() {
     }
   }, []);
 
-  const captureAndScan = useCallback(async (videoElement: HTMLVideoElement): Promise<ScannedContact | null> => {
+  const captureAndScan = useCallback(async (videoElement?: HTMLVideoElement | null): Promise<ScannedContact | null> => {
+    const el = videoElement ?? videoRef.current;
+    if (!el) {
+      setError("Camera not ready. Please start the camera first.");
+      return null;
+    }
     try {
-      const imageBase64 = captureImage(videoElement);
+      const imageBase64 = captureImage(el);
       setCapturedImage(imageBase64);
       stopCamera();
       return await scanImage(imageBase64);

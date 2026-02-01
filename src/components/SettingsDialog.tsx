@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, FileDown, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Link2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { AdminPdfImport } from "@/components/AdminPdfImport";
@@ -25,6 +25,9 @@ import { useProfile } from "@/hooks/useProfile";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSubscription } from "@/hooks/useSubscription";
+import { Contact } from "@/types/contact";
+import { Folder } from "@/types/folder";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -43,6 +46,12 @@ interface SettingsDialogProps {
     role?: string;
     tags?: string[];
   }>) => void;
+  /** For Export Contacts: folder list for "Contacts in folder" scope. */
+  folders?: Folder[];
+  /** For Export Contacts: fetch contacts for the given scope (all or folder). */
+  fetchContactsForExport?: (options: { folderId?: string | null }) => Promise<Contact[]>;
+  /** For Export Contacts: called with the selected contacts to export (parent builds CSV and downloads). */
+  onExportSelectedContacts?: (contacts: Contact[]) => void;
 }
 
 export function SettingsDialog({
@@ -55,6 +64,9 @@ export function SettingsDialog({
   isCompanyKeywords = false,
   canEditKeywords = true,
   onBulkImport,
+  folders = [],
+  fetchContactsForExport,
+  onExportSelectedContacts,
 }: SettingsDialogProps) {
   const [newKeyword, setNewKeyword] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
@@ -108,6 +120,14 @@ export function SettingsDialog({
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["general", "account", "organization"]));
   const [duplicateCleanupOpen, setDuplicateCleanupOpen] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+
+  // Export Contacts panel state
+  const [exportScope, setExportScope] = useState<"all" | "folder">("all");
+  const [exportFolderId, setExportFolderId] = useState<string | null>(null);
+  const [exportLoadedContacts, setExportLoadedContacts] = useState<Contact[]>([]);
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set());
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportHasLoaded, setExportHasLoaded] = useState(false);
 
   const handleAddKeyword = () => {
     if (newKeyword.trim()) {
@@ -355,17 +375,21 @@ export function SettingsDialog({
   }, [showOrganizationTab]);
 
   const categories = useMemo(() => {
+    const generalItems: Array<{ id: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+      { id: "general", label: "Appearance", icon: Palette },
+      { id: "keywords", label: "Keywords", icon: Tags },
+      { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
+      { id: "export-contacts", label: "Export Contacts", icon: FileDown },
+    ];
+    if (hasIntegrationsAccess) {
+      generalItems.push({ id: "integrations", label: "Integrations", icon: Link2 });
+    }
     const cats = [
       {
         id: "general",
         label: "General",
         icon: Palette,
-        items: [
-          { id: "general", label: "Appearance", icon: Palette },
-          { id: "keywords", label: "Keywords", icon: Tags },
-          { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
-          { id: "ai-settings", label: "AI Search", icon: Sparkles },
-        ],
+        items: generalItems,
       },
       {
         id: "account",
@@ -412,7 +436,7 @@ export function SettingsDialog({
     }
 
     return cats;
-  }, [showOrganizationTab, isAdmin, company, hasTeamFeatures]);
+  }, [showOrganizationTab, isAdmin, company, hasTeamFeatures, hasIntegrationsAccess]);
 
   // Safety check: redirect non-admin users away from admin-only categories
   useEffect(() => {
@@ -431,7 +455,11 @@ export function SettingsDialog({
         }
       }
     }
-  }, [selectedCategory, isAdmin, company, categories]);
+    // Redirect non-Pro users away from individual Integrations (e.g. deep link)
+    if (selectedCategory === "integrations" && !hasIntegrationsAccess) {
+      setSelectedCategory("general");
+    }
+  }, [selectedCategory, isAdmin, company, categories, hasIntegrationsAccess]);
 
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) return categories;
@@ -835,23 +863,178 @@ export function SettingsDialog({
               </div>
             )}
 
-            {/* AI Settings */}
-            {selectedCategory === "ai-settings" && (
-              <div className="space-y-4 p-4 sm:p-6 md:p-8">
+            {/* Export Contacts */}
+            {selectedCategory === "export-contacts" && (
+              <div className="space-y-6 p-4 sm:p-6 md:p-8">
                 <div>
-                  <h2 className="text-2xl font-semibold mb-2">AI Search Settings</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Configure AI-powered search features and model downloads.
+                  <h2 className="text-2xl font-semibold mb-2">Export Contacts</h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Choose a scope, load contacts, then select which contacts to export as CSV.
                   </p>
                 </div>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setAiSettingsOpen(true)}
-                  className="w-full"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Manage AI Features
-                </Button>
+                {fetchContactsForExport && onExportSelectedContacts ? (
+                  <>
+                    <Card>
+                      <CardContent className="pt-6 space-y-4">
+                        <div className="space-y-2">
+                          <Label>Scope</Label>
+                          <div className="flex flex-wrap gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="export-scope"
+                                checked={exportScope === "all"}
+                                onChange={() => setExportScope("all")}
+                                className="rounded-full"
+                              />
+                              <span className="text-sm">All contacts</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="export-scope"
+                                checked={exportScope === "folder"}
+                                onChange={() => setExportScope("folder")}
+                                className="rounded-full"
+                              />
+                              <span className="text-sm">Contacts in folder</span>
+                            </label>
+                          </div>
+                        </div>
+                        {exportScope === "folder" && folders.length > 0 && (
+                          <div className="space-y-2">
+                            <Label>Folder</Label>
+                            <select
+                              value={exportFolderId ?? ""}
+                              onChange={(e) => setExportFolderId(e.target.value || null)}
+                              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            >
+                              <option value="">Select a folder</option>
+                              {folders.map((f) => (
+                                <option key={f.id} value={f.id}>{f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <Button
+                          onClick={async () => {
+                            if (!fetchContactsForExport) return;
+                            const canLoad = exportScope === "all" || (exportScope === "folder" && exportFolderId);
+                            if (!canLoad) {
+                              if (exportScope === "folder") toast.error("Select a folder first");
+                              return;
+                            }
+                            setExportLoading(true);
+                            setExportHasLoaded(true);
+                            try {
+                              const contacts = await fetchContactsForExport({
+                                folderId: exportScope === "folder" ? exportFolderId : null,
+                              });
+                              setExportLoadedContacts(contacts);
+                              setExportSelectedIds(new Set(contacts.map((c) => c.id)));
+                            } catch (err) {
+                              const msg = err instanceof Error ? err.message : "Failed to load contacts";
+                              toast.error(msg);
+                            } finally {
+                              setExportLoading(false);
+                            }
+                          }}
+                          disabled={exportLoading || (exportScope === "folder" && !exportFolderId)}
+                        >
+                          {exportLoading ? "Loading…" : "Load contacts"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                    {exportLoadedContacts.length > 0 && (
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <CardTitle className="text-base">Select contacts to export</CardTitle>
+                            <div className="flex gap-2 text-sm">
+                              <button
+                                type="button"
+                                onClick={() => setExportSelectedIds(new Set(exportLoadedContacts.map((c) => c.id)))}
+                                className="text-primary hover:underline"
+                              >
+                                Select all
+                              </button>
+                              <span className="text-muted-foreground">|</span>
+                              <button
+                                type="button"
+                                onClick={() => setExportSelectedIds(new Set())}
+                                className="text-primary hover:underline"
+                              >
+                                Deselect all
+                              </button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <div className="max-h-[280px] overflow-y-auto border rounded-md divide-y">
+                            {exportLoadedContacts.map((contact) => (
+                              <label
+                                key={contact.id}
+                                className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer"
+                              >
+                                <Checkbox
+                                  checked={exportSelectedIds.has(contact.id)}
+                                  onCheckedChange={(checked) => {
+                                    setExportSelectedIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (checked === true) next.add(contact.id);
+                                      else next.delete(contact.id);
+                                      return next;
+                                    });
+                                  }}
+                                />
+                                <span className="text-sm font-medium truncate">{contact.name}</span>
+                                {contact.email && (
+                                  <span className="text-sm text-muted-foreground truncate flex-1 min-w-0">{contact.email}</span>
+                                )}
+                              </label>
+                            ))}
+                          </div>
+                          <div className="mt-4 flex items-center justify-between gap-4">
+                            <p className="text-sm text-muted-foreground">
+                              {exportSelectedIds.size} selected
+                            </p>
+                            <Button
+                              onClick={() => {
+                                const selected = exportLoadedContacts.filter((c) => exportSelectedIds.has(c.id));
+                                if (selected.length === 0) {
+                                  toast.error("Select at least one contact");
+                                  return;
+                                }
+                                onExportSelectedContacts(selected);
+                                toast.success(`Exported ${selected.length} contact${selected.length !== 1 ? "s" : ""}`);
+                              }}
+                              disabled={exportSelectedIds.size === 0}
+                            >
+                              <FileDown className="h-4 w-4 mr-2" />
+                              Export {exportSelectedIds.size} selected as CSV
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {exportLoadedContacts.length === 0 && !exportLoading && (
+                      <p className="text-sm text-muted-foreground">
+                        {exportHasLoaded
+                          ? "No contacts in this scope."
+                          : 'Click "Load contacts" to load contacts for the selected scope.'}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Export is not available.</p>
+                )}
+              </div>
+            )}
+
+            {/* Integrations (individual Slack & Teams) - Pro+ only */}
+            {selectedCategory === "integrations" && hasIntegrationsAccess && (
+              <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                <IntegrationsPanel />
               </div>
             )}
 
@@ -1104,7 +1287,7 @@ export function SettingsDialog({
                               className="bg-muted"
                             />
                             <p className="text-xs text-muted-foreground">
-                              Contact support to change your organization name
+                              <a href="mailto:support@whonow.co" className="text-primary hover:underline">Contact support</a> to change your organization name
                             </p>
                           </div>
                           <Separator />
@@ -1395,8 +1578,8 @@ export function SettingsDialog({
                       <CardContent className="space-y-4 pt-6">
                         <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
                           <p className="text-sm text-amber-900 dark:text-amber-100">
-                            <strong>Note:</strong> These actions can affect your entire organization. 
-                            Contact support if you need help with organization management.
+                            <strong>Note:</strong> These actions can affect your entire organization.{" "}
+                            <a href="mailto:support@whonow.co" className="text-primary hover:underline">Contact support</a> if you need help with organization management.
                           </p>
                         </div>
                         {isSuperAdmin ? (

@@ -38,8 +38,9 @@ export const useAuth = () => {
       };
     }
 
-    const redirectUrl = `${window.location.origin}/`;
-    
+    // Must be allowlisted in Supabase Dashboard: Authentication → URL Configuration → Redirect URLs
+    const redirectUrl = `${window.location.origin}/auth`;
+
     const { error } = await supabase.auth.signUp({
       email,
       password,

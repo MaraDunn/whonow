@@ -4,6 +4,7 @@
  */
 
 import { type OCRStructure } from "./ocrParser";
+import { devLog } from "@/lib/devLog";
 
 export interface OCRAttempt {
   text: string;
@@ -41,7 +42,7 @@ export function mergeOCRResults(attempts: OCRAttempt[]): MergedOCRResult {
     };
   }
 
-  console.log("=== Merging OCR results from", attempts.length, "attempts ===");
+  devLog("=== Merging OCR results from", attempts.length, "attempts ===");
   
   // CRITICAL FIX: Filter out low-quality attempts before merging
   // Reject attempts with very low confidence or suspiciously long text (likely garbage)
@@ -51,19 +52,19 @@ export function mergeOCRResults(attempts: OCRAttempt[]): MergedOCRResult {
   const qualityAttempts = attempts.filter(attempt => {
     // Reject if confidence is too low (likely garbage)
     if (attempt.confidence < 15) {
-      console.log(`Filtering out ${attempt.variantName}: confidence too low (${attempt.confidence.toFixed(1)}%)`);
+      devLog(`Filtering out ${attempt.variantName}: confidence too low (${attempt.confidence.toFixed(1)}%)`);
       return false;
     }
     
     // Reject if text is suspiciously long (likely extracting background noise)
     if (attempt.text.length > maxReasonableLength && attempt.text.length > 200) {
-      console.log(`Filtering out ${attempt.variantName}: text too long (${attempt.text.length} chars, avg: ${avgTextLength.toFixed(0)})`);
+      devLog(`Filtering out ${attempt.variantName}: text too long (${attempt.text.length} chars, avg: ${avgTextLength.toFixed(0)})`);
       return false;
     }
     
     // Reject if text is too short (likely failed)
     if (attempt.text.length < 10) {
-      console.log(`Filtering out ${attempt.variantName}: text too short (${attempt.text.length} chars)`);
+      devLog(`Filtering out ${attempt.variantName}: text too short (${attempt.text.length} chars)`);
       return false;
     }
     
@@ -82,7 +83,7 @@ export function mergeOCRResults(attempts: OCRAttempt[]): MergedOCRResult {
     };
   }
   
-  console.log(`Using ${qualityAttempts.length}/${attempts.length} quality attempts for merging`);
+  devLog(`Using ${qualityAttempts.length}/${attempts.length} quality attempts for merging`);
 
   // Extract all lines from all attempts (using filtered quality attempts)
   const allLines: Array<{
@@ -121,7 +122,7 @@ export function mergeOCRResults(attempts: OCRAttempt[]): MergedOCRResult {
   // Group lines by position (Y-coordinate)
   const lineGroups = groupLinesByPosition(allLines);
 
-  console.log("Grouped into", lineGroups.length, "line positions");
+  devLog("Grouped into", lineGroups.length, "line positions");
 
   // For each position, pick the best line using confidence voting
   const mergedLines: Array<{ text: string; confidence: number; y: number; sources: string[] }> = [];
@@ -143,7 +144,7 @@ export function mergeOCRResults(attempts: OCRAttempt[]): MergedOCRResult {
   
   const sourcesUsed = [...new Set(mergedLines.flatMap(l => l.sources))];
 
-  console.log("Merged result:", {
+  devLog("Merged result:", {
     lines: mergedLines.length,
     avgConfidence: avgConfidence.toFixed(1),
     sources: sourcesUsed,
@@ -151,7 +152,7 @@ export function mergeOCRResults(attempts: OCRAttempt[]): MergedOCRResult {
   });
   
   // DEBUG: Log the actual merged text
-  console.log("Final merged text:", finalText);
+  devLog("Final merged text:", finalText);
 
   // Reconstruct structure
   const structure: OCRStructure = {

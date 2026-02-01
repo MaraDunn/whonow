@@ -69,7 +69,8 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
       "Up to 25 team members",
       "Shared contact folders",
       "Role-based permissions",
-      "Slack & Teams integration",
+      "Slack integration",
+      "Teams (coming soon)",
     ],
   },
   business: {
@@ -109,7 +110,7 @@ export const FEATURE_ACCESS: Record<FeatureName, SubscriptionTier[]> = {
   advanced_search: ["pro", "team", "business"],
   organization_creation: ["team", "business"],
   team_features: ["team", "business"],
-  integrations: ["team", "business"],
+  integrations: ["pro", "team", "business"],
   advanced_analytics: ["business"],
   api_access: ["business"],
   custom_branding: ["business"],
