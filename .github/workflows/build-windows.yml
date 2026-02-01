@@ -1,5 +1,8 @@
 # Build Tauri Windows installer (MSI/EXE) on GitHub-hosted Windows runner.
 # Trigger manually from Actions tab, or run locally: npm run build:windows
+#
+# Required: Add repository secrets for the frontend build (Settings → Secrets → Actions):
+#   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
 name: Build Windows
 
 on:
@@ -11,6 +14,10 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_APP_LAUNCH_MODE: live
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: Build Tauri (Windows)
-        run: npm run tauri:build:win
+        run: npm run tauri:build:win -- --verbose
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4

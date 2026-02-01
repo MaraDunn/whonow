@@ -37,7 +37,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["models/LaMini-Flan-T5-77M-onnx/*"],
+    "resources": [],
     "externalBin": [],
     "copyright": "",
     "category": "Productivity",
