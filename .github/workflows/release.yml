@@ -81,22 +81,34 @@ jobs:
           ls -la src-tauri/target/*/release/ 2>/dev/null || true
           ls -la src-tauri/target/release/ 2>/dev/null || true
 
-      - name: Locate macOS bundle
+      - name: Locate macOS bundle (find .dmg, then its bundle dir)
         id: macos-bundle
         run: |
-          if [ -d "src-tauri/target/release/bundle" ]; then
-            BUNDLE_DIR="src-tauri/target/release/bundle"
-          elif [ -d "src-tauri/target/aarch64-apple-darwin/release/bundle" ]; then
-            BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          elif [ -d "src-tauri/target/x86_64-apple-darwin/release/bundle" ]; then
-            BUNDLE_DIR="src-tauri/target/x86_64-apple-darwin/release/bundle"
-          else
-            echo "No bundle dir found. Contents of src-tauri/target:"
+          set -e
+          echo "=== Finding .dmg under src-tauri/target ==="
+          DMG=$(find src-tauri/target -name "*.dmg" -print -quit 2>/dev/null || true)
+          if [ -z "$DMG" ]; then
+            echo "::error::No .dmg found. The Tauri macOS build did not produce a DMG."
+            echo "Check the 'Build Tauri (macOS)' step above for compile/DMG errors."
+            echo "Common causes: Rust/Node build failure, or DMG script failing in CI (try --bundles dmg)."
+            echo "=== Contents of src-tauri/target ==="
             ls -laR src-tauri/target/ 2>/dev/null || true
             exit 1
           fi
+          echo "Found .dmg: $DMG"
+          # Walk up to the 'bundle' directory so we upload the whole bundle (e.g. bundle/macos/WhoNow.dmg)
+          BUNDLE_DIR=$(dirname "$DMG")
+          while [ "$BUNDLE_DIR" != "." ] && [ "$BUNDLE_DIR" != "/" ]; do
+            if [ "$(basename "$BUNDLE_DIR")" = "bundle" ]; then
+              break
+            fi
+            BUNDLE_DIR=$(dirname "$BUNDLE_DIR")
+          done
+          if [ "$(basename "$BUNDLE_DIR")" != "bundle" ]; then
+            BUNDLE_DIR=$(dirname "$DMG")
+          fi
           echo "dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
-          echo "Using $BUNDLE_DIR"
+          echo "Uploading bundle dir: $BUNDLE_DIR"
           ls -la "$BUNDLE_DIR"
           find "$BUNDLE_DIR" -name "*.dmg" || true
 
