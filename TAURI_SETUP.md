@@ -89,36 +89,13 @@ These are loaded from `.env` file, just like the web version.
 - ✅ All integrations (Slack, Teams, Google Contacts)
 - ✅ Stripe payment processing
 
-### Desktop-Specific Features
-- Auto-update: checks for new versions on launch and prompts to download/install
-
 ### Desktop-Specific Features (Available for Future)
 - File system access via Tauri APIs
 - System tray integration
 - Native notifications
+- Auto-update functionality
 - Custom protocol handlers
 - Native menus and dialogs
-
-## Auto-Update Setup
-
-The desktop app checks for updates on launch and shows a dialog when a newer version is available.
-
-**Before first release with updater:**
-
-1. **Generate signing keys** (once, store private key securely):
-   ```bash
-   npm run tauri signer generate -w ~/.tauri/whonow.key
-   ```
-   This creates `~/.tauri/whonow.key` (private) and `~/.tauri/whonow.key.pub` (public).
-
-2. **Configure public key** in `src-tauri/tauri.conf.json`:
-   - Replace `REPLACE_WITH_PUBLIC_KEY_FROM_tauri_signer_generate` with the contents of `~/.tauri/whonow.key.pub`
-
-3. **Add GitHub secret**: In your repo Settings → Secrets → Actions, add `TAURI_SIGNING_PRIVATE_KEY` with the contents of `~/.tauri/whonow.key`
-
-4. **Bump version** from `0.0.0` to a real SemVer (e.g. `1.0.0`) in `package.json` and `src-tauri/tauri.conf.json` before releasing
-
-5. **Release**: Push a tag (e.g. `v1.0.0`). The workflow builds, signs, and uploads installers plus `latest.json` for the updater.
 
 ## Configuration
 
@@ -167,6 +144,17 @@ OAuth redirects should work automatically through Supabase. If issues occur, che
 1. CSP allows the OAuth provider domains
 2. Supabase redirect URLs are configured correctly
 3. The app is using the correct Supabase project URL
+
+## Releasing
+
+The Release workflow runs on tag push (e.g. `v1.0.0`). **Version is set automatically from the tag**—no manual bump needed.
+
+1. Create and push a tag:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+2. The workflow sets `package.json` and `tauri.conf.json` version from the tag (v1.0.0 → 1.0.0), builds Windows and macOS installers, and creates a GitHub Release with the assets.
 
 ## Notes
 

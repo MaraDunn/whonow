@@ -59,7 +59,6 @@ for (const sigPath of macSigs) {
   const base = sigPath.replace(/\.sig$/, "");
   const basename = base.split(/[/\\]/).pop();
   const sigContent = readFileSync(sigPath, "utf8").trim();
-  // darwin-aarch64 for M1/M2, darwin-x86_64 for Intel (path or filename may indicate arch)
   const platform = sigPath.includes("aarch64") || basename.includes("aarch64")
     ? "darwin-aarch64"
     : "darwin-x86_64";

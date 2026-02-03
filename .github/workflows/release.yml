@@ -1,9 +1,12 @@
 # Build Windows + macOS installers on tag push and create a GitHub Release with the assets.
 # Push a tag (e.g. v1.0.0) to trigger: git tag v1.0.0 && git push origin v1.0.0
 #
+# Version is set automatically from the tag (e.g. v1.0.0 → 1.0.0) - no manual bump needed.
+#
 # Required repo secrets (Settings → Secrets → Actions):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
-#   TAURI_SIGNING_PRIVATE_KEY (for updater - run: npm run tauri signer generate -w ~/.tauri/whonow.key)
+#   TAURI_SIGNING_PRIVATE_KEY (contents of ~/.tauri/whonow.key)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (password you set when generating the key)
 name: Release
 
 on:
@@ -22,6 +25,7 @@ jobs:
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_APP_LAUNCH_MODE: live
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,6 +35,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Set version from tag
+        run: node scripts/set-version-from-tag.js
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -56,6 +63,7 @@ jobs:
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_APP_LAUNCH_MODE: live
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,6 +74,9 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Set version from tag
+        run: node scripts/set-version-from-tag.js
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -74,15 +85,6 @@ jobs:
 
       - name: Build Tauri (macOS)
         run: npm run tauri:build:mac -- --verbose
-
-      - name: List Tauri target (diagnostic)
-        run: |
-          echo "=== src-tauri/target structure ==="
-          find src-tauri/target -type d -name bundle 2>/dev/null || true
-          find src-tauri/target -name "*.dmg" 2>/dev/null || true
-          ls -la src-tauri/target/ 2>/dev/null || true
-          ls -la src-tauri/target/*/release/ 2>/dev/null || true
-          ls -la src-tauri/target/release/ 2>/dev/null || true
 
       - name: Locate macOS bundle (find .dmg, then its bundle dir)
         id: macos-bundle
@@ -93,13 +95,11 @@ jobs:
           if [ -z "$DMG" ]; then
             echo "::error::No .dmg found. The Tauri macOS build did not produce a DMG."
             echo "Check the 'Build Tauri (macOS)' step above for compile/DMG errors."
-            echo "Common causes: Rust/Node build failure, or DMG script failing in CI (try --bundles dmg)."
             echo "=== Contents of src-tauri/target ==="
             ls -laR src-tauri/target/ 2>/dev/null || true
             exit 1
           fi
           echo "Found .dmg: $DMG"
-          # Walk up to the 'bundle' directory so we upload the whole bundle (e.g. bundle/macos/WhoNow.dmg)
           BUNDLE_DIR=$(dirname "$DMG")
           while [ "$BUNDLE_DIR" != "." ] && [ "$BUNDLE_DIR" != "/" ]; do
             if [ "$(basename "$BUNDLE_DIR")" = "bundle" ]; then
