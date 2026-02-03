@@ -72,12 +72,29 @@ jobs:
       - name: Build Tauri (macOS)
         run: npm run tauri:build:mac -- --verbose
 
+      - name: Locate macOS bundle
+        run: |
+          if [ -d "src-tauri/target/release/bundle" ]; then
+            BUNDLE_DIR="src-tauri/target/release/bundle"
+          elif [ -d "src-tauri/target/aarch64-apple-darwin/release/bundle" ]; then
+            BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          elif [ -d "src-tauri/target/x86_64-apple-darwin/release/bundle" ]; then
+            BUNDLE_DIR="src-tauri/target/x86_64-apple-darwin/release/bundle"
+          else
+            echo "No bundle dir found. Contents of src-tauri/target:"
+            ls -laR src-tauri/target/ 2>/dev/null || true
+            exit 1
+          fi
+          echo "BUNDLE_DIR=$BUNDLE_DIR" >> $GITHUB_ENV
+          echo "Using $BUNDLE_DIR"
+          ls -la "$BUNDLE_DIR"
+          find "$BUNDLE_DIR" -name "*.dmg" || true
+
       - name: Upload macOS installer
         uses: actions/upload-artifact@v4
         with:
           name: macos-installer
-          # macos-latest is Apple Silicon; output is under aarch64-apple-darwin
-          path: src-tauri/target/aarch64-apple-darwin/release/bundle/
+          path: ${{ env.BUNDLE_DIR }}
 
   release:
     runs-on: ubuntu-latest
