@@ -5,8 +5,7 @@
 #
 # Required repo secrets (Settings → Secrets → Actions):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
-#   TAURI_SIGNING_PRIVATE_KEY (contents of ~/.tauri/whonow.key)
-#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (password you set when generating the key)
+#   TAURI_SIGNING_PRIVATE_KEY (contents of ~/.tauri/whonow.key; use key with NO password)
 name: Release
 
 on:
@@ -25,7 +24,6 @@ jobs:
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_APP_LAUNCH_MODE: live
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,7 +61,6 @@ jobs:
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_APP_LAUNCH_MODE: live
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
