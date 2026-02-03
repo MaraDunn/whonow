@@ -1,14 +1,21 @@
 import { useState } from "react";
-import { Monitor, Smartphone, Download, ExternalLink, BookmarkPlus } from "lucide-react";
+import { Monitor, Smartphone, Download, ExternalLink, BookmarkPlus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   detectPlatform,
   getDownloadUrl,
-  hasDownloadUrl,
-  getPlatformName,
   type Platform,
 } from "@/utils/downloadLinks";
+import { useReleaseDownloads } from "@/hooks/useReleaseDownloads";
 import { AddToHomeScreenDialog } from "@/components/landing/AddToHomeScreenDialog";
+
+/** Desktop download URL: runtime (GitHub release) if set, else env fallback. */
+function getDesktopDownloadUrl(
+  platform: Platform,
+  releaseUrls: Partial<Record<Platform, string>>
+): string | null {
+  return releaseUrls[platform] ?? getDownloadUrl(platform) ?? null;
+}
 
 interface PlatformConfig {
   platform: Platform;
@@ -59,9 +66,13 @@ const platforms: PlatformConfig[] = [
 export const DownloadSection = () => {
   const currentPlatform = detectPlatform();
   const [addToHomeDialogOpen, setAddToHomeDialogOpen] = useState(false);
+  const { releaseUrls, loading: releasesLoading } = useReleaseDownloads();
 
-  const handleDownload = (platform: Platform) => {
-    const url = getDownloadUrl(platform);
+  const getUrl = (platform: Platform, isMobile: boolean) =>
+    isMobile ? getDownloadUrl(platform) : getDesktopDownloadUrl(platform, releaseUrls);
+
+  const handleDownload = (platform: Platform, isMobile: boolean) => {
+    const url = getUrl(platform, isMobile);
     if (url) {
       window.open(url, "_blank", "noopener,noreferrer");
     }
@@ -91,9 +102,10 @@ export const DownloadSection = () => {
           <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {desktopPlatforms.map((platformConfig) => {
               const { platform, icon: Icon, label, description } = platformConfig;
-              const isAvailable = hasDownloadUrl(platform);
+              const url = getUrl(platform, false);
+              const isAvailable = !!url;
               const isCurrentPlatform = currentPlatform === platform;
-              const url = getDownloadUrl(platform);
+              const isLoading = releasesLoading && !getDownloadUrl(platform);
 
               return (
                 <div
@@ -127,12 +139,22 @@ export const DownloadSection = () => {
                   {/* Download Button */}
                   {isAvailable ? (
                     <Button
-                      onClick={() => handleDownload(platform)}
+                      onClick={() => handleDownload(platform, false)}
                       className="w-full gradient-hero text-primary-foreground hover:shadow-lg transition-shadow"
                       size="sm"
                     >
                       <Download className="mr-2 h-4 w-4" />
                       Download
+                    </Button>
+                  ) : isLoading ? (
+                    <Button
+                      disabled
+                      variant="outline"
+                      className="w-full"
+                      size="sm"
+                    >
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading…
                     </Button>
                   ) : (
                     <Button
@@ -161,9 +183,9 @@ export const DownloadSection = () => {
           <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {mobilePlatforms.map((platformConfig) => {
               const { platform, icon: Icon, label, description } = platformConfig;
-              const isAvailable = hasDownloadUrl(platform);
+              const url = getUrl(platform, true);
+              const isAvailable = !!url;
               const isCurrentPlatform = currentPlatform === platform;
-              const url = getDownloadUrl(platform);
 
               return (
                 <div
@@ -197,7 +219,7 @@ export const DownloadSection = () => {
                   {/* App Store Button */}
                   {isAvailable ? (
                     <Button
-                      onClick={() => handleDownload(platform)}
+                      onClick={() => handleDownload(platform, true)}
                       className="w-full gradient-hero text-primary-foreground hover:shadow-lg transition-shadow"
                       size="sm"
                     >

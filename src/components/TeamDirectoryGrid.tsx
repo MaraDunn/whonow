@@ -81,40 +81,47 @@ export function TeamDirectoryGrid({
     );
   }
 
-  // Responsive grid classes - only apply compact layout on mobile/tablet
+  // Match ContactGrid layout: same grid and card wrapper as Client Directory so cards are not condensed
   const gridClasses = isCompactMode
-    ? "grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3"
-    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6";
+    ? "grid grid-cols-1 sm:grid-cols-2 gap-0 sm:gap-3 items-stretch"
+    : "grid w-full min-w-0 gap-4 sm:gap-5 lg:gap-6 items-stretch auto-rows-[28rem] grid-cols-[repeat(auto-fill,minmax(280px,1fr))]";
+
+  const cardWrapperClass = isCompactMode
+    ? "min-h-0 overflow-hidden rounded-xl mb-4 last:mb-0 sm:mb-0"
+    : "min-h-[28rem] h-full overflow-hidden rounded-xl sm:rounded-2xl";
 
   const allSelected = members.length > 0 && members.every(m => selectedContactIds.has(m.id));
   const selectedCount = selectedContactIds.size;
 
   return (
-    <div className={gridClasses}>
-      {members.map((member, index) => (
-        <DraggableContactCard
-          key={member.id}
-          contact={member}
-          index={index}
-          action={action}
-          onEdit={onEditContact ? () => onEditContact(member) : () => {}}
-          onView={onViewContact ? () => onViewContact(member) : undefined}
-          isTrashView={false}
-          onDelete={onDeleteContact ? () => onDeleteContact(member.id) : undefined}
-          folder={member.folderId ? folderMap.get(member.folderId) : undefined}
-          folders={folders}
-          onUpdateFolder={onUpdateFolder}
-          showOwnershipBadge={showOwnershipBadge}
-          onMarkContacted={onMarkContacted ? () => onMarkContacted(member.id) : undefined}
-          onToggleClient={undefined}
-          compact={isCompactMode}
-          isExpanded={expandedContactId === member.id}
-          onToggleExpand={() => handleToggleExpand(member.id)}
-          isSelected={selectedContactIds.has(member.id)}
-          onSelect={onSelectContact ? (selected) => onSelectContact(member.id, selected) : undefined}
-          selectionMode={selectionMode}
-        />
-      ))}
+    <div className="min-w-0 overflow-x-hidden w-full">
+      <div className={gridClasses}>
+        {members.map((member, index) => (
+          <div key={member.id} className={cardWrapperClass}>
+            <DraggableContactCard
+              contact={member}
+              index={index}
+              action={action}
+              onEdit={onEditContact ? () => onEditContact(member) : () => {}}
+              onView={onViewContact ? () => onViewContact(member) : undefined}
+              isTrashView={false}
+              onDelete={onDeleteContact ? () => onDeleteContact(member.id) : undefined}
+              folder={member.folderId ? folderMap.get(member.folderId) : undefined}
+              folders={folders}
+              onUpdateFolder={onUpdateFolder}
+              showOwnershipBadge={showOwnershipBadge}
+              onMarkContacted={onMarkContacted ? () => onMarkContacted(member.id) : undefined}
+              onToggleClient={undefined}
+              compact={isCompactMode}
+              isExpanded={expandedContactId === member.id}
+              onToggleExpand={() => handleToggleExpand(member.id)}
+              isSelected={selectedContactIds.has(member.id)}
+              onSelect={onSelectContact ? (selected) => onSelectContact(member.id, selected) : undefined}
+              selectionMode={selectionMode}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

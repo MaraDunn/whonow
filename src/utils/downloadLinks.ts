@@ -1,10 +1,13 @@
 /**
  * Download links utility for native app downloads
- * 
+ *
+ * Desktop (Windows/macOS/Linux): The landing page prefers runtime URLs from the latest
+ * GitHub release when VITE_GITHUB_REPO is set (see useReleaseDownloads). These env vars
+ * are used as fallback or when no GitHub repo is configured.
+ *
  * Environment variables:
- * - VITE_DOWNLOAD_URL_WINDOWS
- * - VITE_DOWNLOAD_URL_MAC
- * - VITE_DOWNLOAD_URL_LINUX
+ * - VITE_GITHUB_REPO (optional) — "owner/repo" for runtime release fetch
+ * - VITE_DOWNLOAD_URL_WINDOWS, VITE_DOWNLOAD_URL_MAC, VITE_DOWNLOAD_URL_LINUX
  * - VITE_DOWNLOAD_URL_IOS (App Store link)
  * - VITE_DOWNLOAD_URL_ANDROID (Play Store link)
  */

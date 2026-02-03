@@ -4,11 +4,28 @@ How to make the live landing page download buttons start a download of the Tauri
 
 ---
 
+## Automated releases (tag push)
+
+The **Release** workflow (`.github/workflows/release.yml`) runs when you push a version tag. It builds Windows and macOS installers and creates a GitHub Release with the assets attached.
+
+1. Create and push a tag, e.g. `v1.0.0`:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+2. In GitHub Actions, the “Release” workflow will run, build both installers, and publish a release for that tag with the `.msi`, `.exe`, and `.dmg` attached.
+3. **Runtime download URLs (recommended):** Set `VITE_GITHUB_REPO=owner/repo` in your build env (e.g. Netlify). The landing page Download section will fetch the latest GitHub release and use its Windows/macOS/Linux assets automatically. No step 4 or redeploy needed when you push a new release.
+4. **Or use env vars:** Use the release asset URLs for `VITE_DOWNLOAD_URL_WINDOWS` and `VITE_DOWNLOAD_URL_MAC` (see Step 4 below). For a new version, create a new tag and update those env vars, then redeploy.
+
+Repo secrets required: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`.
+
+---
+
 ## Completed in repo
 
 - **`.env.example`** — Desktop download URL variables are documented (`VITE_DOWNLOAD_URL_WINDOWS`, `VITE_DOWNLOAD_URL_MAC`, `VITE_DOWNLOAD_URL_LINUX`).
 - **`netlify.toml`** — Comment added reminding you to set `VITE_DOWNLOAD_URL_WINDOWS` and `VITE_DOWNLOAD_URL_MAC` in Netlify UI.
-- **Code** — No code change needed; `DownloadSection` already uses these env vars and will start a download when the URLs point to installer files.
+- **Code** — `DownloadSection` uses runtime URLs from the latest GitHub release when `VITE_GITHUB_REPO` is set; otherwise it uses `VITE_DOWNLOAD_URL_*` env vars as fallback.
 
 ---
 
