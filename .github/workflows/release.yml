@@ -72,7 +72,17 @@ jobs:
       - name: Build Tauri (macOS)
         run: npm run tauri:build:mac -- --verbose
 
+      - name: List Tauri target (diagnostic)
+        run: |
+          echo "=== src-tauri/target structure ==="
+          find src-tauri/target -type d -name bundle 2>/dev/null || true
+          find src-tauri/target -name "*.dmg" 2>/dev/null || true
+          ls -la src-tauri/target/ 2>/dev/null || true
+          ls -la src-tauri/target/*/release/ 2>/dev/null || true
+          ls -la src-tauri/target/release/ 2>/dev/null || true
+
       - name: Locate macOS bundle
+        id: macos-bundle
         run: |
           if [ -d "src-tauri/target/release/bundle" ]; then
             BUNDLE_DIR="src-tauri/target/release/bundle"
@@ -85,7 +95,7 @@ jobs:
             ls -laR src-tauri/target/ 2>/dev/null || true
             exit 1
           fi
-          echo "BUNDLE_DIR=$BUNDLE_DIR" >> $GITHUB_ENV
+          echo "dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
           echo "Using $BUNDLE_DIR"
           ls -la "$BUNDLE_DIR"
           find "$BUNDLE_DIR" -name "*.dmg" || true
@@ -94,7 +104,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-installer
-          path: ${{ env.BUNDLE_DIR }}
+          path: ${{ steps.macos-bundle.outputs.dir }}
 
   release:
     runs-on: ubuntu-latest
