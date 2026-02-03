@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, FileDown, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Link2 } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, FileDown, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Link2, Download } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { AdminPdfImport } from "@/components/AdminPdfImport";
@@ -51,6 +51,10 @@ interface SettingsDialogProps {
   fetchContactsForExport?: (options: { folderId?: string | null }) => Promise<Contact[]>;
   /** For Export Contacts: called with the selected contacts to export (parent builds CSV and downloads). */
   onExportSelectedContacts?: (contacts: Contact[]) => void;
+  /** Desktop app: check for updates (shown only when canCheckUpdates) */
+  onCheckForUpdates?: () => void;
+  canCheckUpdates?: boolean;
+  isCheckingUpdates?: boolean;
 }
 
 export function SettingsDialog({
@@ -66,6 +70,9 @@ export function SettingsDialog({
   folders = [],
   fetchContactsForExport,
   onExportSelectedContacts,
+  onCheckForUpdates,
+  canCheckUpdates = false,
+  isCheckingUpdates = false,
 }: SettingsDialogProps) {
   const [newKeyword, setNewKeyword] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
@@ -633,6 +640,27 @@ export function SettingsDialog({
                   </Button>
                   </div>
                 </div>
+
+                {canCheckUpdates && onCheckForUpdates && (
+                  <>
+                    <Separator className="my-6" />
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-2">App updates</h2>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Check for new versions of the desktop app.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={onCheckForUpdates}
+                        disabled={isCheckingUpdates}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        {isCheckingUpdates ? "Checking..." : "Check for updates"}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

@@ -3,6 +3,7 @@
 #
 # Required repo secrets (Settings → Secrets → Actions):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
+#   TAURI_SIGNING_PRIVATE_KEY (for updater - run: npm run tauri signer generate -w ~/.tauri/whonow.key)
 name: Release
 
 on:
@@ -20,6 +21,7 @@ jobs:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_APP_LAUNCH_MODE: live
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,6 +55,7 @@ jobs:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_APP_LAUNCH_MODE: live
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -132,6 +135,9 @@ jobs:
         with:
           name: macos-installer
 
+      - name: Generate latest.json for Tauri updater
+        run: node scripts/generate-latest-json.js
+
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
@@ -139,8 +145,8 @@ jobs:
           name: WhoNow ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            windows-installer/*.msi
-            windows-installer/*.exe
-            macos-installer/**/*.dmg
+            windows-installer/**/*
+            macos-installer/**/*
+            latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

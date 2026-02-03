@@ -24,12 +24,13 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co wss://*.supabase.in https://api.stripe.com https://hooks.stripe.com https://accounts.google.com https://people.googleapis.com https://www.googleapis.com https://slack.com https://*.slack.com https://login.microsoftonline.com https://graph.microsoft.com https://portal.azure.com; img-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src 'self' https://accounts.google.com https://login.microsoftonline.com https://slack.com;"
+      "csp": "default-src 'self'; connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co wss://*.supabase.in https://api.stripe.com https://hooks.stripe.com https://accounts.google.com https://people.googleapis.com https://www.googleapis.com https://slack.com https://*.slack.com https://login.microsoftonline.com https://graph.microsoft.com https://portal.azure.com https://github.com https://*.github.com; img-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src 'self' https://accounts.google.com https://login.microsoftonline.com https://slack.com;"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -98,6 +99,12 @@
       "all": true,
       "request": true,
       "scope": ["https://**"]
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYwRkZEMTUyRTgyMzMyMjcKUldRbk1pUG9VdEgvWURuUFpadmR1RUFJbXNNeE9GZ2d4TjBCQTV2TXVUVXBUcms0U0pyT3B4VTUK%",
+      "endpoints": [
+        "https://github.com/MaraDunn/whonow/releases/latest/download/latest.json"
+      ]
     }
   }
 }

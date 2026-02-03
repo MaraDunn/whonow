@@ -24,6 +24,7 @@ const ImportContactsDialog = lazy(() => import("@/components/ImportContactsDialo
 const CompanySetupDialog = lazy(() => import("@/components/CompanySetupDialog").then((m) => ({ default: m.CompanySetupDialog })));
 const OnboardingTutorial = lazy(() => import("@/components/OnboardingTutorial").then((m) => ({ default: m.OnboardingTutorial })));
 const SelectionToolbar = lazy(() => import("@/components/SelectionToolbar").then((m) => ({ default: m.SelectionToolbar })));
+const AppUpdateDialog = lazy(() => import("@/components/AppUpdateDialog").then((m) => ({ default: m.AppUpdateDialog })));
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts, fetchAllContactsForExport } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
@@ -33,6 +34,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useSubscription } from "@/hooks/useSubscription";
 import { TEAMS_COMING_SOON } from "@/config/features";
 import { useTeamDirectoryContacts } from "@/hooks/useTeamDirectoryContacts";
+import { useAppUpdate } from "@/hooks/useAppUpdate";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,6 +76,23 @@ const IndexContent = () => {
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const {
+    update: appUpdate,
+    isChecking: appUpdateChecking,
+    isDownloading: appUpdateDownloading,
+    downloadProgress: appUpdateProgress,
+    checkForUpdates,
+    downloadAndInstall: appUpdateInstall,
+    dismissUpdate: dismissAppUpdate,
+    canCheckUpdates,
+  } = useAppUpdate();
+
+  // Check for app updates on mount (desktop only, after short delay)
+  useEffect(() => {
+    if (!canCheckUpdates || !checkForUpdates) return;
+    const timer = setTimeout(checkForUpdates, 1500);
+    return () => clearTimeout(timer);
+  }, [canCheckUpdates, checkForUpdates]);
 
   // Launch onboarding tutorial for new users after company setup is done (or skipped), with a short delay
   useEffect(() => {
@@ -1071,6 +1090,18 @@ const IndexContent = () => {
                 />
                 )}
 
+                {appUpdate && (
+                  <Suspense fallback={null}>
+                    <AppUpdateDialog
+                      update={appUpdate}
+                      isDownloading={appUpdateDownloading}
+                      downloadProgress={appUpdateProgress}
+                      onDownload={() => appUpdateInstall()}
+                      onDismiss={dismissAppUpdate}
+                    />
+                  </Suspense>
+                )}
+
                 <HelpDialog
                 open={helpDialogOpen}
                 onOpenChange={setHelpDialogOpen}
@@ -1097,6 +1128,9 @@ const IndexContent = () => {
                 <SettingsDialog
                 open={settingsOpen}
                 onOpenChange={setSettingsOpen}
+                onCheckForUpdates={checkForUpdates}
+                canCheckUpdates={canCheckUpdates}
+                isCheckingUpdates={appUpdateChecking}
                 keywords={keywords}
                 onAddKeyword={addKeyword}
                 onRemoveKeyword={removeKeyword}
