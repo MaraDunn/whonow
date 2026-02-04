@@ -723,14 +723,14 @@ const ContactCardComponent = function ContactCard({
       data-onboarding-contact-card={index === 0 ? "" : undefined}
       onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
       className={cn(
-        "group relative p-5 rounded-xl sm:rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col overflow-hidden box-border h-full max-h-full min-h-0 outline-none",
+        "group relative p-5 rounded-xl sm:rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col overflow-hidden box-border outline-none",
         selectionMode 
           ? isSelected 
             ? "border-primary bg-primary/5 shadow-md" 
             : "border-border bg-card"
           : "border-border bg-card gradient-card shadow-card hover:shadow-card-hover hover:border-primary/30"
       )}
-      style={{ animationDelay: `${index * 50}ms`, minHeight: CARD_H_DESKTOP }}
+      style={{ animationDelay: `${index * 50}ms`, height: CARD_H_DESKTOP }}
     >
       {/* Selection checkbox */}
       {selectionMode && onSelect && (
