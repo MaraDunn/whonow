@@ -37,7 +37,7 @@ jobs:
       - name: Set version from tag
         run: node scripts/set-version-from-tag.js
 
-      - name: Prepare updater signing key (payload file)
+      - name: Prepare updater signing key (full minisign file)
         shell: pwsh
         env:
           KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -49,27 +49,17 @@ jobs:
           $keyPath = Join-Path $env:USERPROFILE ".tauri\whonow.key"
           New-Item -ItemType Directory -Force -Path (Split-Path $keyPath) | Out-Null
 
-          # Accept either:
-          # - raw minisign key file contents (2 lines: "untrusted comment: ..." + base64 payload)
-          # - base64 of the entire minisign key file
+          # Accept either base64-of-file OR raw minisign file text.
           $trim = $keySecret.Trim()
-          $decodedText = $trim
           try {
             $bytes = [System.Convert]::FromBase64String($trim)
-            $decodedText = [System.Text.Encoding]::UTF8.GetString($bytes)
-            Write-Host "Decoded base64-of-file secret"
+            [System.IO.File]::WriteAllBytes($keyPath, $bytes)
+            Write-Host "Decoded base64-of-file into $keyPath"
           } catch {
-            Write-Host "Using raw key file contents secret"
+            # Secret is raw minisign key file text.
+            Set-Content -Path $keyPath -Value $keySecret -NoNewline -Encoding utf8
+            Write-Host "Wrote raw key file contents into $keyPath"
           }
-
-          $lines = $decodedText -split "(`r`n|`n|`r)" | Where-Object { $_.Trim() -ne "" }
-          if ($lines.Count -lt 1) { throw "Signing key is empty after decoding" }
-          $payload = $lines[-1].Trim()
-          if ($payload -match "\s") { throw "Signing key payload contains whitespace; expected single-line base64." }
-
-          # Write ONLY the base64 payload line to the file (what tauri CLI expects to decode).
-          Set-Content -Path $keyPath -Value $payload -NoNewline -Encoding ascii
-          Write-Host "Wrote signing payload to $keyPath"
 
           "TAURI_SIGNING_PRIVATE_KEY=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -126,7 +116,7 @@ jobs:
       - name: Set version from tag
         run: node scripts/set-version-from-tag.js
 
-      - name: Prepare updater signing key (payload file)
+      - name: Prepare updater signing key (full minisign file)
         env:
           KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -138,20 +128,12 @@ jobs:
           fi
           mkdir -p "$HOME/.tauri"
           key_path="$HOME/.tauri/whonow.key"
-          decoded="$KEY_SECRET"
-          if decoded_try="$(printf "%s" "$KEY_SECRET" | base64 -d 2>/dev/null)" || decoded_try="$(printf "%s" "$KEY_SECRET" | base64 --decode 2>/dev/null)"; then
-            decoded="$decoded_try"
-            echo "Decoded base64-of-file secret"
+          if printf "%s" "$KEY_SECRET" | base64 -d > "$key_path" 2>/dev/null || printf "%s" "$KEY_SECRET" | base64 --decode > "$key_path" 2>/dev/null; then
+            echo "Decoded base64-of-file into $key_path"
           else
-            echo "Using raw key file contents secret"
+            printf "%s" "$KEY_SECRET" > "$key_path"
+            echo "Wrote raw key file contents into $key_path"
           fi
-          payload="$(printf "%s" "$decoded" | tr -d '\r' | awk 'NF{last=$0} END{print last}')"
-          if printf "%s" "$payload" | grep -qE '[[:space:]]'; then
-            echo "::error::Signing key payload contains whitespace; expected single-line base64."
-            exit 1
-          fi
-          printf "%s" "$payload" > "$key_path"
-          echo "Wrote signing payload to $key_path"
           echo "TAURI_SIGNING_PRIVATE_KEY=$key_path" >> "$GITHUB_ENV"
           if [ -n "${KEY_PASSWORD:-}" ]; then
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
