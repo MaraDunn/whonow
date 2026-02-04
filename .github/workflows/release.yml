@@ -1,12 +1,12 @@
-# Build Windows + macOS installers on tag push and create a GitHub Release with the assets.
+# Build Windows + macOS installers on tag push using official tauri-action.
 # Push a tag (e.g. v1.0.0) to trigger: git tag v1.0.0 && git push origin v1.0.0
 #
-# Version is set automatically from the tag (e.g. v1.0.0 → 1.0.0) - no manual bump needed.
+# Version is set automatically from the tag (e.g. v1.0.0 → 1.0.0).
 #
 # Required repo secrets (Settings → Secrets → Actions):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
-#   TAURI_SIGNING_PRIVATE_KEY (raw key file contents OR base64 of the key file)
-#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (optional - only if you set a password)
+#   TAURI_SIGNING_PRIVATE_KEY (contents of ~/.tauri/whonow.key - copy with pbcopy)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (password you set - or omit this secret if no password)
 name: Release
 
 on:
@@ -18,205 +18,54 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    env:
-      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-      VITE_APP_LAUNCH_MODE: live
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Set version from tag
-        run: node scripts/set-version-from-tag.js
-
-      - name: Prepare updater signing key (full minisign file)
-        shell: pwsh
-        env:
-          KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          $keySecret = $env:KEY_SECRET
-          if (-not $keySecret.Trim()) { throw "TAURI_SIGNING_PRIVATE_KEY secret is missing/empty." }
-
-          $keyPath = Join-Path $env:USERPROFILE ".tauri\whonow.key"
-          New-Item -ItemType Directory -Force -Path (Split-Path $keyPath) | Out-Null
-
-          # Accept either base64-of-file OR raw minisign file text.
-          $trim = $keySecret.Trim()
-          try {
-            $bytes = [System.Convert]::FromBase64String($trim)
-            [System.IO.File]::WriteAllBytes($keyPath, $bytes)
-            Write-Host "Decoded base64-of-file into $keyPath"
-          } catch {
-            # Secret is raw minisign key file text - write as-is.
-            [System.IO.File]::WriteAllText($keyPath, $keySecret, [System.Text.Encoding]::UTF8)
-            Write-Host "Wrote raw key file contents into $keyPath"
-          }
-
-          "TAURI_SIGNING_PRIVATE_KEY=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $pw = $env:KEY_PASSWORD
-          if ($pw -ne $null -and $pw -ne "") {
-            "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$pw" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          }
-
-      - name: Debug signing env (Windows)
-        shell: pwsh
-        run: |
-          $p = $env:TAURI_SIGNING_PRIVATE_KEY
-          if (-not $p) { throw "TAURI_SIGNING_PRIVATE_KEY not set" }
-          Write-Host "TAURI_SIGNING_PRIVATE_KEY=$p"
-          if (-not (Test-Path $p)) { throw "Key file not found at $p" }
-          $len = (Get-Item $p).Length
-          Write-Host "key_file_bytes=$len"
-          $lines = (Get-Content $p | Measure-Object -Line).Lines
-          Write-Host "key_file_lines=$lines"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Tauri (Windows)
-        run: npm run tauri:build:win -- --verbose
-
-      - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-installer
-          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/
-
-  build-macos:
-    runs-on: macos-latest
-    env:
-      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-      VITE_APP_LAUNCH_MODE: live
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Set version from tag
-        run: node scripts/set-version-from-tag.js
-
-      - name: Prepare updater signing key (full minisign file)
-        env:
-          KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "${KEY_SECRET:-}" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is missing/empty."
-            exit 1
-          fi
-          mkdir -p "$HOME/.tauri"
-          key_path="$HOME/.tauri/whonow.key"
-          if printf "%s" "$KEY_SECRET" | base64 -d > "$key_path" 2>/dev/null || printf "%s" "$KEY_SECRET" | base64 --decode > "$key_path" 2>/dev/null; then
-            echo "Decoded base64-of-file into $key_path"
-          else
-            printf "%s" "$KEY_SECRET" > "$key_path"
-            echo "Wrote raw key file contents into $key_path"
-          fi
-          echo "TAURI_SIGNING_PRIVATE_KEY=$key_path" >> "$GITHUB_ENV"
-          if [ -n "${KEY_PASSWORD:-}" ]; then
-            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
-          fi
-
-      - name: Debug signing env (macOS)
-        run: |
-          set -euo pipefail
-          echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY"
-          test -f "$TAURI_SIGNING_PRIVATE_KEY"
-          echo "key_file_bytes=$(wc -c < \"$TAURI_SIGNING_PRIVATE_KEY\")"
-          echo "key_file_lines=$(wc -l < \"$TAURI_SIGNING_PRIVATE_KEY\")"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Tauri (macOS)
-        run: npm run tauri:build:mac -- --verbose
-
-      - name: Locate macOS bundle (find .dmg, then its bundle dir)
-        id: macos-bundle
-        run: |
-          set -e
-          echo "=== Finding .dmg under src-tauri/target ==="
-          DMG=$(find src-tauri/target -name "*.dmg" -print -quit 2>/dev/null || true)
-          if [ -z "$DMG" ]; then
-            echo "::error::No .dmg found. The Tauri macOS build did not produce a DMG."
-            echo "Check the 'Build Tauri (macOS)' step above for compile/DMG errors."
-            echo "=== Contents of src-tauri/target ==="
-            ls -laR src-tauri/target/ 2>/dev/null || true
-            exit 1
-          fi
-          echo "Found .dmg: $DMG"
-          BUNDLE_DIR=$(dirname "$DMG")
-          while [ "$BUNDLE_DIR" != "." ] && [ "$BUNDLE_DIR" != "/" ]; do
-            if [ "$(basename "$BUNDLE_DIR")" = "bundle" ]; then
-              break
-            fi
-            BUNDLE_DIR=$(dirname "$BUNDLE_DIR")
-          done
-          if [ "$(basename "$BUNDLE_DIR")" != "bundle" ]; then
-            BUNDLE_DIR=$(dirname "$DMG")
-          fi
-          echo "dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
-          echo "Uploading bundle dir: $BUNDLE_DIR"
-          ls -la "$BUNDLE_DIR"
-          find "$BUNDLE_DIR" -name "*.dmg" || true
-
-      - name: Upload macOS installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-installer
-          path: ${{ steps.macos-bundle.outputs.dir }}
-
   release:
-    runs-on: ubuntu-latest
-    needs: [build-windows, build-macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
     steps:
-      - name: Download Windows installer
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-installer
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Download macOS installer
-        uses: actions/download-artifact@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          name: macos-installer
+          node-version: '20'
+          cache: 'npm'
 
-      - name: Generate latest.json for Tauri updater
-        run: node scripts/generate-latest-json.js
+      - name: Set version from tag
+        run: node scripts/set-version-from-tag.js
 
-      - name: Create GitHub Release and upload assets
-        uses: softprops/action-gh-release@v2
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
         with:
-          tag_name: ${{ github.ref_name }}
-          name: WhoNow ${{ github.ref_name }}
-          generate_release_notes: true
-          files: |
-            windows-installer/**/*
-            macos-installer/**/*
-            latest.json
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and release with tauri-action
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_APP_LAUNCH_MODE: live
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'WhoNow ${{ github.ref_name }}'
+          releaseBody: 'See the assets to download and install.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+          uploadUpdaterJson: true
