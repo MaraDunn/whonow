@@ -2,13 +2,25 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-
-export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const RAW_SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
+
+function normalizeEnvValue(value: string | undefined): string {
+  let s = (value ?? "").trim();
+  // Users sometimes paste env vars with wrapping quotes into CI secrets/UI, e.g.:
+  // VITE_SUPABASE_URL="https://xyz.supabase.co"
+  // When injected at runtime those quotes become part of the value. Strip them.
+  while (
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
+    (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
 
 function isValidHttpUrl(value: string): boolean {
   try {
@@ -67,6 +79,13 @@ function createSupabaseStub(message: string) {
 }
 
 export const supabase = (() => {
+  const SUPABASE_URL = normalizeEnvValue(RAW_SUPABASE_URL);
+  const SUPABASE_PUBLISHABLE_KEY = normalizeEnvValue(RAW_SUPABASE_PUBLISHABLE_KEY);
+  const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+
+  // Exported for UI guards (Auth page etc.)
+  (globalThis as any).__WHONOW_SUPABASE_CONFIGURED__ = isSupabaseConfigured;
+
   const missingMsg =
     "Supabase configuration missing. Ensure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are set at build time.";
 
@@ -76,28 +95,26 @@ export const supabase = (() => {
     return createSupabaseStub(missingMsg);
   }
 
-  const trimmedUrl = (SUPABASE_URL ?? "").trim();
-  const trimmedKey = (SUPABASE_PUBLISHABLE_KEY ?? "").trim();
-  if (!trimmedUrl || !trimmedKey) {
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const msg =
       "Supabase configuration is empty. Ensure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are non-empty at build time.";
     console.error("[Supabase] Empty config:", {
-      urlPreview: safePreview(SUPABASE_URL, 32),
-      keyPreview: safePreview(SUPABASE_PUBLISHABLE_KEY, 12),
-      keyLength: (SUPABASE_PUBLISHABLE_KEY ?? "").length,
+      urlPreview: safePreview(RAW_SUPABASE_URL, 32),
+      keyPreview: safePreview(RAW_SUPABASE_PUBLISHABLE_KEY, 12),
+      keyLength: (RAW_SUPABASE_PUBLISHABLE_KEY ?? "").length,
     });
     return createSupabaseStub(msg);
   }
-  if (!isValidHttpUrl(trimmedUrl)) {
+  if (!isValidHttpUrl(SUPABASE_URL)) {
     const msg =
-      `Supabase URL is invalid: "${safePreview(trimmedUrl, 64)}". It must start with https://`;
-    console.error("[Supabase] Invalid URL:", { url: trimmedUrl });
+      `Supabase URL is invalid: "${safePreview(RAW_SUPABASE_URL, 64)}". It must start with https://`;
+    console.error("[Supabase] Invalid URL:", { url: RAW_SUPABASE_URL });
     return createSupabaseStub(msg);
   }
 
   try {
     const storage = createSafeStorage();
-    return createClient<Database>(trimmedUrl, trimmedKey, {
+    return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: {
         storage,
         persistSession: true,
@@ -112,3 +129,9 @@ export const supabase = (() => {
     );
   }
 })();
+
+// Export a stable boolean (computed from normalized values)
+export const isSupabaseConfigured =
+  typeof (globalThis as any).__WHONOW_SUPABASE_CONFIGURED__ === "boolean"
+    ? (globalThis as any).__WHONOW_SUPABASE_CONFIGURED__
+    : Boolean(normalizeEnvValue(RAW_SUPABASE_URL) && normalizeEnvValue(RAW_SUPABASE_PUBLISHABLE_KEY));
