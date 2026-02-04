@@ -10,6 +10,51 @@ export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function safePreview(value: string | undefined, keep: number): string {
+  if (!value) return "❌ MISSING";
+  const v = value.trim();
+  if (!v) return "❌ EMPTY";
+  if (v.length <= keep) return v;
+  return `${v.slice(0, keep)}...`;
+}
+
+// localStorage can throw in some WebView contexts; fall back to in-memory storage.
+function createSafeStorage() {
+  const mem = new Map<string, string>();
+  return {
+    getItem: (key: string) => {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return mem.get(key) ?? null;
+      }
+    },
+    setItem: (key: string, value: string) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        mem.set(key, value);
+      }
+    },
+    removeItem: (key: string) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        mem.delete(key);
+      }
+    },
+  };
+}
+
 function createSupabaseStub(message: string) {
   return new Proxy(
     {},
@@ -31,18 +76,39 @@ export const supabase = (() => {
     return createSupabaseStub(missingMsg);
   }
 
+  const trimmedUrl = (SUPABASE_URL ?? "").trim();
+  const trimmedKey = (SUPABASE_PUBLISHABLE_KEY ?? "").trim();
+  if (!trimmedUrl || !trimmedKey) {
+    const msg =
+      "Supabase configuration is empty. Ensure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are non-empty at build time.";
+    console.error("[Supabase] Empty config:", {
+      urlPreview: safePreview(SUPABASE_URL, 32),
+      keyPreview: safePreview(SUPABASE_PUBLISHABLE_KEY, 12),
+      keyLength: (SUPABASE_PUBLISHABLE_KEY ?? "").length,
+    });
+    return createSupabaseStub(msg);
+  }
+  if (!isValidHttpUrl(trimmedUrl)) {
+    const msg =
+      `Supabase URL is invalid: "${safePreview(trimmedUrl, 64)}". It must start with https://`;
+    console.error("[Supabase] Invalid URL:", { url: trimmedUrl });
+    return createSupabaseStub(msg);
+  }
+
   try {
-    return createClient<Database>(SUPABASE_URL!, SUPABASE_PUBLISHABLE_KEY!, {
+    const storage = createSafeStorage();
+    return createClient<Database>(trimmedUrl, trimmedKey, {
       auth: {
-        storage: localStorage,
+        storage,
         persistSession: true,
         autoRefreshToken: true,
       },
     });
   } catch (e) {
     console.error("[Supabase] Failed to initialize client:", e);
+    const details = e instanceof Error ? e.message : String(e);
     return createSupabaseStub(
-      "Supabase initialization failed. Check build-time env vars and runtime storage availability.",
+      `Supabase initialization failed: ${details}. Check build-time env vars and runtime storage availability.`,
     );
   }
 })();
