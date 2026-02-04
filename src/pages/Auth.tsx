@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 
 const emailSchema = z.string().email("Please enter a valid email address").max(254, "Email is too long");
@@ -96,20 +96,27 @@ const Auth = () => {
     if (!validateForm(false)) return;
 
     setIsSubmitting(true);
-    const { error } = await signIn(email, password);
-    setIsSubmitting(false);
+    try {
+      const { error } = await signIn(email, password);
 
-    if (error) {
-      if (error.message.includes("Invalid login credentials")) {
-        toast.error("Invalid email or password");
-      } else if (error.message.includes("Email not confirmed")) {
-        toast.error("Please confirm your email address");
-      } else {
-        toast.error(error.message);
+      if (error) {
+        if (error.message?.includes("Invalid login credentials")) {
+          toast.error("Invalid email or password");
+        } else if (error.message?.includes("Email not confirmed")) {
+          toast.error("Please confirm your email address");
+        } else {
+          toast.error(error.message || "Sign in failed.");
+        }
+        return;
       }
-    } else {
+
       toast.success("Welcome back!");
       navigate(redirectParam || "/app", { replace: true });
+    } catch (err) {
+      console.error("[AuthPage] handleSignIn threw:", err);
+      toast.error(err instanceof Error ? err.message : "Sign in failed.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -118,31 +125,44 @@ const Auth = () => {
     if (!validateForm(true)) return;
 
     setIsSubmitting(true);
-    const { error } = await signUp(email, password, fullName);
-    setIsSubmitting(false);
+    try {
+      const { error } = await signUp(email, password, fullName);
 
-    if (error) {
-      if (error.message.includes("User already registered")) {
-        toast.error("An account with this email already exists. Please sign in instead.");
-      } else {
-        toast.error(error.message);
+      if (error) {
+        if (error.message?.includes("User already registered")) {
+          toast.error("An account with this email already exists. Please sign in instead.");
+        } else {
+          toast.error(error.message || "Sign up failed.");
+        }
+        return;
       }
-    } else {
+
       toast.success("Check your email to verify your account.");
       setSignUpEmailSent(email);
+    } catch (err) {
+      console.error("[AuthPage] handleSignUp threw:", err);
+      toast.error(err instanceof Error ? err.message : "Sign up failed.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleResendVerification = async () => {
     if (!signUpEmailSent || resendCooldown > 0 || isResending) return;
     setIsResending(true);
-    const { error } = await supabase.auth.resend({ email: signUpEmailSent, type: "signup" });
-    setIsResending(false);
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Verification email sent. Check your inbox.");
-      setResendCooldown(60);
+    try {
+      const { error } = await supabase.auth.resend({ email: signUpEmailSent, type: "signup" });
+      if (error) {
+        toast.error(error.message || "Failed to resend verification email.");
+      } else {
+        toast.success("Verification email sent. Check your inbox.");
+        setResendCooldown(60);
+      }
+    } catch (err) {
+      console.error("[AuthPage] resend verification threw:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to resend verification email.");
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -155,17 +175,24 @@ const Auth = () => {
     }
 
     setIsResetting(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/auth`,
-    });
-    setIsResetting(false);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/auth`,
+      });
 
-    if (error) {
-      toast.error(error.message);
-    } else {
+      if (error) {
+        toast.error(error.message || "Failed to send reset email.");
+        return;
+      }
+
       toast.success("Password reset link sent! Check your email.");
       setShowForgotPassword(false);
       setResetEmail("");
+    } catch (err) {
+      console.error("[AuthPage] resetPasswordForEmail threw:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to send reset email.");
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -190,6 +217,11 @@ const Auth = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {!isSupabaseConfigured && (
+            <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              This app build is missing backend configuration and cannot sign in. Please reinstall from the latest release.
+            </div>
+          )}
           {signUpEmailSent ? (
             <div className="space-y-4">
               <div className="rounded-lg bg-muted/50 p-4 text-center">

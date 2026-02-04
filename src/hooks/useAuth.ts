@@ -62,17 +62,24 @@ export const useAuth = () => {
     // Must be allowlisted in Supabase Dashboard: Authentication → URL Configuration → Redirect URLs
     const redirectUrl = `${window.location.origin}/auth`;
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            full_name: fullName,
+          },
         },
-      },
-    });
-    return { error };
+      });
+      return { error };
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "Sign up failed due to an unexpected error.";
+      console.error("[Auth] signUp threw:", e);
+      return { error: { message } as any };
+    }
   };
 
   const signIn = async (email: string, password: string) => {
@@ -85,11 +92,18 @@ export const useAuth = () => {
       };
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      return { error };
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "Sign in failed due to an unexpected error.";
+      console.error("[Auth] signIn threw:", e);
+      return { error: { message } as any };
+    }
   };
 
   const signOut = async () => {
@@ -97,7 +111,14 @@ export const useAuth = () => {
     setSession(null);
     setUser(null);
     
-    const { error } = await supabase.auth.signOut();
+    let error: any = null;
+    try {
+      const res = await supabase.auth.signOut();
+      error = res.error;
+    } catch (e) {
+      console.error("[Auth] signOut threw:", e);
+      error = { message: e instanceof Error ? e.message : String(e) };
+    }
     
     // Treat "session not found" as success - user is already logged out server-side
     if (error && error.message?.toLowerCase().includes('session not found')) {
