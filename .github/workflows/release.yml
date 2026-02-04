@@ -56,8 +56,8 @@ jobs:
             [System.IO.File]::WriteAllBytes($keyPath, $bytes)
             Write-Host "Decoded base64-of-file into $keyPath"
           } catch {
-            # Secret is raw minisign key file text.
-            Set-Content -Path $keyPath -Value $keySecret -NoNewline -Encoding utf8
+            # Secret is raw minisign key file text - write as-is.
+            [System.IO.File]::WriteAllText($keyPath, $keySecret, [System.Text.Encoding]::UTF8)
             Write-Host "Wrote raw key file contents into $keyPath"
           }
 
