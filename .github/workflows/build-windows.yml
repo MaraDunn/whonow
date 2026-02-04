@@ -6,7 +6,12 @@
 name: Build Windows
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional semver version (e.g. 1.0.20). If omitted, run on a tag ref to auto-detect.'
+        required: false
+        type: string
 
 jobs:
   build:
@@ -24,6 +29,15 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Set version (tag or input)
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}" node scripts/set-version-from-tag.js
+          else
+            node scripts/set-version-from-tag.js
+          fi
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
