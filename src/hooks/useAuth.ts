@@ -9,23 +9,44 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+    let unsub: (() => void) | undefined;
+
+    try {
+      // Set up auth state listener FIRST
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
-      }
-    );
+      });
+      unsub = () => subscription.unsubscribe();
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+      // THEN check for existing session
+      supabase.auth
+        .getSession()
+        .then(({ data: { session } }) => {
+          setSession(session);
+          setUser(session?.user ?? null);
+          setLoading(false);
+        })
+        .catch((e) => {
+          console.error("[Auth] getSession failed:", e);
+          setLoading(false);
+        });
+    } catch (e) {
+      // If Supabase isn't configured, don't leave the app stuck on a spinner.
+      console.error("[Auth] Supabase init/auth setup failed:", e);
       setLoading(false);
-    });
+    }
 
-    return () => subscription.unsubscribe();
+    return () => {
+      try {
+        unsub?.();
+      } catch {
+        // ignore
+      }
+    };
   }, []);
 
   const signUp = async (email: string, password: string, fullName?: string) => {

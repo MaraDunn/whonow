@@ -29,6 +29,9 @@ export default defineConfig(({ mode }) => {
   const isTauri = process.env.TAURI_PLATFORM !== undefined;
   
   return {
+    // In Tauri production builds, use a relative base so assets resolve correctly
+    // from the custom protocol origin (avoids blank screen when /assets paths don't resolve).
+    base: isTauri ? "./" : "/",
     server: {
       host: "::",
       port: 8080,
