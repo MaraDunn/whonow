@@ -39,10 +39,11 @@ jobs:
 
       - name: Prepare updater signing key (file path)
         shell: pwsh
+        env:
+          KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          $keySecret = @"
-${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-"@
+          $keySecret = $env:KEY_SECRET
           if (-not $keySecret.Trim()) { throw "TAURI_SIGNING_PRIVATE_KEY secret is missing/empty." }
 
           $keyPath = Join-Path $env:USERPROFILE ".tauri\whonow.key"
@@ -59,8 +60,8 @@ ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
           "TAURI_SIGNING_PRIVATE_KEY=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          $pw = "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
-          if ($pw -ne "") {
+          $pw = $env:KEY_PASSWORD
+          if ($pw -ne $null -and $pw -ne "") {
             "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$pw" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           }
 
