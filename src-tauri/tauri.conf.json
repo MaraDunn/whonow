@@ -101,7 +101,7 @@
       "scope": ["https://**"]
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYwRkZEMTUyRTgyMzMyMjcKUldRbk1pUG9VdEgvWURuUFpadmR1RUFJbXNNeE9GZ2d4TjBCQTV2TXVUVXBUcms0U0pyT3B4VTUK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENGMkM1MkE5NTczOEU5QjUKUldTMTZUaFhxVklzenoySGRkWlZOSFFRK05VT0xnZnFpN2NzbXd6Rk9hUG1IWWs2UG4yMEo0R3QK",
       "endpoints": [
         "https://github.com/MaraDunn/whonow/releases/latest/download/latest.json"
       ]
