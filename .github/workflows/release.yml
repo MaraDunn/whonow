@@ -5,7 +5,7 @@
 #
 # Required repo secrets (Settings → Secrets → Actions):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
-#   TAURI_SIGNING_PRIVATE_KEY (either raw key file contents OR base64 of the key file)
+#   TAURI_SIGNING_PRIVATE_KEY (raw key file contents OR base64 of the key file)
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (optional - only if you set a password)
 name: Release
 
@@ -37,7 +37,7 @@ jobs:
       - name: Set version from tag
         run: node scripts/set-version-from-tag.js
 
-      - name: Prepare updater signing key (base64 payload)
+      - name: Prepare updater signing key (write key file)
         shell: pwsh
         env:
           KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -46,21 +46,21 @@ jobs:
           $keySecret = $env:KEY_SECRET
           if (-not $keySecret.Trim()) { throw "TAURI_SIGNING_PRIVATE_KEY secret is missing/empty." }
 
+          $keyPath = Join-Path $env:USERPROFILE ".tauri\whonow.key"
+          New-Item -ItemType Directory -Force -Path (Split-Path $keyPath) | Out-Null
+
           $trim = $keySecret.Trim()
-          $decodedText = $trim
           try {
             $bytes = [System.Convert]::FromBase64String($trim)
-            $decodedText = [System.Text.Encoding]::UTF8.GetString($bytes)
+            [System.IO.File]::WriteAllBytes($keyPath, $bytes)
+            Write-Host "Decoded base64 key into $keyPath"
           } catch {
-            # Not base64-of-file; treat as raw key file contents
+            # Not base64-of-file; treat as raw key file contents (minisign text)
+            Set-Content -Path $keyPath -Value $keySecret -NoNewline -Encoding utf8
+            Write-Host "Wrote raw key into $keyPath"
           }
 
-          # Minisign key file format has an "untrusted comment" line followed by base64 payload.
-          $lines = $decodedText -split "(`r`n|`n|`r)" | Where-Object { $_.Trim() -ne "" }
-          $keyB64 = $lines[-1].Trim()
-          if ($keyB64 -match "\s") { throw "Signing key payload contains whitespace; expected single-line base64." }
-
-          "TAURI_SIGNING_PRIVATE_KEY=$keyB64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "TAURI_SIGNING_PRIVATE_KEY=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           $pw = $env:KEY_PASSWORD
           if ($pw -ne $null -and $pw -ne "") {
@@ -70,10 +70,14 @@ jobs:
       - name: Debug signing env (Windows)
         shell: pwsh
         run: |
-          $val = $env:TAURI_SIGNING_PRIVATE_KEY
-          if (-not $val) { throw "TAURI_SIGNING_PRIVATE_KEY not set" }
-          Write-Host "tauri_signing_key_len=$($val.Length)"
-          if ($val -match "\s") { throw "TAURI_SIGNING_PRIVATE_KEY contains whitespace" }
+          $p = $env:TAURI_SIGNING_PRIVATE_KEY
+          if (-not $p) { throw "TAURI_SIGNING_PRIVATE_KEY not set" }
+          Write-Host "TAURI_SIGNING_PRIVATE_KEY=$p"
+          if (-not (Test-Path $p)) { throw "Key file not found at $p" }
+          $len = (Get-Item $p).Length
+          Write-Host "key_file_bytes=$len"
+          $lines = (Get-Content $p | Measure-Object -Line).Lines
+          Write-Host "key_file_lines=$lines"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -111,7 +115,7 @@ jobs:
       - name: Set version from tag
         run: node scripts/set-version-from-tag.js
 
-      - name: Prepare updater signing key (base64 payload)
+      - name: Prepare updater signing key (write key file)
         env:
           KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -121,19 +125,15 @@ jobs:
             echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is missing/empty."
             exit 1
           fi
-          decoded="$KEY_SECRET"
-          if decoded_try="$(printf "%s" "$KEY_SECRET" | base64 -d 2>/dev/null)" || decoded_try="$(printf "%s" "$KEY_SECRET" | base64 --decode 2>/dev/null)"; then
-            decoded="$decoded_try"
-            echo "Decoded base64-of-file secret"
+          mkdir -p "$HOME/.tauri"
+          key_path="$HOME/.tauri/whonow.key"
+          if printf "%s" "$KEY_SECRET" | base64 -d > "$key_path" 2>/dev/null || printf "%s" "$KEY_SECRET" | base64 --decode > "$key_path" 2>/dev/null; then
+            echo "Decoded base64 key into $key_path"
           else
-            echo "Using raw key file contents secret"
+            printf "%s" "$KEY_SECRET" > "$key_path"
+            echo "Wrote raw key into $key_path"
           fi
-          key_b64="$(printf "%s" "$decoded" | tr -d '\r' | awk 'NF{last=$0} END{print last}')"
-          if printf "%s" "$key_b64" | grep -qE '[[:space:]]'; then
-            echo "::error::Signing key payload contains whitespace; expected single-line base64."
-            exit 1
-          fi
-          echo "TAURI_SIGNING_PRIVATE_KEY=$key_b64" >> "$GITHUB_ENV"
+          echo "TAURI_SIGNING_PRIVATE_KEY=$key_path" >> "$GITHUB_ENV"
           if [ -n "${KEY_PASSWORD:-}" ]; then
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           fi
@@ -141,15 +141,10 @@ jobs:
       - name: Debug signing env (macOS)
         run: |
           set -euo pipefail
-          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY not set"
-            exit 1
-          fi
-          echo "tauri_signing_key_len=${#TAURI_SIGNING_PRIVATE_KEY}"
-          if printf "%s" "$TAURI_SIGNING_PRIVATE_KEY" | grep -qE '[[:space:]]'; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY contains whitespace"
-            exit 1
-          fi
+          echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY"
+          test -f "$TAURI_SIGNING_PRIVATE_KEY"
+          echo "key_file_bytes=$(wc -c < \"$TAURI_SIGNING_PRIVATE_KEY\")"
+          echo "key_file_lines=$(wc -l < \"$TAURI_SIGNING_PRIVATE_KEY\")"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
