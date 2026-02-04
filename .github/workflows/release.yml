@@ -53,7 +53,7 @@ jobs:
         run: npm ci
 
       - name: Build and release with tauri-action
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
@@ -68,4 +68,4 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
