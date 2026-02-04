@@ -5,7 +5,8 @@
 #
 # Required repo secrets (Settings → Secrets → Actions):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
-#   TAURI_SIGNING_PRIVATE_KEY (contents of ~/.tauri/whonow.key; use key with NO password)
+#   TAURI_SIGNING_PRIVATE_KEY (either raw key file contents OR base64 of the key file)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (optional - only if you set a password)
 name: Release
 
 on:
@@ -23,7 +24,6 @@ jobs:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_APP_LAUNCH_MODE: live
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +36,33 @@ jobs:
 
       - name: Set version from tag
         run: node scripts/set-version-from-tag.js
+
+      - name: Prepare updater signing key (file path)
+        shell: pwsh
+        run: |
+          $keySecret = @"
+${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+"@
+          if (-not $keySecret.Trim()) { throw "TAURI_SIGNING_PRIVATE_KEY secret is missing/empty." }
+
+          $keyPath = Join-Path $env:USERPROFILE ".tauri\whonow.key"
+          New-Item -ItemType Directory -Force -Path (Split-Path $keyPath) | Out-Null
+
+          $trim = $keySecret.Trim()
+          try {
+            $bytes = [System.Convert]::FromBase64String($trim)
+            [System.IO.File]::WriteAllBytes($keyPath, $bytes)
+          } catch {
+            # Fall back to writing raw (minisign) key content
+            Set-Content -Path $keyPath -Value $keySecret -NoNewline -Encoding utf8
+          }
+
+          "TAURI_SIGNING_PRIVATE_KEY=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $pw = "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
+          if ($pw -ne "") {
+            "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$pw" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -60,7 +87,6 @@ jobs:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_APP_LAUNCH_MODE: live
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,6 +99,29 @@ jobs:
 
       - name: Set version from tag
         run: node scripts/set-version-from-tag.js
+
+      - name: Prepare updater signing key (file path)
+        env:
+          KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEY_SECRET:-}" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is missing/empty."
+            exit 1
+          fi
+          mkdir -p "$HOME/.tauri"
+          key_path="$HOME/.tauri/whonow.key"
+          if printf "%s" "$KEY_SECRET" | base64 --decode > "$key_path" 2>/dev/null; then
+            echo "Decoded base64 key into $key_path"
+          else
+            printf "%s" "$KEY_SECRET" > "$key_path"
+            echo "Wrote raw key into $key_path"
+          fi
+          echo "TAURI_SIGNING_PRIVATE_KEY=$key_path" >> "$GITHUB_ENV"
+          if [ -n "${KEY_PASSWORD:-}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

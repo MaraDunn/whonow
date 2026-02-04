@@ -24,6 +24,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useTeamDirectoryContacts } from "@/hooks/useTeamDirectoryContacts";
+import { useAppUpdate } from "@/hooks/useAppUpdate";
+import { AppUpdateDialog } from "@/components/AppUpdateDialog";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,6 +59,25 @@ const IndexContent = () => {
   const [selectedTeamFolderId, setSelectedTeamFolderId] = useState<string | null>(null);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
+
+  const {
+    canCheckUpdates,
+    update: appUpdate,
+    isDownloading: isUpdateDownloading,
+    downloadProgress: updateProgress,
+    checkForUpdates,
+    downloadAndInstall,
+    dismissUpdate,
+  } = useAppUpdate();
+
+  // Desktop-only: check for updates shortly after mount.
+  useEffect(() => {
+    if (!canCheckUpdates) return;
+    const timer = setTimeout(() => {
+      checkForUpdates();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [canCheckUpdates, checkForUpdates]);
 
   // Refetch team contacts when directory becomes visible or team folder is selected
   useEffect(() => {
@@ -820,6 +841,16 @@ const IndexContent = () => {
                   />
                 );
               })()}
+
+              {appUpdate && (
+                <AppUpdateDialog
+                  update={appUpdate}
+                  isDownloading={isUpdateDownloading}
+                  downloadProgress={updateProgress}
+                  onDownload={downloadAndInstall}
+                  onDismiss={dismissUpdate}
+                />
+              )}
 
               {showDirectory ? (
                 <>
