@@ -65,6 +65,14 @@ jobs:
             "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$pw" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           }
 
+      - name: Debug signing env (Windows)
+        shell: pwsh
+        run: |
+          Write-Host "TAURI_SIGNING_PRIVATE_KEY=$env:TAURI_SIGNING_PRIVATE_KEY"
+          if (-not (Test-Path $env:TAURI_SIGNING_PRIVATE_KEY)) { throw "Key file not found" }
+          $len = (Get-Item $env:TAURI_SIGNING_PRIVATE_KEY).Length
+          Write-Host "key_file_bytes=$len"
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -113,7 +121,7 @@ jobs:
           fi
           mkdir -p "$HOME/.tauri"
           key_path="$HOME/.tauri/whonow.key"
-          if printf "%s" "$KEY_SECRET" | base64 --decode > "$key_path" 2>/dev/null; then
+          if printf "%s" "$KEY_SECRET" | base64 -d > "$key_path" 2>/dev/null || printf "%s" "$KEY_SECRET" | base64 --decode > "$key_path" 2>/dev/null; then
             echo "Decoded base64 key into $key_path"
           else
             printf "%s" "$KEY_SECRET" > "$key_path"
@@ -123,6 +131,13 @@ jobs:
           if [ -n "${KEY_PASSWORD:-}" ]; then
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           fi
+
+      - name: Debug signing env (macOS)
+        run: |
+          set -euo pipefail
+          echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY"
+          test -f "$TAURI_SIGNING_PRIVATE_KEY"
+          echo "key_file_bytes=$(wc -c < \"$TAURI_SIGNING_PRIVATE_KEY\")"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
