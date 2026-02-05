@@ -36,6 +36,17 @@ Ensure **Site URL** in your local Supabase Auth config (or `.env`) matches the U
 
 If Site URL is wrong, the logo may not load in the email and redirects may fail.
 
+### Logo not loading in the email
+
+If the verification email shows a broken image where the logo should be:
+
+1. **Supabase Dashboard** → **Authentication** → **URL Configuration**.
+2. Set **Site URL** to the **public URL of your web app** (the place where your app is deployed and where `/logo-icon.png` is served). For example: `https://app.whonow.com` or `https://whonow.co`.
+3. Do **not** use the Supabase project URL (e.g. `https://xxx.supabase.co`) or `tauri://localhost` as Site URL — neither serves your app’s assets, so the logo request will fail.
+4. Keep **Redirect URLs** as-is (you can still list both your web app and `tauri://localhost/auth` so verification works from desktop and web). Site URL only affects the *logo* image URL and default redirect; the actual link in the email uses the redirect URL from the sign-up request.
+
+After saving, new verification emails will use the correct logo URL.
+
 ## Optional: other auth emails
 
 The same layout (logo, colors, button + fallback link, footer) can be reused for:

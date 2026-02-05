@@ -7,6 +7,8 @@
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
 #   TAURI_SIGNING_PRIVATE_KEY (contents of ~/.tauri/whonow.key - copy with pbcopy)
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (password you set - or omit this secret if no password)
+# Optional: VITE_APP_URL as repo Variable or Secret (e.g. https://app.whonow.co) so
+# verification emails from the desktop app link to your web app, not tauri://localhost.
 name: Release
 
 on:
@@ -60,7 +62,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_APP_LAUNCH_MODE: live
-          VITE_APP_URL: ${{ vars.VITE_APP_URL }}
+          VITE_APP_URL: ${{ vars.VITE_APP_URL || secrets.VITE_APP_URL }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
