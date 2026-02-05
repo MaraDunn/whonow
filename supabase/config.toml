@@ -1,5 +1,9 @@
 project_id = "yinicwvgwdjlkwjegrun"
 
+[auth.email.template.confirmation]
+subject = "Verify your WhoNow account"
+content_path = "./supabase/templates/confirm-signup.html"
+
 [functions.parse-search-query]
 verify_jwt = false
 

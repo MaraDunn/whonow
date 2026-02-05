@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   release:
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -28,7 +29,7 @@ jobs:
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
           - platform: 'windows-latest'
-            args: ''
+            args: '--bundles msi'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -59,6 +60,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_APP_LAUNCH_MODE: live
+          VITE_APP_URL: ${{ vars.VITE_APP_URL }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify your WhoNow account</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); overflow: hidden;">
+          <!-- Header with logo -->
+          <tr>
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #eee;">
+              <img src="{{ .SiteURL }}/logo-icon.png" alt="WhoNow" width="56" height="56" style="display: block; margin: 0 auto 8px;" />
+              <span style="font-size: 18px; font-weight: 600; color: #1a1a1a;">WhoNow</span>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding: 32px;">
+              <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 600; color: #1a1a1a;">Verify your email</h1>
+              <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.5; color: #4a4a4a;">You signed up for WhoNow with <strong>{{ .Email }}</strong>. Click the button below to confirm your account and get started.</p>
+              <!-- Button CTA -->
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
+                <tr>
+                  <td style="border-radius: 8px; background: linear-gradient(135deg, #3DB8A3 0%, #3AB8D4 100%);">
+                    <a href="{{ .ConfirmationURL }}" target="_blank" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none;">Verify my email</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: #737373;">If the button doesn't work, copy and paste this link into your browser:</p>
+              <p style="margin: 0; font-size: 13px; word-break: break-all;"><a href="{{ .ConfirmationURL }}" style="color: #3DB8A3;">{{ .ConfirmationURL }}</a></p>
+              <p style="margin: 24px 0 0; font-size: 13px; color: #737373;">This link expires in 24 hours. If you didn't create an account with WhoNow, you can safely ignore this email.</p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 32px; background-color: #fafafa; border-top: 1px solid #eee; font-size: 12px; color: #737373; text-align: center;">
+              WhoNow – team directory and contacts
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

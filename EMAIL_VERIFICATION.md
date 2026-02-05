@@ -9,6 +9,10 @@ Users must verify their email address before they can use the app. This ensures 
 3. **Sign in**: If a user tries to sign in before verifying, they see "Please confirm your email address."
 4. **Protected routes**: If a session exists but the email is not confirmed (e.g. confirmation was enabled later), the user is redirected to `/auth` and asked to verify.
 
+## Email template (branded verification email)
+
+A professional, branded HTML template for the verification email lives in `supabase/templates/confirm-signup.html`. It includes WhoNow branding and a button CTA instead of a plain link. See [docs/EMAIL_TEMPLATES.md](docs/EMAIL_TEMPLATES.md) for how to apply it (Dashboard vs local config) and the **Site URL** requirement so the logo loads.
+
 ## Supabase configuration
 
 ### Confirm email
