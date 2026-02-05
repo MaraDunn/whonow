@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
-import { getAuthRedirectOrigin } from "@/utils/launchMode";
+import { getAuthRedirectOrigin, IS_WAITLIST_MODE_EFFECTIVE } from "@/utils/launchMode";
 
 const emailSchema = z.string().email("Please enter a valid email address").max(254, "Email is too long");
 const passwordSchema = z.string()
@@ -69,20 +69,18 @@ const Auth = () => {
     hash.includes("type=recovery") ||
     search.includes("type=recovery");
 
-  // Parse tokens from URL (hash or query) and set session explicitly so verification link always works
+  // Parse tokens from URL (hash or query) and set session explicitly so verification link always works.
+  // Do not clear the URL here — it would remove the hash before state updates and briefly show the sign-in form.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    const fromHash = location.hash.slice(1); // strip leading #
-    const fromSearch = location.search.slice(1); // strip leading ?
+    const fromHash = location.hash.slice(1);
+    const fromSearch = location.search.slice(1);
     const params = new URLSearchParams(fromHash || fromSearch);
     const accessToken = params.get("access_token");
     const refreshToken = params.get("refresh_token");
     if (accessToken && refreshToken) {
       supabase.auth
         .setSession({ access_token: accessToken, refresh_token: refreshToken })
-        .then(() => {
-          window.history.replaceState(null, "", window.location.pathname);
-        })
         .catch((e) => console.error("[Auth] setSession from URL failed:", e));
     }
   }, [location.hash, location.search]);
@@ -99,12 +97,17 @@ const Auth = () => {
     }
   }, [loading, user, isReturningFromEmailLink, hash, search]);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated. In waitlist mode, send verified users to landing with ?verified=1 so they see success there.
   useEffect(() => {
     if (!loading && user) {
-      navigate(redirectParam || "/app", { replace: true });
+      const fromCallback = isReturningFromEmailLink;
+      if (IS_WAITLIST_MODE_EFFECTIVE && fromCallback) {
+        navigate("/?verified=1", { replace: true });
+      } else {
+        navigate(redirectParam || "/app", { replace: true });
+      }
     }
-  }, [user, loading, navigate, redirectParam]);
+  }, [user, loading, navigate, redirectParam, isReturningFromEmailLink]);
 
   // Show message when redirected from ProtectedRoute due to unverified email
   useEffect(() => {

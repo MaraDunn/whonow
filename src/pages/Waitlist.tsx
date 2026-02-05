@@ -8,10 +8,23 @@ import { FAQSection } from "@/components/landing/FAQSection";
 import { WaitlistCTASection } from "@/components/landing/WaitlistCTASection";
 import { Footer } from "@/components/landing/Footer";
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 
 const Waitlist = () => {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("verified") === "1") {
+      toast.success("Email verified! You can sign in from the desktop app or when we launch.");
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("verified");
+        return next;
+      }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const hash = location.hash?.replace(/^#/, "");
