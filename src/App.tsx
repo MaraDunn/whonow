@@ -77,24 +77,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// In waitlist mode, /auth normally redirects to /. Allow Auth page only when the URL is an
-// email verification or password-reset callback (hash has token) so the link from the email works.
-const AuthRouteInWaitlistMode = () => {
-  const location = useLocation();
-  const isAuthCallback =
-    typeof location.hash === "string" &&
-    (location.hash.includes("access_token") ||
-      location.hash.includes("type=signup") ||
-      location.hash.includes("type=recovery"));
-  if (isAuthCallback) {
-    return (
-      <Suspense fallback={<RouteFallback />}>
-        <Auth />
-      </Suspense>
-    );
-  }
-  return <Navigate to="/" replace />;
-};
+// In waitlist mode, always render the Auth page at /auth so the email verification and
+// password-reset links (which redirect to /auth with token in hash) work. Otherwise
+// we'd redirect to / and the token would never be processed.
+const AuthRouteInWaitlistMode = () => (
+  <Suspense fallback={<RouteFallback />}>
+    <Auth />
+  </Suspense>
+);
 
 // Waitlist mode route guard - redirects non-public routes to home
 // Respects development mode (bypasses restrictions in dev)
@@ -103,16 +93,9 @@ const WaitlistRouteGuard = ({ children }: { children: React.ReactNode }) => {
   
   if (IS_WAITLIST_MODE_EFFECTIVE) {
     // Public routes allowed in waitlist mode (include shared-contact links so Slack links still open)
-    const publicRoutes = ["/", "/waitlist", "/privacy", "/terms", "/import-contact", "/export-shared-contact"];
+    const publicRoutes = ["/", "/waitlist", "/privacy", "/terms", "/import-contact", "/export-shared-contact", "/auth"];
     const isPublicRoute = publicRoutes.includes(location.pathname);
-    // Allow /auth when it's an auth callback (verification or password-reset link) so the token in the hash can be processed
-    const isAuthCallback =
-      location.pathname === "/auth" &&
-      typeof location.hash === "string" &&
-      (location.hash.includes("access_token") ||
-        location.hash.includes("type=signup") ||
-        location.hash.includes("type=recovery"));
-    if (!isPublicRoute && !isAuthCallback) {
+    if (!isPublicRoute) {
       return <Navigate to="/" replace />;
     }
   }
