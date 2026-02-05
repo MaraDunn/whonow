@@ -58,24 +58,46 @@ const Auth = () => {
     return () => clearInterval(t);
   }, [resendCooldown]);
 
-  // Detect return from email verification / password reset link (Supabase puts tokens in hash)
+  // Detect return from email verification / password reset (Supabase may put tokens in hash or query)
+  const hash = typeof location.hash === "string" ? location.hash : "";
+  const search = typeof location.search === "string" ? location.search : "";
   const isReturningFromEmailLink =
-    typeof location.hash === "string" &&
-    (location.hash.includes("access_token") ||
-      location.hash.includes("type=signup") ||
-      location.hash.includes("type=recovery"));
+    hash.includes("access_token") ||
+    search.includes("access_token") ||
+    hash.includes("type=signup") ||
+    search.includes("type=signup") ||
+    hash.includes("type=recovery") ||
+    search.includes("type=recovery");
+
+  // If tokens are in the query string, set the session explicitly (client may not auto-detect query)
+  useEffect(() => {
+    if (!isSupabaseConfigured || !search) return;
+    const params = new URLSearchParams(search);
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+    if (accessToken && refreshToken) {
+      supabase.auth
+        .setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(() => {
+          // Clear the tokens from the URL without reloading
+          const cleanUrl = window.location.pathname + (window.location.hash || "");
+          window.history.replaceState(null, "", cleanUrl);
+        })
+        .catch((e) => console.error("[Auth] setSession from URL failed:", e));
+    }
+  }, [search]);
 
   // When session is established after clicking email link, show success and redirect
   useEffect(() => {
     if (!loading && user && isReturningFromEmailLink && !hasShownVerifiedToast.current) {
       hasShownVerifiedToast.current = true;
-      if (location.hash.includes("type=recovery")) {
+      if (hash.includes("type=recovery") || search.includes("type=recovery")) {
         toast.success("You can now set your new password.");
       } else {
         toast.success("Email verified! Redirecting…");
       }
     }
-  }, [loading, user, isReturningFromEmailLink, location.hash]);
+  }, [loading, user, isReturningFromEmailLink, hash, search]);
 
   // Redirect if already authenticated
   useEffect(() => {

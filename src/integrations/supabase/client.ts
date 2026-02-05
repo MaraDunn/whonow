@@ -119,6 +119,7 @@ export const supabase = (() => {
         storage,
         persistSession: true,
         autoRefreshToken: true,
+        detectSessionInUrl: true,
       },
     });
   } catch (e) {
