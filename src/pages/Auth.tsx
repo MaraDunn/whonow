@@ -69,23 +69,23 @@ const Auth = () => {
     hash.includes("type=recovery") ||
     search.includes("type=recovery");
 
-  // If tokens are in the query string, set the session explicitly (client may not auto-detect query)
+  // Parse tokens from URL (hash or query) and set session explicitly so verification link always works
   useEffect(() => {
-    if (!isSupabaseConfigured || !search) return;
-    const params = new URLSearchParams(search);
+    if (!isSupabaseConfigured) return;
+    const fromHash = location.hash.slice(1); // strip leading #
+    const fromSearch = location.search.slice(1); // strip leading ?
+    const params = new URLSearchParams(fromHash || fromSearch);
     const accessToken = params.get("access_token");
     const refreshToken = params.get("refresh_token");
     if (accessToken && refreshToken) {
       supabase.auth
         .setSession({ access_token: accessToken, refresh_token: refreshToken })
         .then(() => {
-          // Clear the tokens from the URL without reloading
-          const cleanUrl = window.location.pathname + (window.location.hash || "");
-          window.history.replaceState(null, "", cleanUrl);
+          window.history.replaceState(null, "", window.location.pathname);
         })
         .catch((e) => console.error("[Auth] setSession from URL failed:", e));
     }
-  }, [search]);
+  }, [location.hash, location.search]);
 
   // When session is established after clicking email link, show success and redirect
   useEffect(() => {
@@ -248,8 +248,8 @@ const Auth = () => {
     );
   }
 
-  // Show "Confirming your email..." when user clicked the verification link and session is loading
-  if (isReturningFromEmailLink && loading) {
+  // Show "Confirming your email..." when URL has token params until we have a session (avoid flashing sign-in form)
+  if (isReturningFromEmailLink && !user) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 gap-4">
         <WhoNowLogo size="lg" showText={false} />
