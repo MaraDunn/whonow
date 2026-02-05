@@ -25,6 +25,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSubscription } from "@/hooks/useSubscription";
+import { getAuthRedirectOrigin } from "@/utils/launchMode";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -221,7 +222,7 @@ export function SettingsDialog({
     setIsSendingReset(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-        redirectTo: `${window.location.origin}/auth`,
+        redirectTo: `${getAuthRedirectOrigin()}/auth`,
       });
       if (error) throw error;
       toast.success("Password reset email sent");

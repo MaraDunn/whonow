@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { IS_WAITLIST_MODE_EFFECTIVE } from "@/utils/launchMode";
+import { IS_WAITLIST_MODE_EFFECTIVE, getAuthRedirectOrigin } from "@/utils/launchMode";
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -59,8 +59,9 @@ export const useAuth = () => {
       };
     }
 
-    // Must be allowlisted in Supabase Dashboard: Authentication → URL Configuration → Redirect URLs
-    const redirectUrl = `${window.location.origin}/auth`;
+    // Must be allowlisted in Supabase Dashboard: Authentication → URL Configuration → Redirect URLs.
+    // In desktop app, use web URL (VITE_APP_URL) so the email link opens in browser to a real page.
+    const redirectUrl = `${getAuthRedirectOrigin()}/auth`;
 
     try {
       const { error } = await supabase.auth.signUp({

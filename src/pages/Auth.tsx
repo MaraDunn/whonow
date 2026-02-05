@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { z } from "zod";
-import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
+import { getAuthRedirectOrigin } from "@/utils/launchMode";
 
 const emailSchema = z.string().email("Please enter a valid email address").max(254, "Email is too long");
 const passwordSchema = z.string()
@@ -32,9 +33,11 @@ function getSafeRedirect(redirect: string | null): string | null {
 
 const Auth = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const redirectParam = getSafeRedirect(searchParams.get("redirect"));
   const { user, loading, signIn, signUp } = useAuth();
+  const hasShownVerifiedToast = useRef(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -54,6 +57,25 @@ const Auth = () => {
     const t = setInterval(() => setResendCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
     return () => clearInterval(t);
   }, [resendCooldown]);
+
+  // Detect return from email verification / password reset link (Supabase puts tokens in hash)
+  const isReturningFromEmailLink =
+    typeof location.hash === "string" &&
+    (location.hash.includes("access_token") ||
+      location.hash.includes("type=signup") ||
+      location.hash.includes("type=recovery"));
+
+  // When session is established after clicking email link, show success and redirect
+  useEffect(() => {
+    if (!loading && user && isReturningFromEmailLink && !hasShownVerifiedToast.current) {
+      hasShownVerifiedToast.current = true;
+      if (location.hash.includes("type=recovery")) {
+        toast.success("You can now set your new password.");
+      } else {
+        toast.success("Email verified! Redirecting…");
+      }
+    }
+  }, [loading, user, isReturningFromEmailLink, location.hash]);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -177,7 +199,7 @@ const Auth = () => {
     setIsResetting(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/auth`,
+        redirectTo: `${getAuthRedirectOrigin()}/auth`,
       });
 
       if (error) {
@@ -200,6 +222,17 @@ const Auth = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Show "Confirming your email..." when user clicked the verification link and session is loading
+  if (isReturningFromEmailLink && loading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 gap-4">
+        <WhoNowLogo size="lg" showText={false} />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-muted-foreground">Confirming your email…</p>
       </div>
     );
   }
@@ -229,6 +262,9 @@ const Auth = () => {
                 <p className="font-medium">Check your email</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   We sent a verification link to <strong>{signUpEmailSent}</strong>. Click the link to verify your account, then sign in.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  If you don&apos;t see it, check your spam folder or use &quot;Resend verification email&quot; below.
                 </p>
               </div>
               <div className="flex flex-col gap-2">

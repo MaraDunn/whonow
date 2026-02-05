@@ -20,11 +20,9 @@
 
 ## Alternative: Configure Email (for production)
 
-If you need email confirmation for production:
+If users reach "Check your email" but **never receive the verification email**, Supabase’s default sender only delivers to **team members** and has a very low rate limit. You must configure **custom SMTP** so verification emails go to all users.
 
-1. Go to **Settings** → **Auth**
-2. Configure **SMTP settings** or use Supabase's email service
-3. Customize email templates in **Authentication** → **Email Templates**
+See **[AUTH_EMAIL_SETUP.md](./AUTH_EMAIL_SETUP.md)** for step-by-step SMTP setup (Resend, SendGrid, Brevo, etc.) and troubleshooting.
 
 ## Other Common Issues
 

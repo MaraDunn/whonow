@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
+import { getAuthRedirectOrigin } from "@/utils/launchMode";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -132,7 +133,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
 
     setIsResetting(true);
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/`,
+      redirectTo: `${getAuthRedirectOrigin()}/auth`,
     });
     setIsResetting(false);
 
@@ -194,6 +195,9 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
                 <p className="font-medium">Check your email</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   We sent a verification link to <strong>{signUpEmailSent}</strong>. Click the link to verify your account, then sign in.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  If you don&apos;t see it, check your spam folder or use &quot;Resend verification email&quot; below.
                 </p>
               </div>
               <div className="flex flex-col gap-2">

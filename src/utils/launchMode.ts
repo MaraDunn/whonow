@@ -124,3 +124,22 @@ export const isDesktopOrNativeApp = (): boolean => {
   });
   return false;
 };
+
+/**
+ * Origin to use for auth redirects (email verification, password reset).
+ * In the desktop app, email links open in the browser, so we must use a web URL
+ * (VITE_APP_URL) instead of tauri://localhost so the user lands on a real page.
+ */
+export const getAuthRedirectOrigin = (): string => {
+  if (typeof window === "undefined") return "";
+  const appUrl = (import.meta.env.VITE_APP_URL as string | undefined)?.trim();
+  if (isDesktopOrNativeApp() && appUrl) {
+    try {
+      const u = new URL(appUrl);
+      return u.origin;
+    } catch {
+      // fall through to window.location.origin
+    }
+  }
+  return window.location.origin;
+};
