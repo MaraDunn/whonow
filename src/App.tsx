@@ -77,6 +77,25 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// In waitlist mode, /auth normally redirects to /. Allow Auth page only when the URL is an
+// email verification or password-reset callback (hash has token) so the link from the email works.
+const AuthRouteInWaitlistMode = () => {
+  const location = useLocation();
+  const isAuthCallback =
+    typeof location.hash === "string" &&
+    (location.hash.includes("access_token") ||
+      location.hash.includes("type=signup") ||
+      location.hash.includes("type=recovery"));
+  if (isAuthCallback) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <Auth />
+      </Suspense>
+    );
+  }
+  return <Navigate to="/" replace />;
+};
+
 // Waitlist mode route guard - redirects non-public routes to home
 // Respects development mode (bypasses restrictions in dev)
 const WaitlistRouteGuard = ({ children }: { children: React.ReactNode }) => {
@@ -86,8 +105,14 @@ const WaitlistRouteGuard = ({ children }: { children: React.ReactNode }) => {
     // Public routes allowed in waitlist mode (include shared-contact links so Slack links still open)
     const publicRoutes = ["/", "/waitlist", "/privacy", "/terms", "/import-contact", "/export-shared-contact"];
     const isPublicRoute = publicRoutes.includes(location.pathname);
-    
-    if (!isPublicRoute) {
+    // Allow /auth when it's an auth callback (verification or password-reset link) so the token in the hash can be processed
+    const isAuthCallback =
+      location.pathname === "/auth" &&
+      typeof location.hash === "string" &&
+      (location.hash.includes("access_token") ||
+        location.hash.includes("type=signup") ||
+        location.hash.includes("type=recovery"));
+    if (!isPublicRoute && !isAuthCallback) {
       return <Navigate to="/" replace />;
     }
   }
@@ -145,9 +170,9 @@ const AppRoutes = () => {
               <Route path="/terms" element={<Suspense fallback={<RouteFallback />}><Terms /></Suspense>} />
               <Route path="/import-contact" element={<Suspense fallback={<RouteFallback />}><ImportContactPage /></Suspense>} />
               <Route path="/export-shared-contact" element={<Suspense fallback={<RouteFallback />}><ExportSharedContactPage /></Suspense>} />
-              {/* Block all other routes in waitlist mode */}
+              {/* Block all other routes in waitlist mode; allow /auth when it's an email verification or password-reset callback */}
               <Route path="/app" element={<Navigate to="/" replace />} />
-              <Route path="/auth" element={<Navigate to="/" replace />} />
+              <Route path="/auth" element={<AuthRouteInWaitlistMode />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </>
           ) : (
