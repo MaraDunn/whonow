@@ -131,7 +131,11 @@ const SYNONYM_MAP: Record<string, string[]> = {
   "bd": ["sales", "business development"],
   "revenue": ["sales"],
   "marketing": ["growth", "demand gen", "brand", "marketing", "marcom", "communications"],
-  "growth": ["marketing"],
+  "growth": ["marketing", "head of growth", "growth lead"],
+  "head of growth": ["growth", "marketing"],
+  "growth lead": ["growth", "marketing"],
+  "revops": ["sales", "operations", "revenue operations"],
+  "revenue operations": ["revops", "sales", "operations"],
   "demand gen": ["marketing", "demand generation"],
   "finance": ["accounting", "fpa", "fp&a", "financial planning", "accountant", "bookkeeping"],
   "accounting": ["finance", "accountant"],
@@ -365,18 +369,36 @@ const TIME_PATTERNS = {
     start.setDate(end.getDate() - 7); // Last 7 days
     return { start, end };
   },
+  "recently": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 7);
+    return { start, end };
+  },
+  "a while ago": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 30);
+    return { start, end };
+  },
+  "last quarter": () => {
+    const end = new Date();
+    const start = new Date();
+    start.setMonth(end.getMonth() - 3);
+    return { start, end };
+  },
 };
 
-// Relationship keywords mapping
+// Relationship keywords mapping (P3: relationship soft language)
 const RELATIONSHIP_KEYWORDS: Record<string, string[]> = {
   client: ["client", "clients", "customer", "customers"],
   prospect: ["prospect", "prospects", "lead", "leads", "potential"],
   vendor: ["vendor", "vendors", "supplier", "suppliers"],
   investor: ["investor", "investors", "vc", "venture", "capital"],
   friend: ["friend", "friends", "personal"],
-  colleague: ["colleague", "colleagues", "coworker", "coworkers", "teammate", "teammates"],
+  colleague: ["colleague", "colleagues", "coworker", "coworkers", "teammate", "teammates", "worked with"],
   partner: ["partner", "partners"],
-  contact: ["contact", "contacts", "person", "people"],
+  contact: ["contact", "contacts", "person", "people", "introduced by", "introduced"],
 };
 
 // Location synonyms
@@ -397,12 +419,12 @@ const LOCATION_KEYWORDS = new Set([
   "convention", "expo", "trade show", "workshop", "seminar"
 ]);
 
-// Interaction type keywords
+// Interaction type keywords (Tier 1 synonym expansion per NLP assessment)
 const INTERACTION_KEYWORDS = {
-  email: ["email", "emailed", "mail", "mailed", "message", "messaged", "sent"],
-  call: ["call", "called", "phone", "phoned", "ring", "rang", "dial", "dialed"],
-  meeting: ["meet", "met", "meeting", "met with", "saw", "see", "introduction", "intro"],
-  text: ["text", "texted", "sms", "messaged"],
+  email: ["email", "emailed", "mail", "mailed", "message", "messaged", "sent", "pinged", "reached out", "wrote"],
+  call: ["call", "called", "phone", "phoned", "ring", "rang", "dial", "dialed", "gave a call"],
+  meeting: ["meet", "met", "meeting", "met with", "saw", "see", "introduction", "intro", "connected", "had a meeting"],
+  text: ["text", "texted", "sms", "messaged", "dmed", "slacked"],
 };
 
 // Day names
@@ -938,12 +960,27 @@ function extractLocations(words: string[]): string[] {
       }
       if (locationWords.length > 0) {
         const location = locationWords.join(" ");
-        const locationLower = location.toLowerCase();
-        
-        // Verify it's actually a known location
+        const locationLower = location.toLowerCase().replace(/[.?!]+$/, "").trim();
+        // Skip time phrases: "in the last 2 weeks", "in the past week", "the last two", etc.
+        // Allow trailing punctuation (e.g. "the last two weeks?") so it doesn't fall through as location
+        if (/^(the\s+)?(last|past|next)\s+(\d+|[a-zA-Z]+)\s*(day|days|week|weeks|month|months|year|years)?\s*$/i.test(locationLower)) {
+          continue;
+        }
+        // Also skip any phrase that looks like a time range (avoids "the last two weeks" as location)
+        if (/^(the\s+)?(last|past|next)\s+/i.test(locationLower) && /\b(day|days|week|weeks|month|months|year|years)\b/i.test(locationLower)) {
+          continue;
+        }
+        // Verify it's actually a known location (use word boundaries to avoid
+        // false positives like "the last 2 weeks" matching "la" in "last")
         let isKnownLocation = false;
         for (const [canonical, synonyms] of Object.entries(LOCATION_SYNONYMS)) {
-          if (synonyms.some(s => s === locationLower || locationLower.includes(s))) {
+          const matches = synonyms.some(s => {
+            if (s === locationLower) return true;
+            // Word-boundary match: "la" must not match inside "last"
+            const regex = new RegExp(`\\b${s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+            return regex.test(locationLower);
+          });
+          if (matches) {
             if (!locations.includes(canonical)) {
               locations.push(canonical);
             }
@@ -953,8 +990,13 @@ function extractLocations(words: string[]): string[] {
         }
         
         // If not a known location but follows location preposition, add it anyway
+        // BUT skip time phrases that slipped through (avoid "the last two weeks" as location)
         if (!isKnownLocation && !locations.includes(locationLower)) {
-          locations.push(locationLower);
+          const looksLikeTime = /^(the\s+)?(last|past|next)\s+/i.test(locationLower) ||
+            /^(in\s+)?(the\s+)?(last|past|next)\s+(\d+|[a-zA-Z]+)\s*(day|days|week|weeks|month|months)/i.test(locationLower);
+          if (!looksLikeTime) {
+            locations.push(locationLower);
+          }
         }
       }
     }
@@ -962,9 +1004,13 @@ function extractLocations(words: string[]): string[] {
   
   // Only check for location synonyms if they appear as standalone words/phrases
   // Use word boundaries to avoid false matches (e.g., "new york" shouldn't match "new yorker")
+  // Explicitly exclude "la" inside "last", "past", "blast", "class" etc. (temporal phrases)
   if (locations.length === 0) {
     for (const [canonical, synonyms] of Object.entries(LOCATION_SYNONYMS)) {
       for (const synonym of synonyms) {
+        if (synonym === "la" && /\b(last|past|blast|class|glass|alas|blas)\b/i.test(normalized)) {
+          continue; // "la" in "last"/"past" etc. is not Los Angeles
+        }
         // Use word boundary regex to ensure exact match, not substring
         const regex = new RegExp(`\\b${synonym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
         if (regex.test(normalized)) {
@@ -1035,6 +1081,11 @@ function extractNeedsFollowUp(query: string): boolean {
     "not contacted",
     "should follow up",
     "must follow up",
+    "ghosted",
+    "no response",
+    "never replied",
+    "never got back",
+    "fell through the cracks",
   ];
   
   return followUpPatterns.some(pattern => normalized.includes(pattern));
@@ -1514,31 +1565,46 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
     }
   }
   
-  // Extract potential names (capitalized words not matching other entities)
-  // This is a heuristic - proper nouns that aren't roles/companies
+  // Extract potential names - ONLY from explicit name patterns, not from plain queries
+  // This prevents false positives like "logo" from "I need a logo" being treated as a name
   const potentialNames: string[] = [];
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i];
-    const lower = word.toLowerCase();
-    
-    // Skip stop words, roles, and already extracted entities
-    if (STOP_WORDS.has(lower)) continue;
-    if (ROLE_VOCABULARY.has(lower)) continue;
-    if (entities.companies.some(c => c.toLowerCase().includes(lower))) continue;
-    if (ENTITY_PREPOSITIONS.company.has(lower)) continue;
-    if (ACTION_KEYWORDS[lower]) continue;
-    
-    // Check if looks like a proper noun (starts with capital or all lower in context of a name)
-    // For lowercase queries, include non-stop-word tokens as potential name parts
-    if (word.length >= 2 && !COMPANY_SUFFIXES.has(lower)) {
-      potentialNames.push(word);
-    }
-  }
   
-  // Group potential names (consecutive non-stop words could be full name)
-  if (potentialNames.length > 0) {
-    // Simple heuristic: treat consecutive potential name words as a single name
-    entities.names = potentialNames.slice(0, 3); // Max 3 name parts
+  // Only extract names if we have explicit name indicators:
+  // 1. "named X", "called X", "person named X"
+  // 2. Capitalized words in queries with clear structure (e.g. "John at Google")
+  const hasNameIndicator = /\b(named|called|person named|contact named|someone named)\b/i.test(text);
+  const hasAtPattern = /\bat\b/i.test(text); // "John at Google" pattern
+  
+  // Only extract if we have indicators OR if words are clearly capitalized (not lowercase queries)
+  const shouldExtractNames = hasNameIndicator || (hasAtPattern && words.some(w => /^[A-Z]/.test(w)));
+  
+  if (shouldExtractNames) {
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const lower = word.toLowerCase();
+      
+      // Skip stop words, roles, and already extracted entities
+      if (STOP_WORDS.has(lower)) continue;
+      if (ROLE_VOCABULARY.has(lower)) continue;
+      if (entities.companies.some(c => c.toLowerCase().includes(lower))) continue;
+      if (ENTITY_PREPOSITIONS.company.has(lower)) continue;
+      if (ACTION_KEYWORDS[lower]) continue;
+      
+      // Skip time-related words that shouldn't be names
+      const timeWords = ["day", "days", "week", "weeks", "month", "months", "year", "years", 
+                         "today", "yesterday", "tomorrow", "morning", "afternoon", "evening", "night"];
+      if (timeWords.includes(lower)) continue;
+      
+      // Check if looks like a proper noun (starts with capital)
+      if (/^[A-Z]/.test(word) && word.length >= 2 && !COMPANY_SUFFIXES.has(lower)) {
+        potentialNames.push(word);
+      }
+    }
+    
+    // Group potential names (consecutive capitalized words could be full name)
+    if (potentialNames.length > 0) {
+      entities.names = potentialNames.slice(0, 3); // Max 3 name parts
+    }
   }
   
   // Extract businesses (e.g., "who do I know at mcdonalds")
@@ -2546,6 +2612,10 @@ export function parseSearchQuery(query: string): ParsedQuery {
   
   // If responsibility is found, expand its filters into entities
   if (responsibility) {
+    // Clear entities.names when we have a responsibility match - prevents "logo" from "I need a logo"
+    // being treated as a name filter (which would require contacts named "Logo")
+    entities.names = [];
+    
     // Add responsibility departments to entities
     if (responsibility.filters.departments) {
       for (const dept of responsibility.filters.departments) {
@@ -2649,8 +2719,14 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     filters.company = parsed.entities.companies[0]; // Take first company
   }
 
-  // Map job_title (from roles)
-  if (parsed.entities.roles.length > 0) {
+  // Map job_title (from roles OR responsibility domain for broader matching)
+  if (parsed.responsibility) {
+    // Use responsibility department (e.g. "legal") for broader matching vs specific role (e.g. "lawyer")
+    // This matches "Legal Counsel", "Attorney" etc. via ILIKE '%legal%'
+    const dept = parsed.responsibility.filters.departments?.[0];
+    const role = parsed.responsibility.filters.roles?.[0];
+    filters.job_title = dept || role || parsed.entities.roles[0];
+  } else if (parsed.entities.roles.length > 0) {
     filters.job_title = parsed.entities.roles[0]; // Take first role
   }
 
@@ -2671,9 +2747,9 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
       filters.relationship_type = "client";
     } else if (rel === "vendor" || rel === "vendors") {
       filters.relationship_type = "vendor";
-    } else if (rel.includes("met") || rel.includes("meet")) {
+    } else if (rel.includes("met") || rel.includes("meet") || rel.includes("introduced")) {
       filters.relationship_type = "met";
-    } else if (rel.includes("work") || rel.includes("colleague")) {
+    } else if (rel.includes("work") || rel.includes("colleague") || rel.includes("contact")) {
       filters.relationship_type = "worked_with";
     }
   }
@@ -2686,16 +2762,17 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     };
   }
 
-  // Map tags (from keywords that look like tags)
-  if (parsed.keywords.length > 0) {
-    // Filter keywords that might be tags (short, capitalized, or common tag patterns)
-    const potentialTags = parsed.keywords.filter(
-      (k) => k.length >= 2 && k.length <= 20
-    );
-    if (potentialTags.length > 0) {
-      filters.tags = potentialTags.slice(0, 5); // Limit to 5 tags
-    }
+  // Map interaction_date_range (last contacted - e.g. "who did I call last week")
+  if (parsed.interactionTimeRange) {
+    filters.interaction_date_range = {
+      from: parsed.interactionTimeRange.start.toISOString(),
+      to: parsed.interactionTimeRange.end.toISOString(),
+    };
   }
+
+  // Map tags - DON'T auto-extract from keywords (too many false positives)
+  // Tags should only be set if explicitly searched for with tag syntax or responsibility tags
+  // We removed automatic keyword→tags mapping to avoid over-filtering
 
   // Map introduced_by (if found in query)
   // This would need additional parsing logic - for now, leave undefined
@@ -2704,26 +2781,35 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
   const confidence = 0.7; // Base confidence for deterministic parse
   // Boost confidence if we extracted structured entities
   const hasStructuredFilters =
-    filters.company ||
-    filters.job_title ||
-    filters.relationship_type ||
-    filters.date_range;
+    !!filters.company ||
+    !!filters.job_title ||
+    !!filters.relationship_type ||
+    !!filters.date_range ||
+    !!filters.interaction_date_range;
   const finalConfidence = hasStructuredFilters ? Math.min(0.9, confidence + 0.1) : confidence;
 
   // Generate explanation
   const explanation = parsed.interpretation || "Deterministic query parsing";
 
-  // Set semantic_hint for ranking when we have keywords but no structured filters
-  // This allows semantic matching to work even when entity extraction fails
+  // When interactionOnly (only last_contacted filter, no other entities), omit semantic_hint
+  // so the RPC doesn't require FTS on "who did i call last week" (which would match nothing)
+  const interactionOnly =
+    !!filters.interaction_date_range &&
+    !filters.date_range &&
+    !filters.job_title &&
+    !filters.name &&
+    !filters.company &&
+    !filters.location;
+
+  // Set semantic_hint for ranking - ALWAYS pass it for text queries (FTS is ranking-only now)
+  // This provides a fallback when structured extraction is wrong/incomplete
   let semantic_hint: string | undefined = undefined;
-  if (parsed.keywords.length > 0 && !hasStructuredFilters) {
-    // Use keywords as semantic hint for plain language queries
-    semantic_hint = parsed.keywords.join(" ");
-  } else if (parsed.searchTerms.length > 0 && !hasStructuredFilters) {
-    // Fallback to searchTerms if keywords are empty
-    semantic_hint = parsed.searchTerms.join(" ");
-  } else if (parsed.originalQuery && !hasStructuredFilters) {
-    // Last resort: use original query for semantic matching
+  if (interactionOnly) {
+    // Skip for interaction-only queries ("who did I call last week") - no text to match
+    semantic_hint = undefined;
+  } else if (parsed.originalQuery && parsed.originalQuery.trim().length > 0) {
+    // Use original query for semantic ranking (FTS ranks but doesn't filter)
+    // This ensures we get results even if entity extraction is imperfect
     semantic_hint = parsed.originalQuery;
   }
 
@@ -2738,104 +2824,20 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
 
 /**
  * Parse search query into canonical SearchQuery schema
- * Simplified version - extracts time ranges, responsibilities, and simple names
- * LLM handles complex entity extraction (company, role, location, etc.)
+ * Uses full parseSearchQuery pipeline for entity extraction (company, role, location, etc.)
+ * then converts to SearchQuery. P0 integration per NLP assessment.
  */
 export function parseSearchQueryToSchema(query: string): SearchQuery {
-  const normalized = normalizeQuery(query);
-  const hasAddKeyword = normalized.includes("add") || normalized.includes("added");
+  // Use full parse pipeline for company, role, location, relationship, time extraction
+  const parsed = parseSearchQuery(query);
+  const result = convertToSearchQuery(parsed);
 
-  // Extract time ranges: creation (add) vs interaction (call/email/meet)
-  const timeRange = extractTimeRange(query);
-  const interactionTimeRange = extractInteractionTimeRange(query);
-
-  // Resolve add vs interaction: same logic as parseSearchQuery
-  let useCreationRange: { start: Date; end: Date } | undefined = undefined;
-  let useInteractionRange: { start: Date; end: Date } | undefined = undefined;
-  if (hasAddKeyword && timeRange) {
-    useCreationRange = timeRange;
-  } else if (interactionTimeRange && !hasAddKeyword) {
-    useInteractionRange = interactionTimeRange;
-  } else if (timeRange) {
-    useCreationRange = timeRange;
-  }
-
-  // Extract responsibility (this works well)
+  // Preserve responsibility phrase fallback: when pattern matched but no predefined
+  // responsibility (e.g. "I need a driver"), use phrase as job_title for ILIKE matching
   const responsibilityResult = extractResponsibility(query);
-
-  // Create minimal SearchQuery - LLM will enhance it with entities
-  const filters: SearchQuery["filters"] = {};
-
-  if (useCreationRange) {
-    filters.date_range = {
-      from: useCreationRange.start.toISOString(),
-      to: useCreationRange.end.toISOString(),
-    };
-  }
-  if (useInteractionRange) {
-    filters.interaction_date_range = {
-      from: useInteractionRange.start.toISOString(),
-      to: useInteractionRange.end.toISOString(),
-    };
+  if (!result.filters.job_title && responsibilityResult.phrase) {
+    result.filters.job_title = responsibilityResult.phrase;
   }
 
-  // Add responsibility filters if found
-  if (responsibilityResult.match) {
-    const responsibility = responsibilityResult.match;
-    if (responsibility.filters.departments && responsibility.filters.departments.length > 0) {
-      filters.job_title = responsibility.filters.departments[0];
-    } else if (responsibility.filters.roles && responsibility.filters.roles.length > 0) {
-      filters.job_title = responsibility.filters.roles[0];
-    }
-    if (responsibility.filters.tags && responsibility.filters.tags.length > 0) {
-      filters.tags = responsibility.filters.tags;
-    }
-  } else if (responsibilityResult.phrase) {
-    // Pattern matched (e.g. "I need a driver") but no predefined responsibility.
-    // Use the extracted phrase as job_title so server can match role/company/tags (e.g. role ILIKE '%driver%').
-    filters.job_title = responsibilityResult.phrase;
-  }
-
-  // Simple name extraction: if query is 1-3 words and looks like a name, extract it
-  const words = normalized.split(/\s+/).filter(w => w.length > 0);
-  const hasTimeFilter = !!filters.date_range || !!filters.interaction_date_range;
-  if (words.length >= 1 && words.length <= 3 && !hasTimeFilter && !responsibilityResult.match && !filters.name) {
-    const questionWords = ["who", "what", "where", "when", "why", "how", "do", "does", "did", "i", "you", "we", "they"];
-    const commonVerbs = ["find", "show", "get", "search", "look", "list", "display", "know", "knows"];
-    const firstWord = words[0].toLowerCase();
-    const originalWords = query.trim().split(/\s+/);
-    const originalFirstWord = originalWords[0] || "";
-    const startsWithCapital = originalFirstWord.length > 0 && originalFirstWord[0] === originalFirstWord[0].toUpperCase();
-    if (!questionWords.includes(firstWord) && !commonVerbs.includes(firstWord)) {
-      if (startsWithCapital || words.length === 1) {
-        filters.name = originalWords.slice(0, words.length).join(" ");
-      }
-    }
-  }
-
-  // For interaction-date-only queries, omit semantic_hint so the RPC doesn't require
-  // full-text match on "who did i call last week" (which would return no results).
-  const interactionOnly = !!filters.interaction_date_range && !filters.date_range && !filters.job_title && !filters.name && !filters.company && !filters.location;
-  const semantic_hint = interactionOnly ? undefined : query;
-
-  let explanation: string;
-  if (filters.name) {
-    explanation = `Searching for contacts named "${filters.name}"`;
-  } else if (filters.interaction_date_range) {
-    explanation = "Searching contacts you contacted in that time range";
-  } else if (filters.date_range) {
-    explanation = "Searching contacts with time filter";
-  } else if (responsibilityResult.match) {
-    explanation = "Searching contacts for responsibility";
-  } else {
-    explanation = "Searching contacts";
-  }
-
-  return {
-    intent: "search_contacts",
-    filters,
-    semantic_hint,
-    confidence: filters.name ? 0.7 : 0.5,
-    explanation,
-  };
+  return result;
 }

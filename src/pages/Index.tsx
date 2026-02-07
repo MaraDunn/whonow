@@ -90,6 +90,7 @@ const IndexContent = () => {
   }, [showDirectory, selectedTeamFolderId, refetchTeamContacts]);
   const { 
     contacts, 
+    contactMarkedVersion,
     trashedContacts,
     trashCount,
     personalContactsCount: accuratePersonalCount,
@@ -237,7 +238,8 @@ const IndexContent = () => {
 
   const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent, interpretation } = useSmartSearch(
     showDirectory ? filteredTeamContacts : (showClientDirectory ? clientDirectoryContacts : folderFilteredContacts), 
-    searchQuery
+    searchQuery,
+    { contactMarkedVersion }
   );
 
   const handleSelectTrash = () => {

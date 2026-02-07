@@ -49,7 +49,7 @@ function mapSearchRowToContact(row: Record<string, unknown>): Contact {
   };
 }
 
-export type UseSmartSearchOptions = { totalCount?: number };
+export type UseSmartSearchOptions = { totalCount?: number; contactMarkedVersion?: number };
 
 /**
  * Universal smart search: Always uses server-side smart_search_contacts RPC.
@@ -61,6 +61,7 @@ export function useSmartSearch(
   query: string,
   options?: UseSmartSearchOptions
 ): SmartSearchResult {
+  const contactMarkedVersion = options?.contactMarkedVersion ?? 0;
   const { user } = useAuth();
   const [finalQuery, setFinalQuery] = useState<SearchQuery | null>(null);
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
@@ -142,25 +143,36 @@ export function useSmartSearch(
         if (deterministicQuery.filters.relationship_type) {
           searchParams._relationship_type = deterministicQuery.filters.relationship_type;
         }
-        // Only use semantic_hint for text search when appropriate.
-        // Skip for job_title (responsibility) and for interaction-date-only queries, since
-        // FTS on "who did i call last week" would match nothing.
-        const interactionOnly =
-          !!deterministicQuery.filters.interaction_date_range &&
-          !deterministicQuery.filters.date_range &&
-          !deterministicQuery.filters.job_title &&
-          !deterministicQuery.filters.name &&
-          !deterministicQuery.filters.company &&
-          !deterministicQuery.filters.location;
-        if (
-          !interactionOnly &&
-          (deterministicQuery.semantic_hint || query) &&
-          !deterministicQuery.filters.job_title
-        ) {
-          searchParams._semantic_hint = deterministicQuery.semantic_hint || query;
+        // Always pass semantic_hint for ranking (FTS is ranking-only now, doesn't filter)
+        // This provides a relevance fallback when structured filters are too strict
+        if (deterministicQuery.semantic_hint) {
+          searchParams._semantic_hint = deterministicQuery.semantic_hint;
         }
         
-        const { data, error } = await supabase.rpc("smart_search_contacts", searchParams);
+        // Pass all params in function order (some PostgREST setups require this)
+        const rpcParams = {
+          _user_id: user.id,
+          _job_title: searchParams._job_title ?? null,
+          _date_range_from: searchParams._date_range_from ?? null,
+          _date_range_to: searchParams._date_range_to ?? null,
+          _last_contacted_from: searchParams._last_contacted_from ?? null,
+          _last_contacted_to: searchParams._last_contacted_to ?? null,
+          _name: searchParams._name ?? null,
+          _company: searchParams._company ?? null,
+          _tags: searchParams._tags ?? null,
+          _location: searchParams._location ?? null,
+          _relationship_type: searchParams._relationship_type ?? null,
+          _semantic_hint: searchParams._semantic_hint ?? null,
+          _limit: searchParams._limit ?? MAX_RESULTS,
+        };
+
+        devLog("[useSmartSearch] RPC params:", JSON.stringify({
+          ...rpcParams,
+          _last_contacted_from: rpcParams._last_contacted_from,
+          _last_contacted_to: rpcParams._last_contacted_to,
+        }));
+
+        const { data, error } = await supabase.rpc("smart_search_contacts", rpcParams);
 
         if (controller.signal.aborted) return;
 
@@ -171,7 +183,34 @@ export function useSmartSearch(
           return;
         }
 
-        const results = (data ?? []).map((row: Record<string, unknown>) => mapSearchRowToContact(row));
+        let results = (data ?? []).map((row: Record<string, unknown>) => mapSearchRowToContact(row));
+        devLog("[useSmartSearch] RPC returned", results.length, "results", rpcParams._last_contacted_from ? "(interaction-date filter)" : "");
+
+        // Diagnostic: if interaction-date search returns 0, check if any contacts have last_contacted_at
+        if (
+          results.length === 0 &&
+          rpcParams._last_contacted_from &&
+          rpcParams._last_contacted_to
+        ) {
+          const { data: wideData } = await supabase.rpc("smart_search_contacts", {
+            ...rpcParams,
+            _last_contacted_from: "1970-01-01T00:00:00.000Z",
+            _last_contacted_to: "2099-12-31T23:59:59.999Z",
+          });
+          const wideCount = (wideData ?? []).length;
+          if (wideCount > 0) {
+            console.warn(
+              "[useSmartSearch] Interaction-date query returned 0 but",
+              wideCount,
+              "contacts have last_contacted_at set (outside date range). Check date range calculation."
+            );
+          } else {
+            console.warn(
+              "[useSmartSearch] No contacts have last_contacted_at set. Mark contacts as contacted to use 'who did I call' searches."
+            );
+          }
+        }
+
         setSearchResults(results);
         setFinalQuery(deterministicQuery);
         setIsSearching(false);
@@ -202,7 +241,7 @@ export function useSmartSearch(
     return () => {
       controller.abort();
     };
-  }, [query, user?.id, hasActiveQuery]);
+  }, [query, user?.id, hasActiveQuery, contactMarkedVersion]);
 
   // Update search results when contacts change (for optimistic updates)
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useMemo } from "react";
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
@@ -122,6 +122,9 @@ export const useContacts = (options?: UseContactsListOptions) => {
   const folderId = options?.folderId ?? null;
   const showClientDirectory = options?.showClientDirectory ?? false;
   const ownershipFilter = options?.ownershipFilter ?? "all";
+
+  // Incremented when contacts are marked as contacted; used to re-run smart search
+  const [contactMarkedVersion, setContactMarkedVersion] = useState(0);
 
   // Fetch total count of active contacts (not limited by 1000 row default)
   // Exclude "my-profile" contacts to match the contacts array filtering
@@ -722,6 +725,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
+      setContactMarkedVersion((v) => v + 1);
     },
     onError: (error) => {
       toast.error("Failed to update contact: " + error.message);
@@ -781,6 +785,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
+      setContactMarkedVersion((v) => v + 1);
       if (result.updated === result.total) {
         toast.success(`${result.updated} contact${result.updated !== 1 ? "s" : ""} marked as contacted`);
       } else {
@@ -1009,6 +1014,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
     findDuplicatesForContact,
     mergeContact: mergeContact.mutate,
     isMerging: mergeContact.isPending,
+    contactMarkedVersion,
   };
 };
 

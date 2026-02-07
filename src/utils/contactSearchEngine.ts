@@ -820,7 +820,7 @@ export function searchWithParsedQuery(
   
   // IMPORTANT: If we have responsibility filters, don't use keyword matching
   // The responsibility filter is precise and should be sufficient
-  if (searchQuery.filters.responsibilities && searchQuery.filters.responsibilities.length > 0) {
+  if (parsedQuery.responsibility) {
     devLog('[SEARCH DEBUG] Responsibility filter present, clearing keyword search terms');
     searchTerms = [];
   }

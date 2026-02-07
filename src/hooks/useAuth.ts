@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { IS_WAITLIST_MODE_EFFECTIVE, getAuthRedirectOrigin } from "@/utils/launchMode";
+import { IS_WAITLIST_MODE_EFFECTIVE, getAuthRedirectOrigin, isDesktopOrNativeApp } from "@/utils/launchMode";
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -111,21 +111,25 @@ export const useAuth = () => {
     // Clear local state first - user is logged out locally regardless of server response
     setSession(null);
     setUser(null);
-    
+
+    // In Tauri/desktop, use scope: 'local' to avoid network request - the default
+    // scope makes a server call that can fail due to CORS/WebView constraints.
+    const signOutOptions = isDesktopOrNativeApp() ? { scope: "local" as const } : undefined;
+
     let error: any = null;
     try {
-      const res = await supabase.auth.signOut();
+      const res = await supabase.auth.signOut(signOutOptions);
       error = res.error;
     } catch (e) {
       console.error("[Auth] signOut threw:", e);
       error = { message: e instanceof Error ? e.message : String(e) };
     }
-    
+
     // Treat "session not found" as success - user is already logged out server-side
-    if (error && error.message?.toLowerCase().includes('session not found')) {
+    if (error && error.message?.toLowerCase().includes("session not found")) {
       return { error: null };
     }
-    
+
     return { error };
   };
 
