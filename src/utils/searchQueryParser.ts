@@ -182,6 +182,21 @@ const SYNONYM_MAP: Record<string, string[]> = {
   "coordinator": ["coord"],
 };
 
+// Number words for time range parsing ("last two weeks", "in the last three days")
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+  couple: 2, few: 3, half: 1, // "half" as in "last half week" -> 1 week (or we could do 0.5 and handle it; for now 1)
+};
+
+function parseTimeAmount(token: string): number | null {
+  if (!token || typeof token !== "string") return null;
+  const t = token.trim().toLowerCase();
+  if (/^\d+$/.test(t)) return parseInt(t, 10);
+  const n = NUMBER_WORDS[t];
+  return n !== undefined ? n : null;
+}
+
 // Abbreviation to full form mapping
 const ABBREVIATION_MAP: Record<string, string> = {
   "ceo": "chief executive officer",
@@ -1814,44 +1829,44 @@ function extractTimeRange(query: string): TimeRange | undefined {
     }
   }
   
-  // Check for "last X days/weeks/months"
-  const lastMatch = normalized.match(/last\s+(\d+)\s+(day|days|week|weeks|month|months|year|years)/);
+  // Check for "last X days/weeks/months" (X can be digit or word: "2", "two", "couple")
+  const lastMatch = normalized.match(/last\s+(\d+|[a-zA-Z]+)\s+(day|days|week|weeks|month|months|year|years)/);
   if (lastMatch) {
-    const amount = parseInt(lastMatch[1], 10);
-    const unit = lastMatch[2];
-    const end = new Date();
-    const start = new Date();
-    
-    if (unit.startsWith("day")) {
-      start.setDate(end.getDate() - amount);
-    } else if (unit.startsWith("week")) {
-      start.setDate(end.getDate() - (amount * 7));
-    } else if (unit.startsWith("month")) {
-      start.setMonth(end.getMonth() - amount);
-    } else if (unit.startsWith("year")) {
-      start.setFullYear(end.getFullYear() - amount);
+    const amount = parseTimeAmount(lastMatch[1]);
+    if (amount != null && amount > 0) {
+      const unit = lastMatch[2];
+      const end = new Date();
+      const start = new Date();
+      if (unit.startsWith("day")) {
+        start.setDate(end.getDate() - amount);
+      } else if (unit.startsWith("week")) {
+        start.setDate(end.getDate() - (amount * 7));
+      } else if (unit.startsWith("month")) {
+        start.setMonth(end.getMonth() - amount);
+      } else if (unit.startsWith("year")) {
+        start.setFullYear(end.getFullYear() - amount);
+      }
+      return { start, end };
     }
-    
-    return { start, end };
   }
   
-  // Check for "in the last X days" pattern
-  const inLastMatch = normalized.match(/in\s+the\s+last\s+(\d+)\s+(day|days|week|weeks|month|months)/);
+  // Check for "in the last X days/weeks/months" (X can be digit or word: "2", "two")
+  const inLastMatch = normalized.match(/in\s+the\s+last\s+(\d+|[a-zA-Z]+)\s+(day|days|week|weeks|month|months)/);
   if (inLastMatch) {
-    const amount = parseInt(inLastMatch[1], 10);
-    const unit = inLastMatch[2];
-    const end = new Date();
-    const start = new Date();
-    
-    if (unit.startsWith("day")) {
-      start.setDate(end.getDate() - amount);
-    } else if (unit.startsWith("week")) {
-      start.setDate(end.getDate() - (amount * 7));
-    } else if (unit.startsWith("month")) {
-      start.setMonth(end.getMonth() - amount);
+    const amount = parseTimeAmount(inLastMatch[1]);
+    if (amount != null && amount > 0) {
+      const unit = inLastMatch[2];
+      const end = new Date();
+      const start = new Date();
+      if (unit.startsWith("day")) {
+        start.setDate(end.getDate() - amount);
+      } else if (unit.startsWith("week")) {
+        start.setDate(end.getDate() - (amount * 7));
+      } else if (unit.startsWith("month")) {
+        start.setMonth(end.getMonth() - amount);
+      }
+      return { start, end };
     }
-    
-    return { start, end };
   }
   
   return undefined;
@@ -1863,10 +1878,13 @@ function extractTimeRange(query: string): TimeRange | undefined {
 function extractInteractionTimeRange(query: string): TimeRange | undefined {
   const normalized = normalizeQuery(query);
   
-  // Check for patterns like "emailed last week", "called yesterday", "met this morning"
+  // Verb forms: present and past tense so "call"/"called", "contact"/"contacted" both match
+  const interactionVerbs = "email|emailed|calling|call|called|meet|met|meeting|talk|talked|talking|contact|contacted|contacting|phone|phoned|dial|dialed|reach out|reached out";
+  const timeWords = "last|this|yesterday|today|morning|afternoon|evening|night";
+  // Word boundaries so we match "call" not "recall", and "last" as a word
   const interactionPatterns = [
-    /(email|call|meet|talk|contact).*?(last|this|yesterday|today|morning|afternoon|evening|night)/i,
-    /(last|this|yesterday|today|morning|afternoon|evening|night).*?(email|call|meet|talk|contact)/i,
+    new RegExp(`\\b(${interactionVerbs})\\b.*?\\b(${timeWords})\\b`, "i"),
+    new RegExp(`\\b(${timeWords})\\b.*?\\b(${interactionVerbs})\\b`, "i"),
   ];
   
   for (const pattern of interactionPatterns) {

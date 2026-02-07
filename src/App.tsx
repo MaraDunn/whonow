@@ -69,10 +69,9 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/" replace />;
   }
 
-  // Require verified email (defense in depth when Confirm email is enabled in Supabase)
-  if (!user.email_confirmed_at) {
-    return <Navigate to="/auth?unverified=1" replace />;
-  }
+  // Note: We rely on Supabase for email verification. When "Confirm email" is enabled
+  // in Supabase, unverified users never get a session. When disabled, email_confirmed_at
+  // may be null but users are still valid — blocking on it would prevent app access.
 
   return <>{children}</>;
 };

@@ -12,6 +12,8 @@ import { FolderSidebar } from "@/components/FolderSidebar";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
+import { OnboardingTutorial } from "@/components/OnboardingTutorial";
+import { onboardingSteps } from "@/config/onboardingSteps";
 import { SelectionToolbar } from "@/components/SelectionToolbar";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,7 +38,7 @@ const IndexContent = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { needsCompanySetup, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
+  const { profile, needsCompanySetup, needsOnboarding, completeOnboarding, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
   const { canAccessFeature } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
@@ -59,6 +61,7 @@ const IndexContent = () => {
   const [selectedTeamFolderId, setSelectedTeamFolderId] = useState<string | null>(null);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const {
     canCheckUpdates,
@@ -142,6 +145,14 @@ const IndexContent = () => {
       setSearchParams(searchParams, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  // Launch onboarding tutorial for new users after company setup completes
+  useEffect(() => {
+    if (profile && needsOnboarding && !needsCompanySetup && !showOnboarding) {
+      const timer = setTimeout(() => setShowOnboarding(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [profile, needsOnboarding, needsCompanySetup, showOnboarding]);
 
   // Filter contacts by folder and ownership
   const folderFilteredContacts = useMemo(() => {
@@ -1036,6 +1047,20 @@ const IndexContent = () => {
                 onJoinCompany={joinCompany}
                 onSkipCompanySetup={skipCompanySetup}
               />
+
+              {showOnboarding && (
+                <OnboardingTutorial
+                  steps={onboardingSteps}
+                  onComplete={() => {
+                    completeOnboarding();
+                    setShowOnboarding(false);
+                  }}
+                  onSkip={() => {
+                    completeOnboarding();
+                    setShowOnboarding(false);
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
