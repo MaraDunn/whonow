@@ -16,6 +16,10 @@ interface SmartSearchResult {
   isLoading: boolean;
   aiIntent: string | null;
   interpretation: string | null;
+  understoodFilters: SearchQuery["filters"] | null;
+  /** Display label for role-like searches (e.g. "designer" instead of "design"). */
+  understoodRoleLabel: string | null;
+  isTruncated: boolean;
   aiMetadata?: AIMetadata;
 }
 
@@ -306,6 +310,9 @@ export function useSmartSearch(
     isLoading: isSearching,
     aiIntent: finalQuery?.intent || null,
     interpretation: finalQuery?.explanation || null,
+    understoodFilters: finalQuery?.filters ?? null,
+    understoodRoleLabel: legacyParsed?.responsibility?.filters?.roles?.[0] ?? finalQuery?.filters?.job_title ?? null,
+    isTruncated: hasActiveQuery ? searchResults.length >= MAX_RESULTS : false,
     aiMetadata, // Expose AI metadata for debugging
   };
 }

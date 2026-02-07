@@ -31,8 +31,70 @@ import { AppUpdateDialog } from "@/components/AppUpdateDialog";
 import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { SearchQueryFilters } from "@/types/searchQuery";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
+
+function pluralizeCount(word: string, count: number) {
+  return count === 1 ? word : `${word}s`;
+}
+
+function pluralizeJobTitle(jobTitleRaw: string) {
+  const jt = jobTitleRaw.trim();
+  if (!jt) return "people";
+  const lower = jt.toLowerCase();
+  if (lower.endsWith("s")) return jt;
+  if (lower.endsWith("y") && !/[aeiou]y$/i.test(lower)) return `${jt.slice(0, -1)}ies`;
+  return `${jt}s`;
+}
+
+function buildFriendlySearchSummary(args: {
+  count: number;
+  action: string | null | undefined;
+  filters: SearchQueryFilters | null | undefined;
+  roleLabel: string | null | undefined;
+  isTruncated: boolean;
+}) {
+  const { count, action, filters, roleLabel, isTruncated } = args;
+  const actionPrefix = action ? `Ready to ${action}. ` : "";
+
+  if (count === 0) return `${actionPrefix}I couldn’t find anyone for that in your contacts.`;
+
+  const verb = count === 1 ? "Here’s" : "Here are";
+  const countStr = isTruncated && count > 1 ? `top ${count}` : `${count}`;
+
+  if (filters?.job_title) {
+    const base = (roleLabel || filters.job_title).trim();
+    const jobLabel = count === 1 ? base : pluralizeJobTitle(base);
+    return `${actionPrefix}${verb} ${countStr} ${jobLabel} in your contacts.`;
+  }
+  if (filters?.relationship_type) {
+    const rel =
+      filters.relationship_type === "client"
+        ? pluralizeCount("client", count)
+        : filters.relationship_type === "vendor"
+          ? pluralizeCount("vendor", count)
+          : filters.relationship_type === "met"
+            ? `person${count === 1 ? "" : "s"} you met`
+            : `person${count === 1 ? "" : "s"} you worked with`;
+    return `${actionPrefix}${verb} ${countStr} ${rel} in your contacts.`;
+  }
+  if (filters?.company) {
+    return `${actionPrefix}${verb} ${countStr} person${count === 1 ? "" : "s"} from ${filters.company} in your contacts.`;
+  }
+  if (filters?.name) {
+    return `${actionPrefix}${verb} ${countStr} ${pluralizeCount("contact", count)} named ${filters.name}.`;
+  }
+  if (filters?.location) {
+    return `${actionPrefix}${verb} ${countStr} person${count === 1 ? "" : "s"} in ${filters.location} in your contacts.`;
+  }
+  if (filters?.tags?.length) {
+    const tagLabel = filters.tags.length === 1 ? `"${filters.tags[0]}"` : `"${filters.tags.join('", "')}"`;
+    return `${actionPrefix}${verb} ${countStr} ${pluralizeCount("contact", count)} tagged ${tagLabel}.`;
+  }
+
+  return `${actionPrefix}${verb} ${countStr} ${pluralizeCount("contact", count)} in your contacts.`;
+}
 
 const IndexContent = () => {
   const queryClient = useQueryClient();
@@ -236,7 +298,14 @@ const IndexContent = () => {
     return teamContacts;
   }, [teamContacts, selectedTeamFolderId]);
 
-  const { contacts: filteredContacts, action, searchTerm, isLoading: searchLoading, aiIntent, interpretation } = useSmartSearch(
+  const {
+    contacts: filteredContacts,
+    action,
+    isLoading: searchLoading,
+    understoodFilters,
+    understoodRoleLabel,
+    isTruncated,
+  } = useSmartSearch(
     showDirectory ? filteredTeamContacts : (showClientDirectory ? clientDirectoryContacts : folderFilteredContacts), 
     searchQuery,
     { contactMarkedVersion }
@@ -790,40 +859,29 @@ const IndexContent = () => {
                 </Button>
               </div>
 
-              {searchQuery && interpretation && (
-                <div className="mb-4 px-3 sm:px-4 py-2 bg-muted/50 rounded-lg text-sm text-muted-foreground animate-fade-in">
-                  {interpretation}
-                </div>
-              )}
-
               {searchQuery && (
                 <div className="mb-6 animate-fade-in">
-                  <p className="text-sm text-muted-foreground">
-                    {searchLoading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                        Understanding your question...
-                      </span>
-                    ) : aiIntent ? (
-                      <>
-                        <span className="font-medium text-primary">{aiIntent}</span>
-                        {action && <> • Ready to <span className="font-medium">{action}</span></>}
-                        <> • {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""}</>
-                      </>
-                    ) : action ? (
-                      <>
-                        Ready to <span className="font-medium text-primary">{action}</span>
-                        {searchTerm && (
-                          <> • {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for "<span className="font-medium text-foreground">{searchTerm}</span>"</>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        Showing {filteredContacts.length} result{filteredContacts.length !== 1 ? "s" : ""} for{" "}
-                        <span className="font-medium text-foreground">"{searchQuery}"</span>
-                      </>
-                    )}
-                  </p>
+                  <div className="space-y-1">
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">"{searchQuery.trim()}"</span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {searchLoading ? (
+                        <span className="flex items-center gap-2">
+                          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          Understanding your question...
+                        </span>
+                      ) : (
+                        buildFriendlySearchSummary({
+                          count: filteredContacts.length,
+                          action,
+                          filters: understoodFilters,
+                          roleLabel: understoodRoleLabel,
+                          isTruncated,
+                        })
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
