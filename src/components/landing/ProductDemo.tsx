@@ -449,7 +449,8 @@ export const ProductDemo = () => {
               </div>
             </div>
 
-            <div className="bg-background min-h-[500px] flex">
+            {/* Fixed height prevents layout jump when scrolling past the demo as phases change */}
+            <div className="bg-background flex h-[560px] min-h-[560px] max-h-[560px]">
               {/* Demo sidebar — matches platform: Contact Directory, Client Directory, Team Directory */}
               <aside className="w-64 border-r border-border bg-sidebar text-sidebar-foreground hidden md:flex flex-col shrink-0">
                 <div className="flex flex-col gap-2 p-2" data-sidebar="header">
@@ -543,8 +544,8 @@ export const ProductDemo = () => {
                 </div>
               </aside>
 
-              <div className="flex-1 p-6 sm:p-8">
-                <div className="flex items-center justify-between mb-6">
+              <div className="flex-1 min-h-0 flex flex-col p-6 sm:p-8 overflow-hidden">
+                <div className="flex items-center justify-between mb-6 shrink-0">
                   <div className="flex items-center gap-4">
                     <WhoNowLogo size="sm" showText={true} />
                     {showClientView && (
@@ -619,17 +620,19 @@ export const ProductDemo = () => {
                   </div>
                 )}
 
-                {/* Results grid — visible during directory phase from start for live-updating effect */}
-                <div
-                  className={`grid md:grid-cols-2 lg:grid-cols-3 gap-4 transition-all duration-300 ${
-                    (showSearchView && showSearchResults) || showClientView || showDirectoryView
-                      ? "opacity-100 translate-y-0"
-                      : "opacity-0 translate-y-4"
-                  }`}
-                >
-                  {contactsForView.map((contact, index) =>
-                    renderContactCard(contact, index, showClientView)
-                  )}
+                {/* Results grid — scrollable within fixed-height demo to prevent layout jump */}
+                <div className="min-h-0 flex-1 overflow-y-auto -mx-1 px-1">
+                  <div
+                    className={`grid md:grid-cols-2 lg:grid-cols-3 gap-4 transition-all duration-300 ${
+                      (showSearchView && showSearchResults) || showClientView || showDirectoryView
+                        ? "opacity-100 translate-y-0"
+                        : "opacity-0 translate-y-4"
+                    }`}
+                  >
+                    {contactsForView.map((contact, index) =>
+                      renderContactCard(contact, index, showClientView)
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
