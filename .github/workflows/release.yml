@@ -10,6 +10,7 @@
 #   APPLE_CERTIFICATE (base64 of .p12: base64 -i WhoNow.p12 | pbcopy)
 #   APPLE_CERTIFICATE_PASSWORD, KEYCHAIN_PASSWORD
 #   APPLE_ID, APPLE_PASSWORD (app-specific password), APPLE_TEAM_ID
+#   Alternatively for notarization: APPLE_API_ISSUER, APPLE_API_KEY, APPLE_API_KEY_PATH (often more reliable in CI)
 # Optional: VITE_APP_URL as repo Variable or Secret (e.g. https://app.whonow.co) so
 # verification emails from the desktop app link to your web app, not tauri://localhost.
 name: Release
@@ -24,7 +25,8 @@ permissions:
 
 jobs:
   release:
-    timeout-minutes: 45
+    # macOS notarization can take 20–60+ min when Apple's queue is slow; Windows is much faster
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +82,7 @@ jobs:
       - name: Increase notary upload timeout
         if: matrix.platform == 'macos-latest'
         run: |
-          defaults write com.apple.gke.notary.tool nt-upload-connection-timeout 300
+          defaults write com.apple.gke.notary.tool nt-upload-connection-timeout 600
 
       - name: Build and release with tauri-action
         uses: tauri-apps/tauri-action@v0.5
