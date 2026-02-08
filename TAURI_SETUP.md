@@ -145,6 +145,23 @@ OAuth redirects should work automatically through Supabase. If issues occur, che
 2. Supabase redirect URLs are configured correctly
 3. The app is using the correct Supabase project URL
 
+### macOS: "WhoNow is damaged and can't be opened"
+macOS Gatekeeper can show this when the app is **quarantined** (e.g. downloaded from the web) and either not notarized or the notarization ticket wasn’t stapled. Fixes:
+
+1. **Use a build from the latest release**  
+   New releases are signed and notarized when `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are set in repo secrets. In the Release workflow run, confirm the macOS job completes and that the build step runs notarization (check the Actions log).
+
+2. **One-time workaround for an already-downloaded app**  
+   Remove the quarantine attribute so macOS stops blocking it:
+   ```bash
+   xattr -cr /Applications/WhoNow.app
+   ```
+   Or if you run the app from the DMG:
+   ```bash
+   xattr -cr /Volumes/WhoNow\ */WhoNow.app
+   ```
+   Then move `WhoNow.app` to `/Applications` and open it.
+
 ## Releasing
 
 The Release workflow runs on tag push (e.g. `v1.0.0`). **Version is set automatically from the tag**—no manual bump needed.
@@ -155,6 +172,7 @@ The Release workflow runs on tag push (e.g. `v1.0.0`). **Version is set automati
    git push origin v1.0.0
    ```
 2. The workflow sets `package.json` and `tauri.conf.json` version from the tag (v1.0.0 → 1.0.0), builds Windows and macOS installers, and creates a GitHub Release with the assets.
+3. **macOS**: Ensure repo secrets include `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` so the app is notarized. Without notarization, users may see "app is damaged." Check the Release workflow log for the macOS job to confirm notarization runs and succeeds.
 
 ## Notes
 
