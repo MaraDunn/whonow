@@ -77,6 +77,11 @@ jobs:
           IDENTITY=$(echo "$CERT_LINE" | sed -n 's/.*"\(.*\)".*/\1/p')
           echo "signing_identity=$IDENTITY" >> $GITHUB_OUTPUT
 
+      - name: Increase notary upload timeout
+        if: matrix.platform == 'macos-latest'
+        run: |
+          defaults write com.apple.gke.notary.tool nt-upload-connection-timeout 300
+
       - name: Build and release with tauri-action
         uses: tauri-apps/tauri-action@v0.5
         env:
