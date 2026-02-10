@@ -353,6 +353,13 @@ export const useSubscription = () => {
       return;
     }
 
+    // On login: clear cache and run a fresh subscription check so relogging always shows current tier
+    try {
+      localStorage.removeItem(SUBSCRIPTION_CACHE_KEY);
+      localStorage.removeItem(`${SUBSCRIPTION_CACHE_KEY}_time`);
+    } catch (error) {
+      console.error("Failed to clear subscription cache on login:", error);
+    }
     checkSubscription();
 
     // Listen for manual refresh events (e.g., after joining a company)
