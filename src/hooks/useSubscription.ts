@@ -107,6 +107,15 @@ export const useSubscription = () => {
     return fallback;
   };
 
+  // Get a valid access token, refreshing the session if needed (avoids 401 Invalid JWT from expired token)
+  const getValidAccessToken = useCallback(async (): Promise<string | null> => {
+    const { data: { session: current } } = await supabase.auth.getSession();
+    if (current?.access_token) return current.access_token;
+    const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
+    if (error || !refreshed?.access_token) return null;
+    return refreshed.access_token;
+  }, []);
+
   const checkSubscription = useCallback(async () => {
     if (!session?.access_token || !user) {
       // Don't reset subscription if we're just waiting for auth to load
@@ -275,9 +284,14 @@ export const useSubscription = () => {
         }
 
         // Fallback: Try Edge Function if database doesn't have subscription
+        const token = await getValidAccessToken();
+        if (!token) {
+          setIsLoading(false);
+          throw new Error("Session expired. Please sign in again.");
+        }
         const { data, error } = await supabase.functions.invoke("check-subscription", {
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
@@ -330,7 +344,7 @@ export const useSubscription = () => {
       // Don't reset subscription on errors - keep cached data to prevent flickering
       // Loading state already set to false in the promise
     }
-  }, [session?.access_token, user]);
+  }, [session?.access_token, user, getValidAccessToken]);
 
   useEffect(() => {
     // If user is logged out, clear cache and reset to starter
@@ -411,10 +425,15 @@ export const useSubscription = () => {
       }
 
       try {
+        const token = await getValidAccessToken();
+        if (!token) {
+          toast.error("Session expired. Please sign in again.");
+          return null;
+        }
         const { data, error } = await supabase.functions.invoke("create-checkout", {
           body: { tier },
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
@@ -470,7 +489,7 @@ export const useSubscription = () => {
         return null;
       }
     },
-    [session?.access_token]
+    [session?.access_token, getValidAccessToken]
   );
 
   const openCustomerPortal = useCallback(async () => {
@@ -479,40 +498,44 @@ export const useSubscription = () => {
       return null;
     }
 
-      try {
-        const { data, error } = await supabase.functions.invoke("customer-portal", {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        });
+    try {
+      const token = await getValidAccessToken();
+      if (!token) {
+        toast.error("Session expired. Please sign in again.");
+        return null;
+      }
+      const { data, error } = await supabase.functions.invoke("customer-portal", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-        if (error) {
-          console.error("Customer portal error:", error);
-          const message = await getCustomerPortalErrorMessage(error);
-          toast.error(message);
-          return null;
-        }
-
-        if (data?.error) {
-          console.error("Customer portal returned error:", data.error);
-          toast.error(data.error || "Failed to open billing portal");
-          return null;
-        }
-
-        if (data?.url) {
-          await openExternalUrl(data.url);
-          return data.url;
-        } else {
-          toast.error("No portal URL received");
-          return null;
-        }
-      } catch (err) {
-        console.error("Error opening customer portal:", err);
-        const message = await getCustomerPortalErrorMessage(err);
+      if (error) {
+        console.error("Customer portal error:", error);
+        const message = await getCustomerPortalErrorMessage(error);
         toast.error(message);
         return null;
       }
-  }, [session?.access_token]);
+
+      if (data?.error) {
+        console.error("Customer portal returned error:", data.error);
+        toast.error(data.error || "Failed to open billing portal");
+        return null;
+      }
+
+      if (data?.url) {
+        await openExternalUrl(data.url);
+        return data.url;
+      }
+      toast.error("No portal URL received");
+      return null;
+    } catch (err) {
+      console.error("Error opening customer portal:", err);
+      const message = await getCustomerPortalErrorMessage(err);
+      toast.error(message);
+      return null;
+    }
+  }, [session?.access_token, getValidAccessToken]);
 
   return {
     ...subscription,

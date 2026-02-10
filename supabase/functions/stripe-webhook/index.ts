@@ -88,21 +88,29 @@ serve(async (req) => {
     const upsertSubscription = async (params: {
       userId: string;
       subscription: Stripe.Subscription;
+      stripe: Stripe;
     }) => {
-      const { userId, subscription } = params;
+      let { subscription } = params;
+      const { userId, stripe } = params;
+      // Event payload sometimes omits period dates; fetch full subscription when needed
+      if (!subscription.current_period_end || !subscription.current_period_start) {
+        logStep("Subscription missing date fields, fetching from Stripe", { subscriptionId: subscription.id });
+        const retrieved = await stripe.subscriptions.retrieve(subscription.id);
+        if (retrieved.current_period_end && retrieved.current_period_start) {
+          subscription = retrieved;
+        } else {
+          logStep("Subscription still missing date fields after retrieve, skipping sync", {
+            subscriptionId: subscription.id,
+          });
+          return;
+        }
+      }
       const customerId = subscription.customer as string;
       const priceId = subscription.items.data[0]?.price?.id as string | undefined;
       const tier = priceToTier(priceId);
       const seatsLimit = SEAT_LIMITS[tier] || 1;
-      const status = subscription.status === "active" ? "active" : subscription.status;
-      if (!subscription.current_period_end || !subscription.current_period_start) {
-        logStep("Subscription missing date fields, skipping sync", {
-          subscriptionId: subscription.id,
-          hasPeriodEnd: !!subscription.current_period_end,
-          hasPeriodStart: !!subscription.current_period_start,
-        });
-        return;
-      }
+      // Treat trialing as active so get_user_subscription_tier returns the tier (it filters on status = 'active')
+      const status = (subscription.status === "active" || subscription.status === "trialing") ? "active" : subscription.status;
       const { error: upsertError } = await supabase
         .from("subscriptions")
         .upsert({
@@ -139,7 +147,7 @@ serve(async (req) => {
           ? session.subscription
           : session.subscription.id;
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        await upsertSubscription({ userId, subscription });
+        await upsertSubscription({ userId, subscription, stripe });
         break;
       }
 
@@ -199,7 +207,7 @@ serve(async (req) => {
           break;
         }
 
-        await upsertSubscription({ userId, subscription });
+        await upsertSubscription({ userId, subscription, stripe });
         break;
       }
 
