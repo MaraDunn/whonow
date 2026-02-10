@@ -284,8 +284,17 @@ export const useSubscription = () => {
         // Fallback: Try Edge Function if database doesn't have subscription
         const token = await getValidAccessToken();
         if (!token) {
+          const starterData: SubscriptionData = {
+            subscribed: false,
+            tier: "starter",
+            seatsLimit: 1,
+            seatsUsed: 0,
+            subscriptionEnd: null,
+          };
+          setSubscription(starterData);
           setIsLoading(false);
-          throw new Error("Session expired. Please sign in again.");
+          // Don't throw: avoids spamming console when interval/retries run with no valid session
+          return starterData;
         }
         const { data, error } = await supabase.functions.invoke("check-subscription", {
           headers: {

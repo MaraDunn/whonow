@@ -26,7 +26,8 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.check-subscription]
-verify_jwt = true
+# Let the function validate the token; avoids gateway 401 when token is valid but gateway rejects (e.g. refresh timing)
+verify_jwt = false
 
 [functions.create-checkout]
 verify_jwt = true
