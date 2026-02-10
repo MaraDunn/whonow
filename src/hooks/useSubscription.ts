@@ -312,10 +312,22 @@ export const useSubscription = () => {
 
         // Handle case where function returns error in response body
         if (data?.error) {
+          // Temporary state: Stripe subscription not ready yet (e.g. missing period dates)
+          if (data.error === "Subscription is being processed, please try again in a moment") {
+            const processingData: SubscriptionData = {
+              subscribed: false,
+              tier: "starter",
+              seatsLimit: 1,
+              seatsUsed: 0,
+              subscriptionEnd: null,
+            };
+            setSubscription(processingData);
+            setIsLoading(false);
+            return processingData;
+          }
           console.error("Subscription check returned error:", data.error);
-          // Don't reset subscription on API errors - keep cached data
           setIsLoading(false);
-          throw new Error(data.error); // Re-throw so pending request is cleared
+          throw new Error(data.error);
         }
 
         const subscriptionData: SubscriptionData = {

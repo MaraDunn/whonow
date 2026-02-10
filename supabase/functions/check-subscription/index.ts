@@ -113,25 +113,25 @@ serve(async (req) => {
       });
     }
 
-    const subscription = subscriptions.data[0];
-    
-    // Validate subscription has required date fields
+    let subscription = subscriptions.data[0];
     if (!subscription.current_period_end || !subscription.current_period_start) {
-      logStep("Subscription missing date fields", { 
-        hasPeriodEnd: !!subscription.current_period_end,
-        hasPeriodStart: !!subscription.current_period_start 
-      });
-      return new Response(JSON.stringify({ 
-        subscribed: false, 
-        tier: "starter",
-        seats_limit: 1,
-        seats_used: 0,
-        subscription_end: null,
-        error: "Subscription is being processed, please try again in a moment"
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
+      logStep("Subscription missing date fields, fetching from Stripe", { subscriptionId: subscription.id });
+      const retrieved = await stripe.subscriptions.retrieve(subscription.id);
+      if (retrieved.current_period_end && retrieved.current_period_start) {
+        subscription = retrieved;
+      } else {
+        return new Response(JSON.stringify({
+          subscribed: false,
+          tier: "starter",
+          seats_limit: 1,
+          seats_used: 0,
+          subscription_end: null,
+          error: "Subscription is being processed, please try again in a moment"
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
     }
     
     const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();

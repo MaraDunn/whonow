@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
 import { getStripeRedirectOrigin } from "../_shared/appUrl.ts";
 
 const corsHeaders = {
@@ -44,13 +43,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Check launch mode - block in waitlist mode
-  const { blocked } = checkLaunchMode();
-  if (blocked) {
-    const origin = req.headers.get("origin");
-    return waitlistModeBlockedResponse(origin);
-  }
-
+  // Not blocked by waitlist mode so users with access can start checkout
   const supabaseClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
