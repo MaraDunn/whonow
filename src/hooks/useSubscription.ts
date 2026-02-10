@@ -107,10 +107,8 @@ export const useSubscription = () => {
     return fallback;
   };
 
-  // Get a valid access token, refreshing the session if needed (avoids 401 Invalid JWT from expired token)
+  // Get a valid access token, always refreshing so we don't send an expired JWT (avoids 401 from gateway)
   const getValidAccessToken = useCallback(async (): Promise<string | null> => {
-    const { data: { session: current } } = await supabase.auth.getSession();
-    if (current?.access_token) return current.access_token;
     const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
     if (error || !refreshed?.access_token) return null;
     return refreshed.access_token;
