@@ -281,8 +281,11 @@ export const useSubscription = () => {
           }
         }
 
-        // Fallback: Try Edge Function if database doesn't have subscription
-        const token = await getValidAccessToken();
+        // Fallback: Try Edge Function if database doesn't have subscription (syncs from Stripe to DB)
+        let token = await getValidAccessToken();
+        if (!token && session?.access_token) {
+          token = session.access_token;
+        }
         if (!token) {
           const starterData: SubscriptionData = {
             subscribed: false,
@@ -293,7 +296,6 @@ export const useSubscription = () => {
           };
           setSubscription(starterData);
           setIsLoading(false);
-          // Don't throw: avoids spamming console when interval/retries run with no valid session
           return starterData;
         }
         const { data, error } = await supabase.functions.invoke("check-subscription", {

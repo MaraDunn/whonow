@@ -38,6 +38,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.stripe-webhook]
+# Must be false: Stripe sends webhooks without an Authorization header; gateway would otherwise return 401
 verify_jwt = false
 
 [functions.waitlist]

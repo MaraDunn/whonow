@@ -36,8 +36,11 @@ Use this list when payments succeed but the user’s tier (e.g. Pro) doesn’t u
   - After a test checkout, do you see requests for the events above?
   - If **no**: endpoint URL wrong, or Stripe not sending (check endpoint “Events to send”).
   - If **yes**: note the **response status** (200 = success, 4xx/5xx = failure).
+  - **No new webhook logs is normal** when nothing changed in Stripe. For a subscription that already exists, the app syncs tier via **check-subscription** (reads Stripe, writes DB). If the subscription is in Stripe but not in the app, ensure check-subscription is deployed and the app can call it (valid session).
 
 - [ ] **Signing secret**: In Stripe, open the endpoint and copy the **Signing secret** (`whsec_...`). In Supabase (Edge Functions → Secrets), `STRIPE_WEBHOOK_SECRET` must match exactly. If you recreated the webhook or rotated the secret, update Supabase.
+
+- [ ] **401 "Missing authorization header"** when Stripe sends an event: Stripe does **not** send an `Authorization` header. The Supabase gateway is rejecting the request because the **stripe-webhook** function has JWT verification enabled on the deployed version. Fix: ensure `supabase/config.toml` has `[functions.stripe-webhook]` with `verify_jwt = false`, then **redeploy** the function so the setting takes effect: `supabase functions deploy stripe-webhook`. Until this is fixed, no webhook events will reach your code and no subscription rows will be created.
 
 ---
 
@@ -71,6 +74,10 @@ Use this list when payments succeed but the user’s tier (e.g. Pro) doesn’t u
   - If you see **signature verification failed**: `STRIPE_WEBHOOK_SECRET` does not match the endpoint’s signing secret.
   - If you see **No user_id in checkout session metadata**: checkout was not created by our `create-checkout` (metadata must include `user_id`).
   - If you see **Error upserting subscription**: check the error message (e.g. missing column, constraint, or permissions).
+  - If you see **No user found for subscription**: the function looked up the user by Stripe customer email via `auth.admin.listUsers` and didn’t find a match (e.g. email mismatch or user not in first 10k users).
+  - If you see **Subscription still missing date fields after retrieve, skipping sync**: Stripe subscription had no period dates even after fetch; rare.
+
+- [ ] **No new row after resend**: In **Stripe** → Webhooks → your endpoint → **Recent deliveries**, open the **resent** event and check the **Response** (status and body). If it’s **401**, the request never reached your code (redeploy didn’t apply or JWT still required). If it’s **200**, the request reached the function; then in **Supabase** → Edge Functions → **stripe-webhook** → **Logs** (filter by the time of the resend) you should see either `Subscription synced` (row should exist; check `user_id` / `stripe_customer_id` in the table) or one of the log messages above explaining why no row was written.
 
 ---
 

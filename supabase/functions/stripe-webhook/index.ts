@@ -99,10 +99,9 @@ serve(async (req) => {
         if (retrieved.current_period_end && retrieved.current_period_start) {
           subscription = retrieved;
         } else {
-          logStep("Subscription still missing date fields after retrieve, skipping sync", {
+          logStep("Subscription still missing date fields after retrieve; syncing tier with null period", {
             subscriptionId: subscription.id,
           });
-          return;
         }
       }
       const customerId = subscription.customer as string;
@@ -111,6 +110,12 @@ serve(async (req) => {
       const seatsLimit = SEAT_LIMITS[tier] || 1;
       // Treat trialing as active so get_user_subscription_tier returns the tier (it filters on status = 'active')
       const status = (subscription.status === "active" || subscription.status === "trialing") ? "active" : subscription.status;
+      const periodStart = subscription.current_period_start
+        ? new Date(subscription.current_period_start * 1000).toISOString()
+        : null;
+      const periodEnd = subscription.current_period_end
+        ? new Date(subscription.current_period_end * 1000).toISOString()
+        : null;
       const { error: upsertError } = await supabase
         .from("subscriptions")
         .upsert({
@@ -119,8 +124,8 @@ serve(async (req) => {
           stripe_customer_id: customerId,
           stripe_subscription_id: subscription.id,
           status: status,
-          current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-          current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+          current_period_start: periodStart,
+          current_period_end: periodEnd,
           employee_seats_limit: seatsLimit,
         }, { onConflict: "user_id" });
       if (upsertError) {
