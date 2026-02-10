@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
+import { getStripeRedirectOrigin } from "../_shared/appUrl.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -72,10 +73,9 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
-    // Get origin from request or use environment variable, fallback to localhost:8080
-    const origin = Deno.env.get("APP_URL") || 
-                   req.headers.get("origin") || 
-                   "http://localhost:8080";
+    // Redirect to canonical app (whonow.co) so Stripe always returns users to the deployed app
+    const origin = getStripeRedirectOrigin(req);
+    logStep("Redirect origin", { origin });
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}/app`,

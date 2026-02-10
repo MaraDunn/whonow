@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { SubscriptionData, SubscriptionTier, FeatureName, FEATURE_ACCESS } from "@/types/subscription";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { openExternalUrl } from "@/utils/openExternalUrl";
 
 // Persistent cache key for subscription data
 const SUBSCRIPTION_CACHE_KEY = "whonow_subscription_cache";
@@ -374,6 +375,14 @@ export const useSubscription = () => {
     if (params.get("subscription") === "success") {
       toast.success("Subscription activated successfully!");
       checkSubscription();
+      // Webhook can be delayed; retry reading from DB so tier updates even when
+      // check-subscription is blocked (e.g. waitlist mode)
+      const retryMs = [2500, 5000];
+      retryMs.forEach((ms) => {
+        setTimeout(() => {
+          checkSubscription();
+        }, ms);
+      });
       // Clean up URL
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -438,7 +447,7 @@ export const useSubscription = () => {
         }
 
         if (data?.url) {
-          window.open(data.url, "_blank");
+          await openExternalUrl(data.url);
           return data.url;
         } else {
           toast.error("No checkout URL received");
@@ -484,7 +493,7 @@ export const useSubscription = () => {
         }
 
         if (data?.url) {
-          window.open(data.url, "_blank");
+          await openExternalUrl(data.url);
           return data.url;
         } else {
           toast.error("No portal URL received");

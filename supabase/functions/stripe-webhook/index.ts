@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { checkLaunchMode } from "../_shared/security.ts";
 
 // No CORS headers needed - webhooks come from Stripe servers, not browsers
+// Stripe webhook is never blocked by waitlist mode so subscription updates apply for users with access.
 
 // Stripe IDs differ between test and live mode.
 // Prefer mapping by PRICE ID (easy to configure via secrets).
@@ -39,12 +39,6 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
 serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
-  }
-
-  // Check launch mode - block in waitlist mode
-  const { blocked } = checkLaunchMode();
-  if (blocked) {
-    return new Response("Service unavailable", { status: 403 });
   }
 
   try {
@@ -90,74 +84,122 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
+    // Helper: upsert subscription row (shared by checkout.session.completed and subscription events)
+    const upsertSubscription = async (params: {
+      userId: string;
+      subscription: Stripe.Subscription;
+    }) => {
+      const { userId, subscription } = params;
+      const customerId = subscription.customer as string;
+      const priceId = subscription.items.data[0]?.price?.id as string | undefined;
+      const tier = priceToTier(priceId);
+      const seatsLimit = SEAT_LIMITS[tier] || 1;
+      const status = subscription.status === "active" ? "active" : subscription.status;
+      if (!subscription.current_period_end || !subscription.current_period_start) {
+        logStep("Subscription missing date fields, skipping sync", {
+          subscriptionId: subscription.id,
+          hasPeriodEnd: !!subscription.current_period_end,
+          hasPeriodStart: !!subscription.current_period_start,
+        });
+        return;
+      }
+      const { error: upsertError } = await supabase
+        .from("subscriptions")
+        .upsert({
+          user_id: userId,
+          tier: tier,
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscription.id,
+          status: status,
+          current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+          current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+          employee_seats_limit: seatsLimit,
+        }, { onConflict: "user_id" });
+      if (upsertError) {
+        logStep("Error upserting subscription", { error: upsertError.message });
+      } else {
+        logStep("Subscription synced", { tier, status, userId });
+      }
+    };
+
     // Handle subscription events
     switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.mode !== "subscription" || !session.subscription) {
+          logStep("Checkout session not subscription or no subscription id", { mode: session.mode });
+          break;
+        }
+        const userId = session.metadata?.user_id;
+        if (!userId) {
+          logStep("No user_id in checkout session metadata, skipping");
+          break;
+        }
+        const subscriptionId = typeof session.subscription === "string"
+          ? session.subscription
+          : session.subscription.id;
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        await upsertSubscription({ userId, subscription });
+        break;
+      }
+
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
-        
-        // Get customer email to find user
-        const customer = await stripe.customers.retrieve(customerId);
-        if (customer.deleted) {
-          logStep("Customer deleted, skipping");
-          break;
-        }
-        
-        const customerEmail = customer.email;
-        if (!customerEmail) {
-          logStep("No customer email found", { customerId });
-          break;
-        }
 
-        // Find user by email
-        const { data: users, error: userError } = await supabase.auth.admin.listUsers();
-        if (userError) {
-          logStep("Error listing users", { error: userError.message });
-          break;
-        }
-
-        const user = users.users.find(u => u.email === customerEmail);
-        if (!user) {
-          logStep("No user found for email");
-          break;
-        }
-
-        // Determine tier from price (works across test/live)
-        const priceId = subscription.items.data[0]?.price?.id as string | undefined;
-        const tier = priceToTier(priceId);
-        const seatsLimit = SEAT_LIMITS[tier] || 1;
-        const status = subscription.status === "active" ? "active" : subscription.status;
-
-        // Validate subscription has date fields
-        if (!subscription.current_period_end || !subscription.current_period_start) {
-          logStep("Subscription missing date fields, skipping sync", { 
-            subscriptionId: subscription.id,
-            hasPeriodEnd: !!subscription.current_period_end,
-            hasPeriodStart: !!subscription.current_period_start 
-          });
-          break;
-        }
-
-        // Upsert subscription
-        const { error: upsertError } = await supabase
+        // Prefer user_id from existing row (by stripe_customer_id or stripe_subscription_id)
+        const { data: existing } = await supabase
           .from("subscriptions")
-          .upsert({
-            user_id: user.id,
-            tier: tier,
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscription.id,
-            status: status,
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            employee_seats_limit: seatsLimit,
-          }, { onConflict: "user_id" });
+          .select("user_id")
+          .or(`stripe_customer_id.eq.${customerId},stripe_subscription_id.eq.${subscription.id}`)
+          .limit(1)
+          .maybeSingle();
+        let userId: string | null = existing?.user_id ?? null;
 
-        if (upsertError) {
-          logStep("Error upserting subscription", { error: upsertError.message });
-        } else {
-          logStep("Subscription synced", { tier, status, userId: user.id });
+        if (!userId) {
+          // Find user by customer email (listUsers is paginated; only first page was used before)
+          const customer = await stripe.customers.retrieve(customerId);
+          if (customer.deleted) {
+            logStep("Customer deleted, skipping");
+            break;
+          }
+          const customerEmail = customer.email;
+          if (!customerEmail) {
+            logStep("No customer email found", { customerId });
+            break;
+          }
+          let page = 1;
+          const perPage = 100;
+          while (true) {
+            const { data: listData, error: userError } = await supabase.auth.admin.listUsers({
+              page,
+              perPage,
+            });
+            if (userError) {
+              logStep("Error listing users", { error: userError.message });
+              break;
+            }
+            const user = listData.users.find((u) => u.email === customerEmail);
+            if (user) {
+              userId = user.id;
+              break;
+            }
+            if (!listData.users.length || listData.users.length < perPage) break;
+            page += 1;
+            if (page > 100) {
+              logStep("Gave up finding user by email after 100 pages");
+              break;
+            }
+          }
         }
+
+        if (!userId) {
+          logStep("No user found for subscription", { subscriptionId: subscription.id });
+          break;
+        }
+
+        await upsertSubscription({ userId, subscription });
         break;
       }
 
