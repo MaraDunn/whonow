@@ -1,6 +1,6 @@
 {
   "productName": "WhoNow",
-  "version": "1.0.0",
+  "version": "1.0.36",
   "identifier": "com.whonow.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -53,7 +53,7 @@
       "frameworks": [],
       "minimumSystemVersion": "10.13",
       "exceptionDomain": "",
-      "signingIdentity": null,
+      "signingIdentity": "Developer ID Application: Mara Dunn (4TSFTN7743)",
       "providerShortName": null,
       "entitlements": null
     },
@@ -65,16 +65,13 @@
   },
   "plugins": {
     "shell": {
-      "all": false,
       "open": true
     },
     "dialog": {
-      "all": false,
       "open": true,
       "save": true
     },
     "fs": {
-      "all": false,
       "readFile": true,
       "writeFile": true,
       "readDir": true,
@@ -96,12 +93,13 @@
       ]
     },
     "http": {
-      "all": true,
       "request": true,
-      "scope": ["https://**"]
+      "scope": [
+        "https://**"
+      ]
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENGMkM1MkE5NTczOEU5QjUKUldTMTZUaFhxVklzenoySGRkWlZOSFFRK05VT0xnZnFpN2NzbXd6Rk9hUG1IWWs2UG4yMEo0R3QK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk3RTZGNjE5OUVDOTg2QzkKUldUSmhzbWVHZmJtbDBRSTBrM1hVOSs1L2lINFdLVXVKMU5SbmtDUVU1cHlhV1hlQzlqNHdYRVQK",
       "endpoints": [
         "https://github.com/MaraDunn/whonow/releases/latest/download/latest.json"
       ]
