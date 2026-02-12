@@ -104,3 +104,27 @@ jobs:
           args: ${{ matrix.args }}
           includeUpdaterJson: true
           tauriScript: npm run tauri
+
+      # Re-package DMG from the stapled app so the uploaded DMG contains the notarized bundle
+      # (Tauri's bundle_dmg may run on a copy from before stapling, resulting in an unnotarized app in the DMG)
+      - name: Rebuild DMG from stapled app and re-upload
+        if: matrix.platform == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          if [[ "${{ matrix.args }}" == *"aarch64"* ]]; then
+            TARGET="aarch64-apple-darwin"
+            ARCH="aarch64"
+          else
+            TARGET="x86_64-apple-darwin"
+            ARCH="x64"
+          fi
+          APP="src-tauri/target/${TARGET}/release/bundle/macos/WhoNow.app"
+          DMG_NAME="WhoNow_${VER}_${ARCH}.dmg"
+          echo "Creating DMG from stapled app at $APP"
+          spctl -a -vvv -t execute -- "$APP" || true
+          rm -f "$DMG_NAME"
+          hdiutil create -volname "WhoNow" -srcfolder "$APP" -ov -format UDZO "$DMG_NAME"
+          codesign --force --sign "${{ steps.apple-cert.outputs.signing_identity }}" "$DMG_NAME"
+          gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" --clobber
