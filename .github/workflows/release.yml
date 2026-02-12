@@ -105,8 +105,7 @@ jobs:
           includeUpdaterJson: true
           tauriScript: npm run tauri
 
-      # Re-package DMG from the stapled app so the uploaded DMG contains the notarized bundle
-      # (Tauri's bundle_dmg may run on a copy from before stapling, resulting in an unnotarized app in the DMG)
+      # Re-package DMG from the stapled app: proper layout (app + Applications symlink) and re-upload
       - name: Rebuild DMG from stapled app and re-upload
         if: matrix.platform == 'macos-latest'
         env:
@@ -122,9 +121,15 @@ jobs:
           fi
           APP="src-tauri/target/${TARGET}/release/bundle/macos/WhoNow.app"
           DMG_NAME="WhoNow_${VER}_${ARCH}.dmg"
-          echo "Creating DMG from stapled app at $APP"
-          spctl -a -vvv -t execute -- "$APP" || true
+          echo "Verifying app is notarized/stapled..."
+          xcrun stapler validate "$APP" || { echo "::error::App is not stapled; release DMG would be unnotarized."; exit 1; }
+          STAGE="dmg-stage"
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          echo "Creating DMG with app + Applications folder..."
           rm -f "$DMG_NAME"
-          hdiutil create -volname "WhoNow" -srcfolder "$APP" -ov -format UDZO "$DMG_NAME"
+          hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDZO "$DMG_NAME"
+          rm -rf "$STAGE"
           codesign --force --sign "${{ steps.apple-cert.outputs.signing_identity }}" "$DMG_NAME"
           gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" --clobber
