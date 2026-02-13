@@ -121,16 +121,44 @@ jobs:
           fi
           APP="src-tauri/target/${TARGET}/release/bundle/macos/WhoNow.app"
           DMG_NAME="WhoNow_${VER}_${ARCH}.dmg"
+          IDENTITY="${{ steps.apple-cert.outputs.signing_identity }}"
+          CODE_RESOURCES="$APP/Contents/CodeResources"
+          if [[ -L "$CODE_RESOURCES" ]]; then
+            echo "CodeResources is a symlink; removing and re-signing so stapling can work..."
+            rm "$CODE_RESOURCES"
+            codesign --force --deep --sign "$IDENTITY" "$APP"
+            echo "Re-notarizing and re-stapling app after re-sign..."
+            ditto -c -k --keepParent "$APP" WhoNow.zip
+            xcrun notarytool submit WhoNow.zip --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait
+            xcrun stapler staple "$APP"
+            rm -f WhoNow.zip
+          fi
+          echo "Checking for entitlements that can cause Gatekeeper to reject..."
+          if codesign -d --entitlements - --xml -- "$APP" 2>/dev/null | grep -qE 'allow-jit|allow-unsigned-executable-memory'; then
+            echo "::error::App or a nested binary has allow-jit or allow-unsigned-executable-memory; Gatekeeper may reject. Adjust Tauri entitlements."
+            exit 1
+          fi
           echo "Verifying app is notarized/stapled..."
           xcrun stapler validate "$APP" || { echo "::error::App is not stapled; release DMG would be unnotarized."; exit 1; }
+          echo "Verifying app would be accepted by Gatekeeper (spctl)..."
+          spctl -a -t execute -v -- "$APP" || { echo "::error::App would be rejected by Gatekeeper (spctl). Check entitlements and bundle."; exit 1; }
           STAGE="dmg-stage"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           ditto "$APP" "$STAGE/WhoNow.app"
+          echo "Verifying stapled ticket survived ditto copy..."
+          xcrun stapler validate "$STAGE/WhoNow.app" || { echo "::error::Stapled ticket lost during ditto copy."; exit 1; }
+          spctl -a -t execute -v -- "$STAGE/WhoNow.app" || { echo "::error::Gatekeeper would reject staged app (entitlements/bundle?)."; exit 1; }
           ln -s /Applications "$STAGE/Applications"
           echo "Creating DMG with app + Applications folder..."
           rm -f "$DMG_NAME"
           hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDZO "$DMG_NAME"
           rm -rf "$STAGE"
+          echo "Verifying app inside DMG still has stapled ticket and passes Gatekeeper..."
+          hdiutil attach "$DMG_NAME" -readonly -nobrowse
+          APP_IN_DMG="/Volumes/WhoNow/WhoNow.app"
+          xcrun stapler validate "$APP_IN_DMG" || { hdiutil detach /Volumes/WhoNow; echo "::error::Stapled ticket lost inside DMG (xattrs not preserved by hdiutil)."; exit 1; }
+          spctl -a -t execute -v -- "$APP_IN_DMG" || { hdiutil detach /Volumes/WhoNow; echo "::error::Gatekeeper would reject app inside DMG."; exit 1; }
+          hdiutil detach /Volumes/WhoNow
           codesign --force --sign "${{ steps.apple-cert.outputs.signing_identity }}" "$DMG_NAME"
           echo "Notarizing DMG so opening the disk image is trusted..."
           xcrun notarytool submit "$DMG_NAME" --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait

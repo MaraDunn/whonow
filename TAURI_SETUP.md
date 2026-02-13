@@ -146,21 +146,21 @@ OAuth redirects should work automatically through Supabase. If issues occur, che
 3. The app is using the correct Supabase project URL
 
 ### macOS: "WhoNow is damaged and can't be opened"
-macOS Gatekeeper can show this when the app is **quarantined** (e.g. downloaded from the web) and either not notarized or the notarization ticket wasn’t stapled. Fixes:
+macOS Gatekeeper can show this when the app is **quarantined** (e.g. downloaded from the web) and either not notarized or the notarization ticket wasn’t stapled. If CI notarization keeps failing, follow **[docs/MACOS_NOTARIZATION_CHECKLIST.md](docs/MACOS_NOTARIZATION_CHECKLIST.md)** to verify your Apple account and secrets. Fixes:
 
-1. **Use a build from the latest release**  
-   New releases are signed and notarized when `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are set in repo secrets. In the Release workflow run, confirm the macOS job completes and that the build step runs notarization (check the Actions log).
+1. **Use a notarized build from the latest release**  
+   New releases are signed and notarized when `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are set in repo secrets. Use the app from the latest GitHub release; the first time you open it, you may need **right-click → Open** to allow Gatekeeper. In the Release workflow run, confirm the macOS job completes and that the build step runs notarization (check the Actions log).
 
-2. **One-time workaround for an already-downloaded app**  
-   Remove the quarantine attribute so macOS stops blocking it:
+2. **If you must remove quarantine only**  
+   Remove only the quarantine attribute (do **not** use `xattr -cr`, which removes the stapled notarization ticket and can cause "damaged" or "Unnotarized"):
    ```bash
-   xattr -cr /Applications/WhoNow.app
+   xattr -d com.apple.quarantine /Applications/WhoNow.app
    ```
-   Or if you run the app from the DMG:
+   Or if the app is still on the DMG volume:
    ```bash
-   xattr -cr /Volumes/WhoNow\ */WhoNow.app
+   xattr -d com.apple.quarantine /Volumes/WhoNow/WhoNow.app
    ```
-   Then move `WhoNow.app` to `/Applications` and open it.
+   Then move `WhoNow.app` to `/Applications` if needed and open it.
 
 ## Releasing
 
