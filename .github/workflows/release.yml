@@ -125,11 +125,14 @@ jobs:
           xcrun stapler validate "$APP" || { echo "::error::App is not stapled; release DMG would be unnotarized."; exit 1; }
           STAGE="dmg-stage"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
-          cp -R "$APP" "$STAGE/"
+          ditto "$APP" "$STAGE/WhoNow.app"
           ln -s /Applications "$STAGE/Applications"
           echo "Creating DMG with app + Applications folder..."
           rm -f "$DMG_NAME"
           hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDZO "$DMG_NAME"
           rm -rf "$STAGE"
           codesign --force --sign "${{ steps.apple-cert.outputs.signing_identity }}" "$DMG_NAME"
+          echo "Notarizing DMG so opening the disk image is trusted..."
+          xcrun notarytool submit "$DMG_NAME" --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait
+          xcrun stapler staple "$DMG_NAME"
           gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" --clobber
