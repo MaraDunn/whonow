@@ -169,14 +169,15 @@ jobs:
           spctl -a -t execute -v -- "$STAGE/WhoNow.app" || { echo "::error::Gatekeeper would reject staged app (entitlements/bundle?)."; exit 1; }
           ln -s /Applications "$STAGE/Applications"
           echo "Creating DMG via mounted volume (ditto) to preserve xattrs..."
-          rm -f "$DMG_NAME" temp_who.dmg
+          TEMP_SPARSE="temp_who.dmg.sparseimage"
+          rm -f "$DMG_NAME" temp_who.dmg "$TEMP_SPARSE"
           hdiutil create -size 200m -type SPARSE -fs HFS+ -volname "WhoNow" -ov temp_who.dmg
-          hdiutil attach temp_who.dmg -nobrowse
+          hdiutil attach "$TEMP_SPARSE" -nobrowse
           ditto "$STAGE/WhoNow.app" "/Volumes/WhoNow/WhoNow.app"
           ln -s /Applications "/Volumes/WhoNow/Applications"
           hdiutil detach /Volumes/WhoNow
-          hdiutil convert temp_who.dmg -format UDZO -o "$DMG_NAME" -ov
-          rm -f temp_who.dmg
+          hdiutil convert "$TEMP_SPARSE" -format UDZO -o "$DMG_NAME" -ov
+          rm -f "$TEMP_SPARSE"
           rm -rf "$STAGE"
           echo "Verifying app inside DMG still has stapled ticket and passes Gatekeeper..."
           hdiutil attach "$DMG_NAME" -readonly -nobrowse
