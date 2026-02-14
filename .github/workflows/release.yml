@@ -170,7 +170,7 @@ jobs:
           ln -s /Applications "$STAGE/Applications"
           echo "Creating DMG via mounted volume (ditto) to preserve xattrs..."
           rm -f "$DMG_NAME" temp_who.dmg
-          hdiutil create -size 200m -type UDRW -fs HFS+ -volname "WhoNow" -ov temp_who.dmg
+          hdiutil create -size 200m -format UDRW -fs HFS+ -volname "WhoNow" -ov temp_who.dmg
           hdiutil attach temp_who.dmg -nobrowse
           ditto "$STAGE/WhoNow.app" "/Volumes/WhoNow/WhoNow.app"
           ln -s /Applications "/Volumes/WhoNow/Applications"
