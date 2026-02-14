@@ -7,6 +7,7 @@
 #   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
 #   TAURI_SIGNING_PRIVATE_KEY (contents of ~/.tauri/whonow.key - copy with pbcopy)
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD (password you set - or omit if no password)
+#   RELEASE_GITHUB_TOKEN - PAT with repo scope (classic) or Contents + Metadata (fine-grained); used to create the release
 #   macOS: APPLE_CERTIFICATE (base64 of .p12), APPLE_CERTIFICATE_PASSWORD, KEYCHAIN_PASSWORD
 #   macOS notarization: APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID
 # Optional: VITE_APP_URL as repo Variable or Secret (e.g. https://app.whonow.co)
@@ -21,7 +22,25 @@ permissions:
   contents: write
 
 jobs:
+  # Create the release first with PAT so tauri-action can upload (avoids "Resource not accessible by integration").
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release for tag
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: WhoNow ${{ github.ref_name }}
+          body: See the assets to download and install.
+          draft: false
+          token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+
   release:
+    needs: create-release
+    permissions:
+      contents: write
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -83,7 +102,7 @@ jobs:
       - name: Build and release with tauri-action
         uses: tauri-apps/tauri-action@v0.5
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_APP_LAUNCH_MODE: live
@@ -109,7 +128,7 @@ jobs:
       - name: Rebuild DMG from stapled app and re-upload
         if: matrix.platform == 'macos-latest'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           VER="${GITHUB_REF_NAME#v}"
           if [[ "${{ matrix.args }}" == *"aarch64"* ]]; then
