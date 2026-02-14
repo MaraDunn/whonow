@@ -149,9 +149,18 @@ OAuth redirects should work automatically through Supabase. If issues occur, che
 macOS Gatekeeper can show this when the app is **quarantined** (e.g. downloaded from the web) and either not notarized or the notarization ticket wasn’t stapled. If CI notarization keeps failing, follow **[docs/MACOS_NOTARIZATION_CHECKLIST.md](docs/MACOS_NOTARIZATION_CHECKLIST.md)** to verify your Apple account and secrets. Fixes:
 
 1. **Use a notarized build from the latest release**  
-   New releases are signed and notarized when `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are set in repo secrets. Use the app from the latest GitHub release; the first time you open it, you may need **right-click → Open** to allow Gatekeeper. In the Release workflow run, confirm the macOS job completes and that the build step runs notarization (check the Actions log).
+   New releases are signed and notarized when `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are set in repo secrets. Use the app from the latest GitHub release. **Copy WhoNow.app to Applications** (or another folder) **before** first launch—do not run it directly from the mounted DMG; then open it from Applications. The first time you may need **right-click → Open** to allow Gatekeeper. In the Release workflow run, confirm the macOS job completes and that the build step runs notarization (check the Actions log).
 
-2. **If you must remove quarantine only**  
+2. **If Gatekeeper still blocks**  
+   Run these on the installed app (e.g. `/Applications/WhoNow.app`) to see if the staple is present and what Gatekeeper reports:
+   ```bash
+   xcrun stapler validate /Applications/WhoNow.app
+   spctl -a -t execute -v -- /Applications/WhoNow.app
+   xattr -l /Applications/WhoNow.app
+   ```
+   You want stapler to print "The validate action worked!", spctl to show `accepted` and `source=Notarized Developer ID`, and xattr to include `com.apple.security.cms` (the notarization ticket). If the staple is missing, the app was not copied correctly from the DMG; copy again from a fresh download.
+
+3. **If you must remove quarantine only**  
    Remove only the quarantine attribute (do **not** use `xattr -cr`, which removes the stapled notarization ticket and can cause "damaged" or "Unnotarized"):
    ```bash
    xattr -d com.apple.quarantine /Applications/WhoNow.app
@@ -160,7 +169,7 @@ macOS Gatekeeper can show this when the app is **quarantined** (e.g. downloaded 
    ```bash
    xattr -d com.apple.quarantine /Volumes/WhoNow/WhoNow.app
    ```
-   Then move `WhoNow.app` to `/Applications` if needed and open it.
+   Then move `WhoNow.app` to `/Applications` if needed and open it. Do **not** use `xattr -cr` (it removes the notarization ticket).
 
 ## Releasing
 

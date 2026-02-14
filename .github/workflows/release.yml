@@ -168,9 +168,15 @@ jobs:
           xcrun stapler validate "$STAGE/WhoNow.app" || { echo "::error::Stapled ticket lost during ditto copy."; exit 1; }
           spctl -a -t execute -v -- "$STAGE/WhoNow.app" || { echo "::error::Gatekeeper would reject staged app (entitlements/bundle?)."; exit 1; }
           ln -s /Applications "$STAGE/Applications"
-          echo "Creating DMG with app + Applications folder..."
-          rm -f "$DMG_NAME"
-          hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDZO "$DMG_NAME"
+          echo "Creating DMG via mounted volume (ditto) to preserve xattrs..."
+          rm -f "$DMG_NAME" temp_who.dmg
+          hdiutil create -size 200m -type UDRW -fs HFS+ -volname "WhoNow" -ov temp_who.dmg
+          hdiutil attach temp_who.dmg -nobrowse
+          ditto "$STAGE/WhoNow.app" "/Volumes/WhoNow/WhoNow.app"
+          ln -s /Applications "/Volumes/WhoNow/Applications"
+          hdiutil detach /Volumes/WhoNow
+          hdiutil convert temp_who.dmg -format UDZO -o "$DMG_NAME" -ov
+          rm -f temp_who.dmg
           rm -rf "$STAGE"
           echo "Verifying app inside DMG still has stapled ticket and passes Gatekeeper..."
           hdiutil attach "$DMG_NAME" -readonly -nobrowse

@@ -132,13 +132,17 @@ If you confirm your **account and credentials** with sections 1–5 and 6, we ca
 
 ## Verifying Gatekeeper acceptance
 
-Notarization and stapling alone do not guarantee Gatekeeper will accept the app. To simulate what Gatekeeper does, run:
+Notarization and stapling alone do not guarantee Gatekeeper will accept the app. **Copy the app to Applications** (or another folder) before first launch; do not run it directly from the mounted DMG.
+
+To check whether the app would pass Gatekeeper and whether the stapled ticket is present, run (use the path to your installed app, e.g. `/Applications/WhoNow.app`):
 
 ```bash
-spctl -a -t execute -v -- /path/to/WhoNow.app
+xcrun stapler validate /Applications/WhoNow.app
+spctl -a -t execute -v -- /Applications/WhoNow.app
+xattr -l /Applications/WhoNow.app
 ```
 
-You should see `accepted` and `source=Notarized Developer ID`. If you see `rejected` or `Unnotarized Developer ID`, fix entitlements or the bundle; do not rely only on `stapler validate`.
+You want: stapler prints "The validate action worked!"; spctl shows `accepted` and `source=Notarized Developer ID`; xattr lists `com.apple.security.cms` (the notarization ticket). If you see `rejected` or `Unnotarized Developer ID`, or the staple is missing from xattr, the ticket was lost (e.g. during copy from DMG)—try copying again from a fresh download.
 
 ---
 
