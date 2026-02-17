@@ -110,16 +110,20 @@ function loadUserPreferences(): Partial<AIFeatureFlags> {
   }
   
   try {
+    const getBool = (key: string) => {
+      const v = localStorage.getItem(key);
+      return v === null ? undefined : v === 'true';
+    };
     return {
-      enableAI: localStorage.getItem(STORAGE_KEYS.AI_ENABLED) === 'true' 
-        ? true 
-        : localStorage.getItem(STORAGE_KEYS.AI_ENABLED) === 'false' 
-        ? false 
+      enableAI: localStorage.getItem(STORAGE_KEYS.AI_ENABLED) === 'true'
+        ? true
+        : localStorage.getItem(STORAGE_KEYS.AI_ENABLED) === 'false'
+        ? false
         : undefined,
-      enableSemanticQueryParsing: localStorage.getItem(STORAGE_KEYS.QUERY_PARSING_ENABLED) === 'true',
-      enableSemanticRanking: localStorage.getItem(STORAGE_KEYS.SEMANTIC_RANKING_ENABLED) === 'true',
-      enableHybridScoring: localStorage.getItem(STORAGE_KEYS.HYBRID_SCORING_ENABLED) === 'true',
-      debugMode: localStorage.getItem(STORAGE_KEYS.DEBUG_MODE) === 'true',
+      enableSemanticQueryParsing: getBool(STORAGE_KEYS.QUERY_PARSING_ENABLED),
+      enableSemanticRanking: getBool(STORAGE_KEYS.SEMANTIC_RANKING_ENABLED),
+      enableHybridScoring: getBool(STORAGE_KEYS.HYBRID_SCORING_ENABLED),
+      debugMode: getBool(STORAGE_KEYS.DEBUG_MODE),
     };
   } catch (error) {
     console.warn('[AI Config] Failed to load user preferences:', error);
