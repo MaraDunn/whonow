@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { parsePdfFile } from "@/utils/pdfContactParser";
 
 interface ParsedContact {
   name: string;
@@ -161,17 +162,22 @@ export function useFileContacts() {
     setFileName(file.name);
 
     try {
-      const content = await file.text();
       const extension = file.name.toLowerCase().split(".").pop();
+      const isPdf = extension === "pdf" || file.type === "application/pdf";
 
       let parsed: ParsedContact[] = [];
 
-      if (extension === "vcf" || extension === "vcard") {
-        parsed = parseVCF(content);
-      } else if (extension === "csv") {
-        parsed = parseCSV(content);
+      if (isPdf) {
+        parsed = await parsePdfFile(file);
       } else {
-        throw new Error("Unsupported file format. Please use .vcf or .csv files.");
+        const content = await file.text();
+        if (extension === "vcf" || extension === "vcard") {
+          parsed = parseVCF(content);
+        } else if (extension === "csv") {
+          parsed = parseCSV(content);
+        } else {
+          throw new Error("Unsupported file format. Please use vCard (.vcf), CSV (.csv), or PDF (.pdf) files.");
+        }
       }
 
       if (parsed.length === 0) {

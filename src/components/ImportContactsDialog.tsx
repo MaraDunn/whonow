@@ -684,7 +684,7 @@ export function ImportContactsDialog({
                       <Upload className="h-10 w-10 text-muted-foreground mb-4" />
                       <p className="text-sm font-medium">Drop a file here or click to browse</p>
                       <p className="text-xs text-muted-foreground mt-2">
-                        Supports vCard (.vcf) and CSV (.csv)
+                        Supports vCard (.vcf), CSV (.csv), and PDF (.pdf)
                       </p>
                     </>
                   )}
@@ -692,7 +692,7 @@ export function ImportContactsDialog({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".vcf,.vcard,.csv"
+                  accept=".vcf,.vcard,.csv,.pdf"
                   onChange={handleFileChange}
                   className="hidden"
                 />

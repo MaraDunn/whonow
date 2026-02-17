@@ -1085,7 +1085,6 @@ const IndexContent = () => {
                 onResetKeywords={resetToDefaults}
                 isCompanyKeywords={isCompanyKeywords}
                 canEditKeywords={canEditKeywords}
-                onBulkImport={handleImportContacts}
               />
 
               <ImportContactsDialog

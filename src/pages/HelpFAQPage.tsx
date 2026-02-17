@@ -27,7 +27,7 @@ const faqItems = [
   {
     question: "How do I import contacts?",
     answer:
-      "Click 'Add Contact' and choose one of the import options: 'Scan Business Card' to capture a card with your camera, 'Import from File' to upload a CSV or vCard, 'Sync from Google' to connect your Google contacts, or 'Import from Slack' (if available on your plan) to pull in your Slack workspace members.",
+      "Click 'Add Contact' and choose one of the import options: 'Scan Business Card' to capture a card with your camera, 'Import from File' to upload a vCard, CSV, or PDF, 'Sync from Google' to connect your Google contacts, or 'Import from Slack' (if available on your plan) to pull in your Slack workspace members.",
   },
   {
     question: "How do I export contacts?",

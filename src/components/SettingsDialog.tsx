@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from "react";
 import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { IntegrationsPanel } from "@/components/IntegrationsPanel";
-import { AdminPdfImport } from "@/components/AdminPdfImport";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 import { BrandingSettings } from "@/components/BrandingSettings";
 import { DuplicateCleanupDialog } from "@/components/DuplicateCleanupDialog";
@@ -36,14 +35,6 @@ interface SettingsDialogProps {
   onResetKeywords: () => void;
   isCompanyKeywords?: boolean;
   canEditKeywords?: boolean;
-  onBulkImport?: (contacts: Array<{
-    name: string;
-    email?: string;
-    phone?: string;
-    company?: string;
-    role?: string;
-    tags?: string[];
-  }>) => void;
 }
 
 export function SettingsDialog({
@@ -55,7 +46,6 @@ export function SettingsDialog({
   onResetKeywords,
   isCompanyKeywords = false,
   canEditKeywords = true,
-  onBulkImport,
 }: SettingsDialogProps) {
   const [newKeyword, setNewKeyword] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
@@ -398,8 +388,7 @@ export function SettingsDialog({
         // Add additional admin-only sections if they have team features
         if (hasTeamFeatures) {
           orgItems.push(
-            { id: "company-keywords", label: "Company Keywords", icon: Tags },
-            { id: "bulk-import", label: "Bulk Contact Import", icon: FileText }
+            { id: "company-keywords", label: "Company Keywords", icon: Tags }
           );
         }
       }
@@ -417,7 +406,7 @@ export function SettingsDialog({
 
   // Safety check: redirect non-admin users away from admin-only categories
   useEffect(() => {
-    const adminOnlyCategories = ["subscription", "team-members", "org-integrations", "custom-branding", "admin-controls", "company-keywords", "bulk-import"];
+    const adminOnlyCategories = ["subscription", "team-members", "org-integrations", "custom-branding", "admin-controls", "company-keywords"];
     
     if (adminOnlyCategories.includes(selectedCategory)) {
       // If user is not an admin or not in a company, redirect to org-details
@@ -1498,15 +1487,6 @@ export function SettingsDialog({
                   </div>
                 )}
 
-                {/* Bulk Contact Import - Admin only */}
-                {selectedCategory === "bulk-import" && isAdmin && company && hasTeamFeatures && onBulkImport && (
-                  <div className="space-y-6 p-4 sm:p-6 md:p-8">
-                    <div>
-                      <h2 className="text-2xl font-semibold mb-2">Bulk Contact Import</h2>
-                    </div>
-                    <AdminPdfImport onImport={onBulkImport} />
-                  </div>
-                )}
               </>
             )}
           </div>
