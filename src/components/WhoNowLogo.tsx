@@ -29,14 +29,17 @@ export function WhoNowLogo({ size = "md", showText = true, className = "" }: Who
     : { first: companyName, rest: "" };
 
   return (
-    <div className={`flex items-center gap-3 ${className}`}>
+    <div className={`flex items-center gap-3 min-w-0 ${className}`}>
       <img
         src={branding.logo}
         alt={branding.companyName || "Logo"}
-        className={`${sizeClasses[size]} object-contain`}
+        className={`${sizeClasses[size]} shrink-0 object-contain`}
       />
       {showText && (
-        <span className={`font-display font-bold ${textSizes[size]}`}>
+        <span
+          className={`font-display font-bold truncate ${textSizes[size]}`}
+          title={companyName}
+        >
           <span className="text-foreground">{nameParts.first}</span>
           {nameParts.rest && <span className="text-gradient">{nameParts.rest}</span>}
         </span>

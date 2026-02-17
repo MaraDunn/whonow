@@ -277,7 +277,7 @@ export function FolderSidebar({
             
             {/* Company Logo */}
             {!isCollapsed && (
-              <WhoNowLogo size="sm" showText={true} className="shrink-0" />
+              <WhoNowLogo size="sm" showText={true} className="min-w-0 flex-1 overflow-hidden" />
             )}
           </div>
         </SidebarHeader>
