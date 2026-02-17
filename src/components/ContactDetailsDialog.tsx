@@ -1,6 +1,6 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, FileDown, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera, MessageSquare, Video, Sparkles } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, FileDown, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera, MessageSquare, Video, Sparkles, Zap } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -565,25 +565,28 @@ export function ContactDetailsDialog({
         {/* Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-3 space-y-4">
           {isEditing ? (
-            /* EDIT MODE - Layout matches Contact Details (view) */
+            /* EDIT MODE - Layout matches ContactFormDialog (generic contact edit / add) */
+            (() => {
+              const isPersonalProfile = contact?.tags?.includes("my-profile") ?? false;
+              return (
             <>
-              {/* Avatar + Name - Compact row like view */}
-              <div className="flex items-start gap-3">
+              {/* Avatar - matches ContactFormDialog */}
+              <div className="flex flex-col items-center sm:items-start gap-4">
                 <div
-                  className="relative cursor-pointer group flex-shrink-0"
+                  className="relative cursor-pointer group"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Avatar className="h-14 w-14 border-2 border-border">
+                  <Avatar className="h-20 w-20 sm:h-16 sm:w-16 border-2 border-border">
                     <AvatarImage src={avatar} alt={name || "Avatar"} />
-                    <AvatarFallback className="text-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground font-display font-semibold">
+                    <AvatarFallback className="text-base sm:text-sm bg-muted">
                       {name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
                     </AvatarFallback>
                   </Avatar>
                   <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
                     {uploading ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      <Loader2 className="h-5 w-5 sm:h-4 sm:w-4 animate-spin text-muted-foreground" />
                     ) : (
-                      <Camera className="h-5 w-5 text-muted-foreground" />
+                      <Camera className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
                     )}
                   </div>
                 </div>
@@ -595,131 +598,192 @@ export function ContactDetailsDialog({
                   onChange={handleFileChange}
                   disabled={uploading}
                 />
-                <div className="flex-1 min-w-0 space-y-2">
-                  <Label htmlFor="edit-name" className="sr-only">Name *</Label>
+                {hasCompany && (
+                  <div className="flex items-center gap-3 sm:gap-2">
+                    <Label htmlFor="edit-shared" className="text-sm sm:text-xs font-medium">Shared contact?</Label>
+                    <Switch
+                      id="edit-shared"
+                      checked={isShared}
+                      onCheckedChange={setIsShared}
+                      aria-label="Share with company"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Essential Fields - same order as ContactFormDialog */}
+              <div className="space-y-4 sm:space-y-3">
+                <div className="space-y-2 sm:space-y-1.5">
+                  <Label htmlFor="edit-name" className="text-sm sm:text-xs font-medium">Name *</Label>
                   <Input
                     id="edit-name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Name *"
+                    placeholder="John Doe"
                     required
-                    className="font-display font-semibold text-lg"
+                    className="h-11 sm:h-9 text-base sm:text-sm"
                   />
-                  <span className="text-xs text-muted-foreground">Click avatar to upload photo</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
+                  <div className="space-y-2 sm:space-y-1.5">
+                    <Label htmlFor="edit-phone" className="text-sm sm:text-xs font-medium">Phone Number</Label>
+                    <Input
+                      id="edit-phone"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+1 (555) 000-0000"
+                      className="h-11 sm:h-9 text-base sm:text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2 sm:space-y-1.5">
+                    <Label htmlFor="edit-email" className="text-sm sm:text-xs font-medium">Email</Label>
+                    <Input
+                      id="edit-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="john@example.com"
+                      className="h-11 sm:h-9 text-base sm:text-sm"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Email & Phone - Plain fields like view contact info */}
-              <div className="space-y-2">
-                <Label htmlFor="edit-email">Email</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="john@example.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-phone">Phone</Label>
-                <Input
-                  id="edit-phone"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+1 (555) 000-0000"
-                />
+              {/* Folder, Company, Role - same grid as ContactFormDialog */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-3">
+                {folders.length > 0 && (
+                  <div className="space-y-2 sm:space-y-1.5">
+                    <Label htmlFor="edit-folder" className="text-sm sm:text-xs font-medium">Folder</Label>
+                    <Select value={folderId || "none"} onValueChange={(val) => setFolderId(val === "none" ? undefined : val)}>
+                      <SelectTrigger id="edit-folder" className="h-11 sm:h-9 text-base sm:text-sm">
+                        <SelectValue placeholder="Select..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No folder</SelectItem>
+                        {folders.map((f) => (
+                          <SelectItem key={f.id} value={f.id}>
+                            <span className="flex items-center gap-2">
+                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: f.color }} />
+                              {f.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-2 sm:space-y-1.5">
+                  <Label htmlFor="edit-company" className="text-sm sm:text-xs font-medium">Company</Label>
+                  <Input
+                    id="edit-company"
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    placeholder="Acme Inc"
+                    className="h-11 sm:h-9 text-base sm:text-sm"
+                  />
+                </div>
+                <div className="space-y-2 sm:space-y-1.5">
+                  <Label htmlFor="edit-role" className="text-sm sm:text-xs font-medium">Role</Label>
+                  <Input
+                    id="edit-role"
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    placeholder="Marketing Manager"
+                    className="h-11 sm:h-9 text-base sm:text-sm"
+                  />
+                </div>
               </div>
 
-              {/* Description - Collapsible, expanded by default in edit */}
-              <CollapsibleSection title="Description" open={descriptionOpen} onOpenChange={setDescriptionOpen}>
-                <Label htmlFor="edit-description" className="sr-only">Description</Label>
+              {/* Description - full width, same as ContactFormDialog; "you" language for personal profile */}
+              <div className="space-y-2 sm:space-y-1.5">
+                <Label htmlFor="edit-description" className="text-sm sm:text-xs font-medium">Description</Label>
                 <Textarea
                   id="edit-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What do they handle? e.g. 'Handles all marketing campaigns'"
-                  rows={2}
+                  placeholder={isPersonalProfile ? "What do you handle? (e.g. I handle all marketing campaigns)" : "What do they handle? (e.g. Handles all marketing campaigns)"}
+                  rows={3}
+                  className="resize-none text-base sm:text-sm min-h-[4rem] sm:min-h-[2.5rem]"
                 />
-              </CollapsibleSection>
+              </div>
 
-              {/* Keywords - Collapsible, expanded by default, highlighted as quickest way to enrich */}
-              <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-3">
-                <div className="flex items-center gap-2 text-primary">
-                  <Sparkles className="h-4 w-4 shrink-0" />
-                  <span className="text-xs font-semibold uppercase tracking-wide">
-                    Quickest way to enrich contacts
+              {/* Keywords - same styling as ContactFormDialog; "your profile" for personal profile */}
+              <div className="space-y-3 sm:space-y-2 p-4 sm:p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <Label htmlFor="edit-tags" className="text-base sm:text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <Zap className="h-5 w-5 sm:h-4 sm:w-4 text-primary" />
+                  Keywords
+                  <span className="text-xs sm:text-[10px] font-normal text-muted-foreground ml-1">
+                    {isPersonalProfile ? "(Easiest way to enrich your profile)" : "(Easiest way to enrich your contact)"}
                   </span>
-                </div>
-                <CollapsibleSection title="Keywords" open={keywordsOpen} onOpenChange={setKeywordsOpen}>
-                  {autoTags.length > 0 && (
-                    <div className="space-y-1.5">
-                      <span className="text-xs text-muted-foreground">Suggested keywords:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {autoTags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="outline"
-                            className="cursor-pointer border-dashed hover:bg-destructive/10"
-                            onClick={() => removeAutoTag(tag)}
-                          >
-                            {tag}
-                            <X className="h-3 w-3 ml-1" />
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {presetKeywords.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
+                </Label>
+                <Textarea
+                  id="edit-tags"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleAddTag}
+                  placeholder="Type keywords separated by commas or press Enter..."
+                  rows={3}
+                  className="resize-none text-base sm:text-sm min-h-[4rem] sm:min-h-[2.5rem] bg-background"
+                />
+                {autoTags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 sm:gap-1.5 pt-2">
+                    <span className="text-sm sm:text-xs text-muted-foreground w-full">Suggested keywords:</span>
+                    {autoTags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="outline"
+                        className="cursor-pointer border-dashed hover:bg-destructive/10 text-sm sm:text-xs py-1.5 sm:py-0.5 px-2.5 sm:px-2"
+                        onClick={() => removeAutoTag(tag)}
+                      >
+                        {tag}
+                        <X className="h-4 w-4 sm:h-3 sm:w-3 ml-1.5 sm:ml-1" />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                {presetKeywords.length > 0 && (
+                  <div className="pt-2">
+                    <span className="text-sm sm:text-xs text-muted-foreground mb-2 sm:mb-1.5 block font-medium">Quick add:</span>
+                    <div className="flex flex-wrap gap-2 sm:gap-1.5">
                       {presetKeywords.map((preset) => {
                         const isSelected = tags.includes(preset);
                         return (
                           <Badge
                             key={preset}
                             variant={isSelected ? "default" : "outline"}
-                            className={`cursor-pointer transition-colors ${
+                            className={`cursor-pointer transition-colors text-sm sm:text-xs py-1.5 sm:py-0.5 px-3 sm:px-2 ${
                               isSelected
                                 ? "bg-primary text-primary-foreground"
                                 : "hover:bg-accent hover:text-accent-foreground"
                             }`}
                             onClick={() => togglePresetTag(preset)}
                           >
-                            {isSelected && <Check className="h-3 w-3 mr-1" />}
+                            {isSelected && <Check className="h-4 w-4 sm:h-3 sm:w-3 mr-1.5 sm:mr-1" />}
                             {preset}
                           </Badge>
                         );
                       })}
                     </div>
-                  )}
-
-                  <Input
-                    id="edit-tags"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={handleAddTag}
-                    placeholder="Type custom keywords and press Enter..."
-                  />
-
-                  {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {tags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="secondary"
-                          className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
-                          onClick={() => removeTag(tag)}
-                        >
-                          {tag}
-                          <X className="h-3 w-3 ml-1" />
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </CollapsibleSection>
+                  </div>
+                )}
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 sm:gap-1.5 pt-2">
+                    {tags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground text-sm sm:text-xs py-1.5 sm:py-0.5 px-2.5 sm:px-2"
+                        onClick={() => removeTag(tag)}
+                      >
+                        {tag}
+                        <X className="h-4 w-4 sm:h-3 sm:w-3 ml-1.5 sm:ml-1" />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Share toggle */}
+              {/* Share toggle - same as before */}
               {hasCompany && (
                 <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border">
                   <div className="flex items-center gap-3">
@@ -746,49 +810,6 @@ export function ContactDetailsDialog({
                   />
                 </div>
               )}
-
-              {/* Work Info Accordion */}
-              <CollapsibleSection title="Work Info" open={workOpen} onOpenChange={setWorkOpen}>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-company">Company</Label>
-                  <Input
-                    id="edit-company"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    placeholder="Acme Inc"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-role">Role</Label>
-                  <Input
-                    id="edit-role"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    placeholder="Marketing Manager"
-                  />
-                </div>
-                {folders.length > 0 && (
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-folder">Folder</Label>
-                    <Select value={folderId || "none"} onValueChange={(val) => setFolderId(val === "none" ? undefined : val)}>
-                      <SelectTrigger id="edit-folder">
-                        <SelectValue placeholder="Select a folder..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No folder</SelectItem>
-                        {folders.map((f) => (
-                          <SelectItem key={f.id} value={f.id}>
-                            <span className="flex items-center gap-2">
-                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: f.color }} />
-                              {f.name}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </CollapsibleSection>
 
               {/* Address Accordion */}
               <CollapsibleSection title="Address" open={addressOpen} onOpenChange={setAddressOpen}>
@@ -983,6 +1004,8 @@ export function ContactDetailsDialog({
                 )}
               </CollapsibleSection>
             </>
+              );
+            })()
           ) : (
             /* VIEW MODE */
             <>

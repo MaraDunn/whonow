@@ -607,7 +607,7 @@ export function ImportContactsDialog({
                         id="scan-description"
                         value={editedContact.description}
                         onChange={(e) => setEditedContact({ ...editedContact, description: e.target.value })}
-                        placeholder="What do they handle? (e.g., 'Handles all marketing campaigns')"
+                        placeholder="What do they handle? (e.g. Handles all marketing campaigns)"
                         rows={2}
                       />
                     </div>

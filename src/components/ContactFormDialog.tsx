@@ -638,7 +638,7 @@ export function ContactFormDialog({
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Notes about this contact..."
+                placeholder="What do they handle? (e.g. Handles all marketing campaigns)"
                 rows={3}
                 className="resize-none text-base sm:text-sm min-h-[4rem] sm:min-h-[2.5rem]"
               />
