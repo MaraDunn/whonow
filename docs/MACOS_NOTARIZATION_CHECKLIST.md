@@ -134,6 +134,13 @@ If you confirm your **account and credentials** with sections 1–5 and 6, we ca
 
 Notarization and stapling alone do not guarantee Gatekeeper will accept the app. **Copy the app to Applications** (or another folder) before first launch; do not run it directly from the mounted DMG.
 
+**Important:** Copying the app from the DMG using **Finder** (drag-and-drop or copy-paste) can break the code signature seal, so the app may show as "damaged" or be rejected by Gatekeeper. To install correctly:
+
+- **Recommended:** Open the DMG, then **double-click "Install WhoNow"** (the installer script in the DMG). It copies the app to Applications using a method that preserves the notarization ticket.
+- **Alternative (Terminal):** Run:  
+  `ditto /Volumes/WhoNow/WhoNow.app /Applications/WhoNow.app`  
+  then eject the DMG and open WhoNow from Applications.
+
 To check whether the app would pass Gatekeeper and whether the stapled ticket is present, run (use the path to your installed app, e.g. `/Applications/WhoNow.app`):
 
 ```bash
@@ -142,7 +149,7 @@ spctl -a -t execute -v -- /Applications/WhoNow.app
 xattr -l /Applications/WhoNow.app
 ```
 
-You want: stapler prints "The validate action worked!"; spctl shows `accepted` and `source=Notarized Developer ID`; xattr lists `com.apple.security.cms` (the notarization ticket). If you see `rejected` or `Unnotarized Developer ID`, or the staple is missing from xattr, the ticket was lost (e.g. during copy from DMG)—try copying again from a fresh download.
+You want: stapler prints "The validate action worked!"; spctl shows `accepted` and `source=Notarized Developer ID`; xattr lists `com.apple.security.cms` (the notarization ticket). If you see `rejected` or `Unnotarized Developer ID`, or the staple is missing from xattr, the ticket was lost (e.g. during copy from DMG)—install again using **Install WhoNow** or the `ditto` command above.
 
 ---
 

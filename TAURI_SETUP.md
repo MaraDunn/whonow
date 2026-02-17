@@ -146,10 +146,10 @@ OAuth redirects should work automatically through Supabase. If issues occur, che
 3. The app is using the correct Supabase project URL
 
 ### macOS: "WhoNow is damaged and can't be opened"
-macOS Gatekeeper can show this when the app is **quarantined** (e.g. downloaded from the web) and either not notarized or the notarization ticket wasn’t stapled. If CI notarization keeps failing, follow **[docs/MACOS_NOTARIZATION_CHECKLIST.md](docs/MACOS_NOTARIZATION_CHECKLIST.md)** to verify your Apple account and secrets. Fixes:
+macOS Gatekeeper can show this when the app is **quarantined** (e.g. downloaded from the web) and either not notarized or the notarization ticket wasn’t stapled. **Copying the app from the DMG by dragging it to Applications in Finder can break the seal** and cause this message. If CI notarization keeps failing, follow **[docs/MACOS_NOTARIZATION_CHECKLIST.md](docs/MACOS_NOTARIZATION_CHECKLIST.md)** to verify your Apple account and secrets. Fixes:
 
 1. **Use a notarized build from the latest release**  
-   New releases are signed and notarized when `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are set in repo secrets. Use the app from the latest GitHub release. **Copy WhoNow.app to Applications** (or another folder) **before** first launch—do not run it directly from the mounted DMG; then open it from Applications. The first time you may need **right-click → Open** to allow Gatekeeper. In the Release workflow run, confirm the macOS job completes and that the build step runs notarization (check the Actions log).
+   New releases are signed and notarized when `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are set in repo secrets. Use the app from the latest GitHub release. **Do not drag WhoNow.app to Applications.** Instead: open the DMG, then **double-click "Install WhoNow"** (the installer in the DMG). It installs the app to Applications and preserves the notarization. Then open WhoNow from Applications. The first time you may need **right-click → Open** to allow Gatekeeper. **Power-user option:** In Terminal, run `ditto /Volumes/WhoNow/WhoNow.app /Applications/WhoNow.app` then eject the DMG and open from Applications. In the Release workflow run, confirm the macOS job completes and that the build step runs notarization (check the Actions log).
 
 2. **If Gatekeeper still blocks**  
    Run these on the installed app (e.g. `/Applications/WhoNow.app`) to see if the staple is present and what Gatekeeper reports:
@@ -158,7 +158,7 @@ macOS Gatekeeper can show this when the app is **quarantined** (e.g. downloaded 
    spctl -a -t execute -v -- /Applications/WhoNow.app
    xattr -l /Applications/WhoNow.app
    ```
-   You want stapler to print "The validate action worked!", spctl to show `accepted` and `source=Notarized Developer ID`, and xattr to include `com.apple.security.cms` (the notarization ticket). If the staple is missing, the app was not copied correctly from the DMG; copy again from a fresh download.
+   You want stapler to print "The validate action worked!", spctl to show `accepted` and `source=Notarized Developer ID`, and xattr to include `com.apple.security.cms` (the notarization ticket). If the staple is missing, the app was not copied correctly from the DMG; install again using **Install WhoNow** or the `ditto` command; do not copy by dragging in Finder.
 
 3. **If you must remove quarantine only**  
    Remove only the quarantine attribute (do **not** use `xattr -cr`, which removes the stapled notarization ticket and can cause "damaged" or "Unnotarized"):

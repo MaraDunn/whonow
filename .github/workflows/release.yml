@@ -143,9 +143,16 @@ jobs:
           IDENTITY="${{ steps.apple-cert.outputs.signing_identity }}"
           CODE_RESOURCES="$APP/Contents/CodeResources"
           if [[ -L "$CODE_RESOURCES" ]]; then
-            echo "CodeResources is a symlink; removing and re-signing so stapling can work..."
+            echo "CodeResources is a symlink; removing and re-signing (inside-out) so stapling can work..."
             rm "$CODE_RESOURCES"
-            codesign --force --deep --sign "$IDENTITY" "$APP"
+            # Sign nested code first (Apple: avoid --deep; sign innermost then outer)
+            for d in "$APP/Contents/Frameworks"/*.framework; do
+              [[ -d "$d" ]] && codesign --force --options runtime --sign "$IDENTITY" "$d"
+            done 2>/dev/null || true
+            while IFS= read -r f; do
+              [[ -n "$f" ]] && codesign --force --options runtime --sign "$IDENTITY" "$f"
+            done < <(find "$APP" -type f \( -perm +111 -o -name "*.dylib" \) ! -path "*/_CodeSignature/*" 2>/dev/null | awk -F/ '{print NF, $0}' | sort -rn | cut -d' ' -f2-)
+            codesign --force --options runtime --sign "$IDENTITY" "$APP"
             echo "Re-notarizing and re-stapling app after re-sign..."
             ditto -c -k --keepParent "$APP" WhoNow.zip
             xcrun notarytool submit WhoNow.zip --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait
@@ -167,13 +174,32 @@ jobs:
           echo "Verifying stapled ticket survived ditto copy..."
           xcrun stapler validate "$STAGE/WhoNow.app" || { echo "::error::Stapled ticket lost during ditto copy."; exit 1; }
           spctl -a -t execute -v -- "$STAGE/WhoNow.app" || { echo "::error::Gatekeeper would reject staged app (entitlements/bundle?)."; exit 1; }
+          echo "Strict codesign verification on staged app..."
+          codesign -d -vvv --strict "$STAGE/WhoNow.app" || { echo "::error::Stapled app failed strict codesign check (bundle structure?)."; exit 1; }
           ln -s /Applications "$STAGE/Applications"
+          INSTALL_SCRIPT="$STAGE/Install WhoNow.command"
+          echo '#!/bin/bash
+set -e
+VOL="/Volumes/WhoNow"
+APP="$VOL/WhoNow.app"
+if [[ ! -d "$APP" ]]; then
+  echo "WhoNow.app not found. Make sure the WhoNow disk image is mounted."
+  read -n 1 -p "Press a key to close..."
+  exit 1
+fi
+echo "Installing WhoNow to Applications..."
+ditto "$APP" "/Applications/WhoNow.app"
+echo "Done. Opening WhoNow."
+open -a WhoNow 2>/dev/null || true
+exit 0' > "$INSTALL_SCRIPT"
+          chmod +x "$INSTALL_SCRIPT"
           echo "Creating DMG via mounted volume (ditto) to preserve xattrs..."
           TEMP_SPARSE="temp_who.dmg.sparseimage"
           rm -f "$DMG_NAME" temp_who.dmg "$TEMP_SPARSE"
           hdiutil create -size 200m -type SPARSE -fs HFS+ -volname "WhoNow" -ov temp_who.dmg
           hdiutil attach "$TEMP_SPARSE" -nobrowse
           ditto "$STAGE/WhoNow.app" "/Volumes/WhoNow/WhoNow.app"
+          cp -p "$STAGE/Install WhoNow.command" "/Volumes/WhoNow/Install WhoNow.command"
           ln -s /Applications "/Volumes/WhoNow/Applications"
           hdiutil detach /Volumes/WhoNow
           hdiutil convert "$TEMP_SPARSE" -format UDZO -o "$DMG_NAME" -ov
@@ -189,4 +215,12 @@ jobs:
           echo "Notarizing DMG so opening the disk image is trusted..."
           xcrun notarytool submit "$DMG_NAME" --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait
           xcrun stapler staple "$DMG_NAME"
+          echo "Simulated Finder copy: cp -R from DMG and verify staple/spctl..."
+          hdiutil attach "$DMG_NAME" -readonly -nobrowse
+          rm -rf /tmp/Applications
+          mkdir -p /tmp/Applications
+          cp -R "/Volumes/WhoNow/WhoNow.app" "/tmp/Applications/WhoNow.app"
+          xcrun stapler validate "/tmp/Applications/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Stapled ticket lost after cp -R (simulated Finder copy). Users must use Install WhoNow.command."; exit 1; }
+          spctl -a -t execute -v -- "/tmp/Applications/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper would reject app after cp -R (simulated Finder copy). Users must use Install WhoNow.command."; exit 1; }
+          hdiutil detach /Volumes/WhoNow
           gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" --clobber
