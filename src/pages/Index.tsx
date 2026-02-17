@@ -580,6 +580,26 @@ const IndexContent = () => {
     }
   };
 
+  // Keyboard shortcut: ⌘⇧S / Ctrl+Shift+S to toggle selection mode (when not typing in an input)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "s") {
+        const el = document.activeElement;
+        const isEditable = el && (
+          el instanceof HTMLInputElement ||
+          el instanceof HTMLTextAreaElement ||
+          (el as HTMLElement).isContentEditable
+        );
+        if (!isEditable) {
+          e.preventDefault();
+          handleToggleSelectionMode();
+        }
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleToggleSelectionMode]);
+
   // Calculate contact count per folder - memoized to avoid recalculating on every render
   // This is used by FolderSidebar and only needs to update when contacts change
   const contactCountByFolder = useMemo(() => {
@@ -881,7 +901,12 @@ const IndexContent = () => {
                   onClick={handleToggleSelectionMode}
                   className="shrink-0 w-full sm:w-auto sm:min-w-[160px]"
                 >
-                  {selectionMode ? "Cancel" : "Select"}
+                  <span>{selectionMode ? "Cancel" : "Select"}</span>
+                  <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs opacity-80 font-normal">
+                    <span>⌘</span>
+                    <span>⇧</span>
+                    <span>S</span>
+                  </span>
                 </Button>
                 <div className="flex-1 min-w-0">
                   <SearchBar
