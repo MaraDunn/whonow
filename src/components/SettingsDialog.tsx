@@ -645,7 +645,7 @@ export function SettingsDialog({
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg min-h-[100px]">
+              <div className="flex flex-wrap items-start gap-2 p-3 bg-muted/50 rounded-lg min-h-[100px]">
                 {keywords.length === 0 ? (
                   <p className="text-sm text-muted-foreground w-full text-center py-4">
                     No keywords yet. {!isCompanyKeywords ? "Add some above!" : "Ask your admin to add some."}
@@ -656,8 +656,8 @@ export function SettingsDialog({
                       key={keyword}
                       variant="secondary"
                       className={!isCompanyKeywords 
-                        ? "cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                        : ""
+                        ? "flex-none cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                        : "flex-none"
                       }
                       onClick={!isCompanyKeywords ? () => onRemoveKeyword(keyword) : undefined}
                     >
@@ -1437,7 +1437,7 @@ export function SettingsDialog({
                             <Plus className="h-4 w-4" />
                           </Button>
                         </div>
-                        <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg min-h-[80px]">
+                        <div className="flex flex-wrap items-start gap-2 p-3 bg-muted/50 rounded-lg min-h-[80px]">
                           {keywords.length === 0 ? (
                             <p className="text-sm text-muted-foreground w-full text-center py-4">
                               No company keywords yet. Add some above!
@@ -1447,7 +1447,7 @@ export function SettingsDialog({
                               <Badge
                                 key={keyword}
                                 variant="secondary"
-                                className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                                className="flex-none cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-colors"
                                 onClick={() => onRemoveKeyword(keyword)}
                               >
                                 {keyword}
