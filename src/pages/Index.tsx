@@ -875,14 +875,6 @@ const IndexContent = () => {
               />
               
               <div className="mb-4 sm:mb-6 md:mb-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <SearchBar
-                    value={searchQuery}
-                    onChange={setSearchQuery}
-                    placeholder="Try 'Who handles marketing?' or 'email sarah'..."
-                    isLoading={searchLoading}
-                  />
-                </div>
                 <Button
                   variant={selectionMode ? "default" : "outline"}
                   size="sm"
@@ -891,6 +883,14 @@ const IndexContent = () => {
                 >
                   {selectionMode ? "Cancel" : "Select"}
                 </Button>
+                <div className="flex-1 min-w-0">
+                  <SearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    placeholder="Try 'Who handles marketing?' or 'email sarah'..."
+                    isLoading={searchLoading}
+                  />
+                </div>
               </div>
 
               {searchQuery && (
