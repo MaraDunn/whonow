@@ -202,6 +202,8 @@ jobs:
           hdiutil attach "$TEMP_SPARSE" -nobrowse
           ditto "$STAGE/WhoNow.app" "/Volumes/WhoNow/WhoNow.app"
           cp -p "$STAGE/Install WhoNow.command" "/Volumes/WhoNow/Install WhoNow.command"
+          # Sign install script so Gatekeeper allows it when user double-clicks
+          codesign --force --sign "$IDENTITY" "/Volumes/WhoNow/Install WhoNow.command"
           ln -s /Applications "/Volumes/WhoNow/Applications"
           hdiutil detach /Volumes/WhoNow
           hdiutil convert "$TEMP_SPARSE" -format UDZO -o "$DMG_NAME" -ov

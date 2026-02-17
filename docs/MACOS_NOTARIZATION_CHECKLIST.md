@@ -136,7 +136,7 @@ Notarization and stapling alone do not guarantee Gatekeeper will accept the app.
 
 **Important:** Copying the app from the DMG using **Finder** (drag-and-drop or copy-paste) can break the code signature seal, so the app may show as "damaged" or be rejected by Gatekeeper. To install correctly:
 
-- **Recommended:** Open the DMG, then **double-click "Install WhoNow"** (the installer script in the DMG). It copies the app to Applications using a method that preserves the notarization ticket.
+- **Recommended:** Open the DMG, then **double-click "Install WhoNow"** (the installer script in the DMG). It copies the app to Applications using a method that preserves the notarization ticket. If Gatekeeper blocks the script, **right-click it → Open**, or use the Terminal command below.
 - **Alternative (Terminal):** Run:  
   `ditto /Volumes/WhoNow/WhoNow.app /Applications/WhoNow.app`  
   then eject the DMG and open WhoNow from Applications.
