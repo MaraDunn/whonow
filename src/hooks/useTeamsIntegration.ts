@@ -416,7 +416,7 @@ export function useTeamsIntegration() {
     }
   }, [toast]);
 
-  const shareContact = useCallback(async (contactId: string, teamId: string, channelId: string) => {
+  const shareContact = useCallback(async (contactId: string, teamId: string, channelId: string, silent = false) => {
     try {
       setIsLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
@@ -452,10 +452,12 @@ export function useTeamsIntegration() {
         return false;
       }
 
-      toast({
-        title: "Shared",
-        description: "Contact shared to Teams channel",
-      });
+      if (!silent) {
+        toast({
+          title: "Shared",
+          description: "Contact shared to Teams channel",
+        });
+      }
       return true;
     } catch (error) {
       console.error("Error sharing contact to Teams:", error);

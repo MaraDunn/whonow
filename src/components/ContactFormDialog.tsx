@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Check, Camera, Loader2, Zap, ChevronDown, ChevronUp, Building2, UserCircle, MapPin, Navigation } from "lucide-react";
+import { X, Check, Camera, Loader2, Zap, ChevronDown, ChevronUp, Building2, UserCircle, MapPin, Navigation, Users } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -488,9 +488,25 @@ export function ContactFormDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[calc(100vh-2rem)] flex flex-col p-0 sm:rounded-lg rounded-none border-0 sm:border">
         <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 shrink-0 border-b border-border">
-          <DialogTitle className="font-display text-xl sm:text-lg text-center sm:text-left">
-            {getDialogTitle()}
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle className="font-display text-xl sm:text-lg text-center sm:text-left">
+              {getDialogTitle()}
+            </DialogTitle>
+            {hasCompany && (
+              <div className="flex items-center gap-2 shrink-0">
+                <Label htmlFor="header-shared" className="text-sm font-medium whitespace-nowrap flex items-center gap-1.5">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  Shared
+                </Label>
+                <Switch
+                  id="header-shared"
+                  checked={isShared}
+                  onCheckedChange={setIsShared}
+                  aria-label="Share with organization"
+                />
+              </div>
+            )}
+          </div>
           <DialogDescription className="sr-only">
             {isEditing ? "Edit contact information" : "Add a new contact to your address book"}
           </DialogDescription>
@@ -526,19 +542,6 @@ export function ContactFormDialog({
                 onChange={handleFileChange}
                 disabled={uploading}
               />
-              
-              {/* Shared contact toggle - Below avatar on mobile */}
-              {hasCompany && (
-                <div className="flex items-center gap-3 sm:gap-2">
-                  <Label htmlFor="shared" className="text-sm sm:text-xs font-medium">Shared contact?</Label>
-                  <Switch
-                    id="shared"
-                    checked={isShared}
-                    onCheckedChange={setIsShared}
-                    aria-label="Share with company"
-                  />
-                </div>
-              )}
             </div>
 
             {/* Essential Fields - Stacked on mobile, grid on desktop */}

@@ -439,6 +439,19 @@ export function ContactDetailsDialog({
     setFolderPopoverOpen(false);
   };
 
+  const handleQuickSharedChange = (newShared: boolean) => {
+    if (!contact || !onSave) return;
+
+    const updatedContact: Contact = {
+      ...contact,
+      isShared: newShared,
+    };
+
+    onSave(updatedContact);
+    setIsShared(newShared);
+    toast.success(newShared ? "Shared with organization" : "Marked as personal contact");
+  };
+
   if (!contact) return null;
 
   const initials = contact.name
@@ -457,7 +470,21 @@ export function ContactDetailsDialog({
           <h2 className="font-display font-semibold text-base sm:text-lg text-foreground truncate min-w-0">
             {isEditing ? "Edit Contact" : "Contact Details"}
           </h2>
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {!isEditing && hasCompany && onSave && (
+              <div className="flex items-center gap-2">
+                <Label htmlFor="quick-shared" className="text-xs font-medium text-muted-foreground whitespace-nowrap flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5" />
+                  Shared
+                </Label>
+                <Switch
+                  id="quick-shared"
+                  checked={contact.isShared || false}
+                  onCheckedChange={handleQuickSharedChange}
+                  aria-label="Share with organization"
+                />
+              </div>
+            )}
             {!isEditing && (
               <>
                 <DropdownMenu>

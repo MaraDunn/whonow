@@ -24,19 +24,25 @@ import { toast } from "sonner";
 interface ShareToTeamsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  contact: Contact | null;
+  contact?: Contact | null;
+  /** For bulk share: contact IDs to share. When provided, contact is ignored. */
+  contactIds?: string[];
 }
 
 export function ShareToTeamsDialog({
   open,
   onOpenChange,
   contact,
+  contactIds,
 }: ShareToTeamsDialogProps) {
   const { status, teams, channels, getStatus, getTeams, getChannels, shareContact, isLoading } =
     useTeamsIntegration();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [selectedChannelId, setSelectedChannelId] = useState<string>("");
   const [isSharing, setIsSharing] = useState(false);
+
+  const idsToShare = contactIds?.length ? contactIds : (contact ? [contact.id] : []);
+  const isBulk = idsToShare.length > 1;
 
   useEffect(() => {
     if (open) {
@@ -59,27 +65,36 @@ export function ShareToTeamsDialog({
   }, [open, selectedTeamId, getChannels]);
 
   const handleShare = async () => {
-    if (!contact || !selectedTeamId || !selectedChannelId) {
+    if (idsToShare.length === 0 || !selectedTeamId || !selectedChannelId) {
       toast.error("Please select a team and channel to share to");
       return;
     }
 
     setIsSharing(true);
     try {
-      const success = await shareContact(contact.id, selectedTeamId, selectedChannelId);
-      if (success) {
+      let successCount = 0;
+      for (const id of idsToShare) {
+        const ok = await shareContact(id, selectedTeamId, selectedChannelId, isBulk);
+        if (ok) successCount++;
+      }
+      if (successCount > 0) {
         onOpenChange(false);
         setSelectedTeamId("");
         setSelectedChannelId("");
+        if (isBulk && successCount < idsToShare.length) {
+          toast.warning(`${successCount} of ${idsToShare.length} contacts shared`);
+        } else if (isBulk) {
+          toast.success(`${successCount} contacts shared to Teams`);
+        }
       }
     } catch (error) {
-      console.error("Error sharing contact:", error);
+      console.error("Error sharing contact(s):", error);
     } finally {
       setIsSharing(false);
     }
   };
 
-  if (!contact) return null;
+  if (idsToShare.length === 0 && !contact) return null;
 
   const isConnected = status?.connected;
   const hasTeams = teams && teams.length > 0;
@@ -94,7 +109,9 @@ export function ShareToTeamsDialog({
             Share to Teams
           </DialogTitle>
           <DialogDescription>
-            Share {contact.name}'s contact card to a Teams channel
+            {isBulk
+              ? `Share ${idsToShare.length} contacts to a Teams channel`
+              : `Share ${contact?.name || "contact"}'s contact card to a Teams channel`}
           </DialogDescription>
         </DialogHeader>
 
@@ -190,7 +207,7 @@ export function ShareToTeamsDialog({
             ) : (
               <>
                 <Share2 className="h-4 w-4 mr-2" />
-                Share
+                {isBulk ? `Share ${idsToShare.length} contacts` : "Share"}
               </>
             )}
           </Button>

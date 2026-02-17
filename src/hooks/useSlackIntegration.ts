@@ -297,7 +297,7 @@ export function useSlackIntegration() {
     }
   }, []);
 
-  const shareContact = useCallback(async (contactId: string, channelId: string) => {
+  const shareContact = useCallback(async (contactId: string, channelId: string, silent = false) => {
     try {
       setIsLoading(true);
       
@@ -333,7 +333,9 @@ export function useSlackIntegration() {
         return false;
       }
 
-      toast.success("Contact shared to Slack channel");
+      if (!silent) {
+        toast.success("Contact shared to Slack channel");
+      }
       return true;
     } catch (error) {
       console.error("Error sharing contact:", error);

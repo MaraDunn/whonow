@@ -930,6 +930,66 @@ export const useContacts = (options?: UseContactsListOptions) => {
     },
   });
 
+  // Bulk share with organization - make multiple contacts visible to all company members
+  const bulkShareContacts = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!ids || ids.length === 0) {
+        throw new Error("No contacts selected");
+      }
+
+      const validIds = ids.filter(id => id && typeof id === 'string' && id.length > 0);
+      if (validIds.length === 0) {
+        throw new Error("No valid contact IDs provided");
+      }
+
+      devLog("[bulkShareContacts] Attempting to share", validIds.length, "contacts with organization");
+
+      const batchSize = 50;
+      let successCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < validIds.length; i += batchSize) {
+        const batch = validIds.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from("contacts")
+          .update({ is_shared: true, owner_id: null })
+          .in("id", batch)
+          .select("id");
+
+        if (error) {
+          console.error(`[bulkShareContacts] Batch ${Math.floor(i / batchSize) + 1} error:`, error);
+          errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
+        } else {
+          successCount += data?.length || 0;
+          devLog(`[bulkShareContacts] Batch ${Math.floor(i / batchSize) + 1}: ${data?.length || 0} contacts shared`);
+        }
+      }
+
+      if (successCount === 0 && errors.length > 0) {
+        throw new Error(`Failed to share contacts: ${errors.join("; ")}`);
+      }
+
+      if (errors.length > 0) {
+        console.warn(`[bulkShareContacts] Partial success: ${successCount} shared, ${errors.length} batches failed`);
+      }
+
+      return { shared: successCount, total: validIds.length };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
+      if (result.shared === result.total) {
+        toast.success(`${result.shared} contact${result.shared !== 1 ? "s" : ""} shared with organization`);
+      } else {
+        toast.warning(`${result.shared} of ${result.total} contact${result.total !== 1 ? "s" : ""} shared with organization`);
+      }
+    },
+    onError: (error) => {
+      console.error("[bulkShareContacts] Error:", error);
+      toast.error("Failed to share contacts: " + (error instanceof Error ? error.message : "Unknown error"));
+    },
+  });
+
   /**
    * Finds duplicate contacts for a given contact
    * Only checks within user's personal contacts (owner_id = user.id)
@@ -1011,6 +1071,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
     bulkUpdateLastContacted: bulkUpdateLastContacted.mutate,
     toggleClientStatus: toggleClientStatus.mutate,
     bulkToggleClientStatus: bulkToggleClientStatus.mutate,
+    bulkShareContacts: bulkShareContacts.mutate,
     findDuplicatesForContact,
     mergeContact: mergeContact.mutate,
     isMerging: mergeContact.isPending,

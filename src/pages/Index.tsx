@@ -171,6 +171,7 @@ const IndexContent = () => {
     bulkUpdateLastContacted,
     toggleClientStatus,
     bulkToggleClientStatus,
+    bulkShareContacts,
     totalCount,
     bulkDeleteContacts,
     bulkMoveToFolder,
@@ -556,6 +557,22 @@ const IndexContent = () => {
     });
   };
 
+  const handleBulkShare = (ids: string[]) => {
+    if (!ids || ids.length === 0) {
+      toast.error("No contacts selected");
+      return;
+    }
+    bulkShareContacts(ids, {
+      onSuccess: () => {
+        setSelectedContactIds(new Set());
+        setSelectionMode(false);
+      },
+      onError: (error) => {
+        console.error("[handleBulkShare] Error:", error);
+      }
+    });
+  };
+
   const handleToggleSelectionMode = () => {
     setSelectionMode(prev => !prev);
     if (selectionMode) {
@@ -642,6 +659,7 @@ const IndexContent = () => {
 
   const handleSaveContactFromDetails = (updatedContact: Contact) => {
     updateContact(updatedContact);
+    setViewingContact(updatedContact); // Keep in sync so toggle and badges update immediately
     toast.success(`Updated ${updatedContact.name}`);
   };
 
@@ -919,8 +937,10 @@ const IndexContent = () => {
                     onBulkMoveToFolder={!showTrash ? handleBulkMoveToFolder : undefined}
                     onBulkMarkContacted={!showTrash ? handleBulkMarkContacted : undefined}
                     onBulkToggleClient={!showTrash ? handleBulkToggleClient : undefined}
+                    onBulkShare={!showTrash ? handleBulkShare : undefined}
                     onBulkRestore={showTrash ? handleBulkRestore : undefined}
                     hasClientAccess={hasClientAccess}
+                    hasCompany={!!company}
                     folders={showDirectory ? teamFolders : folders}
                     selectedContactIds={selectedContactIds}
                     onToggleSelectionMode={handleToggleSelectionMode}

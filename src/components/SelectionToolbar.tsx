@@ -1,11 +1,19 @@
-import { Trash2, X, Folder as FolderIcon, Clock, Star, RotateCcw } from "lucide-react";
+import { Trash2, X, Folder as FolderIcon, Clock, Star, RotateCcw, Users, Share2, MessageSquare, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
+import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
 import {
   Tooltip,
   TooltipContent,
@@ -25,8 +33,10 @@ interface SelectionToolbarProps {
   onBulkMoveToFolder?: (ids: string[], folderId: string | null) => void;
   onBulkMarkContacted?: (ids: string[]) => void;
   onBulkToggleClient?: (ids: string[], isClient: boolean) => void;
+  onBulkShare?: (ids: string[]) => void;
   onBulkRestore?: (ids: string[]) => void;
   hasClientAccess?: boolean;
+  hasCompany?: boolean;
   folders?: Folder[];
   selectedContactIds: Set<string>;
   onToggleSelectionMode: () => void;
@@ -41,14 +51,18 @@ export function SelectionToolbar({
   onBulkMoveToFolder,
   onBulkMarkContacted,
   onBulkToggleClient,
+  onBulkShare,
   onBulkRestore,
   hasClientAccess = false,
+  hasCompany = false,
   folders = [],
   selectedContactIds,
   onToggleSelectionMode,
   isTrashView = false,
 }: SelectionToolbarProps) {
   const [folderPopoverOpen, setFolderPopoverOpen] = useState(false);
+  const [slackShareDialogOpen, setSlackShareDialogOpen] = useState(false);
+  const [teamsShareDialogOpen, setTeamsShareDialogOpen] = useState(false);
 
   return (
     <TooltipProvider>
@@ -120,6 +134,64 @@ export function SelectionToolbar({
               </TooltipTrigger>
               <TooltipContent>
                 <p>Delete selected</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {!isTrashView && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={selectedCount === 0}
+                      className="shrink-0 h-8 px-2"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Share selected to Slack or Teams</p>
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  onClick={() => setSlackShareDialogOpen(true)}
+                  disabled={selectedCount === 0}
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Share to Slack
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setTeamsShareDialogOpen(true)}
+                  disabled={selectedCount === 0}
+                >
+                  <Video className="h-4 w-4 mr-2" />
+                  Share to Teams
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {!isTrashView && hasCompany && onBulkShare && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const ids = Array.from(selectedContactIds);
+                    onBulkShare(ids);
+                  }}
+                  disabled={selectedCount === 0}
+                  className="shrink-0 h-8 px-2"
+                >
+                  <Users className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Share with organization</p>
               </TooltipContent>
             </Tooltip>
           )}
@@ -283,6 +355,17 @@ export function SelectionToolbar({
           </Button>
         </div>
       </div>
+
+      <ShareToSlackDialog
+        open={slackShareDialogOpen}
+        onOpenChange={setSlackShareDialogOpen}
+        contactIds={Array.from(selectedContactIds)}
+      />
+      <ShareToTeamsDialog
+        open={teamsShareDialogOpen}
+        onOpenChange={setTeamsShareDialogOpen}
+        contactIds={Array.from(selectedContactIds)}
+      />
     </TooltipProvider>
   );
 }

@@ -24,17 +24,23 @@ import { toast } from "sonner";
 interface ShareToSlackDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  contact: Contact | null;
+  contact?: Contact | null;
+  /** For bulk share: contact IDs to share. When provided, contact is ignored. */
+  contactIds?: string[];
 }
 
 export function ShareToSlackDialog({
   open,
   onOpenChange,
   contact,
+  contactIds,
 }: ShareToSlackDialogProps) {
   const { status, channels, getStatus, getChannels, shareContact, isLoading } = useSlackIntegration();
   const [selectedChannelId, setSelectedChannelId] = useState<string>("");
   const [isSharing, setIsSharing] = useState(false);
+
+  const idsToShare = contactIds?.length ? contactIds : (contact ? [contact.id] : []);
+  const isBulk = idsToShare.length > 1;
 
   // Refresh status when dialog opens (picks up org-level or user-level connection)
   useEffect(() => {
@@ -51,26 +57,35 @@ export function ShareToSlackDialog({
   }, [open, status?.connected, getChannels]);
 
   const handleShare = async () => {
-    if (!contact || !selectedChannelId) {
+    if (idsToShare.length === 0 || !selectedChannelId) {
       toast.error("Please select a channel to share to");
       return;
     }
 
     setIsSharing(true);
     try {
-      const success = await shareContact(contact.id, selectedChannelId);
-      if (success) {
+      let successCount = 0;
+      for (const id of idsToShare) {
+        const ok = await shareContact(id, selectedChannelId, isBulk);
+        if (ok) successCount++;
+      }
+      if (successCount > 0) {
         onOpenChange(false);
         setSelectedChannelId("");
+        if (isBulk && successCount < idsToShare.length) {
+          toast.warning(`${successCount} of ${idsToShare.length} contacts shared`);
+        } else if (isBulk) {
+          toast.success(`${successCount} contacts shared to Slack`);
+        }
       }
     } catch (error) {
-      console.error("Error sharing contact:", error);
+      console.error("Error sharing contact(s):", error);
     } finally {
       setIsSharing(false);
     }
   };
 
-  if (!contact) return null;
+  if (idsToShare.length === 0 && !contact) return null;
 
   const isConnected = status?.connected;
   const hasChannels = channels && channels.length > 0;
@@ -84,7 +99,9 @@ export function ShareToSlackDialog({
             Share to Slack
           </DialogTitle>
           <DialogDescription>
-            Share {contact.name}'s contact card to a Slack channel
+            {isBulk
+              ? `Share ${idsToShare.length} contacts to a Slack channel`
+              : `Share ${contact?.name || "contact"}'s contact card to a Slack channel`}
           </DialogDescription>
         </DialogHeader>
 
@@ -155,7 +172,7 @@ export function ShareToSlackDialog({
             ) : (
               <>
                 <Share2 className="h-4 w-4 mr-2" />
-                Share
+                {isBulk ? `Share ${idsToShare.length} contacts` : "Share"}
               </>
             )}
           </Button>
