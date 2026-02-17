@@ -178,20 +178,22 @@ jobs:
           codesign -d -vvv --strict "$STAGE/WhoNow.app" || { echo "::error::Stapled app failed strict codesign check (bundle structure?)."; exit 1; }
           ln -s /Applications "$STAGE/Applications"
           INSTALL_SCRIPT="$STAGE/Install WhoNow.command"
-          echo '#!/bin/bash
-set -e
-VOL="/Volumes/WhoNow"
-APP="$VOL/WhoNow.app"
-if [[ ! -d "$APP" ]]; then
-  echo "WhoNow.app not found. Make sure the WhoNow disk image is mounted."
-  read -n 1 -p "Press a key to close..."
-  exit 1
-fi
-echo "Installing WhoNow to Applications..."
-ditto "$APP" "/Applications/WhoNow.app"
-echo "Done. Opening WhoNow."
-open -a WhoNow 2>/dev/null || true
-exit 0' > "$INSTALL_SCRIPT"
+          printf '%s\n' \
+            '#!/bin/bash' \
+            'set -e' \
+            'VOL="/Volumes/WhoNow"' \
+            'APP="$VOL/WhoNow.app"' \
+            'if [[ ! -d "$APP" ]]; then' \
+            '  echo "WhoNow.app not found. Make sure the WhoNow disk image is mounted."' \
+            '  read -n 1 -p "Press a key to close..."' \
+            '  exit 1' \
+            'fi' \
+            'echo "Installing WhoNow to Applications..."' \
+            'ditto "$APP" "/Applications/WhoNow.app"' \
+            'echo "Done. Opening WhoNow."' \
+            'open -a WhoNow 2>/dev/null || true' \
+            'exit 0' \
+            > "$INSTALL_SCRIPT"
           chmod +x "$INSTALL_SCRIPT"
           echo "Creating DMG via mounted volume (ditto) to preserve xattrs..."
           TEMP_SPARSE="temp_who.dmg.sparseimage"
