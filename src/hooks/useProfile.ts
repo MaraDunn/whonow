@@ -551,6 +551,7 @@ export const useProfile = (userId?: string) => {
     isLoading: profileLoading || companyLoading || membersLoading,
     updateProfile: updateProfile.mutate,
     createCompany: createCompany.mutate,
+    isCreatingCompany: createCompany.isPending,
     joinCompany: joinCompany.mutate,
     skipCompanySetup: skipCompanySetup.mutate,
     completeOnboarding: completeOnboarding.mutate,

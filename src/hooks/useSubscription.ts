@@ -51,6 +51,7 @@ export const useSubscription = () => {
   const { user, session } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionData>(loadCachedSubscription);
   const [isLoading, setIsLoading] = useState(true);
+  const [showCreateOrganizationAfterUpgrade, setShowCreateOrganizationAfterUpgrade] = useState(false);
 
   const normalizeTier = (rawTier: unknown, subscribed: boolean): SubscriptionTier => {
     // If not subscribed, always treat as starter.
@@ -416,6 +417,7 @@ export const useSubscription = () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("subscription") === "success") {
       toast.success("Subscription activated successfully!");
+      setShowCreateOrganizationAfterUpgrade(true);
       checkSubscription();
       // Webhook can be delayed; retry reading from DB so tier updates even when
       // check-subscription is blocked (e.g. waitlist mode)
@@ -429,6 +431,10 @@ export const useSubscription = () => {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [checkSubscription]);
+
+  const dismissCreateOrgPrompt = useCallback(() => {
+    setShowCreateOrganizationAfterUpgrade(false);
+  }, []);
 
   const canAccessFeature = useCallback(
     (feature: FeatureName): boolean => {
@@ -565,5 +571,7 @@ export const useSubscription = () => {
     createCheckout,
     openCustomerPortal,
     refreshSubscription: checkSubscription,
+    showCreateOrganizationAfterUpgrade,
+    dismissCreateOrgPrompt,
   };
 };

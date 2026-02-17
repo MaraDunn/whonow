@@ -12,6 +12,7 @@ import { FolderSidebar } from "@/components/FolderSidebar";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
 import { CompanySetupDialog } from "@/components/CompanySetupDialog";
+import { CreateOrganizationAfterUpgradeDialog } from "@/components/CreateOrganizationAfterUpgradeDialog";
 import { OnboardingTutorial } from "@/components/OnboardingTutorial";
 import { onboardingSteps } from "@/config/onboardingSteps";
 import { SelectionToolbar } from "@/components/SelectionToolbar";
@@ -100,8 +101,8 @@ const IndexContent = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { profile, needsCompanySetup, needsOnboarding, completeOnboarding, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin } = useProfile(user?.id);
-  const { canAccessFeature } = useSubscription();
+  const { profile, needsCompanySetup, needsOnboarding, completeOnboarding, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin, isCreatingCompany } = useProfile(user?.id);
+  const { canAccessFeature, showCreateOrganizationAfterUpgrade, dismissCreateOrgPrompt } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
   const [searchQuery, setSearchQuery] = useState("");
@@ -216,6 +217,21 @@ const IndexContent = () => {
       return () => clearTimeout(timer);
     }
   }, [profile, needsOnboarding, needsCompanySetup, showOnboarding]);
+
+  // Show create-organization prompt when user upgrades to a tier that allows it
+  // (Only when they've already completed company setup as individual—otherwise CompanySetupDialog handles it)
+  const showCreateOrgAfterUpgrade =
+    showCreateOrganizationAfterUpgrade &&
+    canAccessFeature("organization_creation") &&
+    !company &&
+    !needsCompanySetup;
+
+  // Clear the upgrade prompt when user creates an organization (company becomes set)
+  useEffect(() => {
+    if (company && showCreateOrganizationAfterUpgrade) {
+      dismissCreateOrgPrompt();
+    }
+  }, [company, showCreateOrganizationAfterUpgrade, dismissCreateOrgPrompt]);
 
   // Filter contacts by folder and ownership
   const folderFilteredContacts = useMemo(() => {
@@ -1105,6 +1121,13 @@ const IndexContent = () => {
                 onCreateCompany={createCompany}
                 onJoinCompany={joinCompany}
                 onSkipCompanySetup={skipCompanySetup}
+              />
+
+              <CreateOrganizationAfterUpgradeDialog
+                open={showCreateOrgAfterUpgrade}
+                onCreateCompany={createCompany}
+                onDismiss={dismissCreateOrgPrompt}
+                isCreating={isCreatingCompany}
               />
 
               {showOnboarding && (
