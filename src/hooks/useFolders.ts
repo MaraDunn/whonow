@@ -139,12 +139,10 @@ export const useFolders = () => {
         throw new Error(`A folder named "${folder.name}" already exists in this directory`);
       }
 
+      const updateData = mapFolderToDb(folder, user?.id, profile?.companyId);
       const { data, error } = await supabase
         .from("folders")
-        .update({
-          name: folder.name,
-          color: folder.color || "#6366f1",
-        })
+        .update(updateData)
         .eq("id", id)
         .select()
         .single();
