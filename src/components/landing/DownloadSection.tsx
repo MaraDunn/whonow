@@ -9,6 +9,9 @@ import {
 import { useReleaseDownloads } from "@/hooks/useReleaseDownloads";
 import { AddToHomeScreenDialog } from "@/components/landing/AddToHomeScreenDialog";
 
+/** Set to false when release downloads are ready to be offered. */
+const DOWNLOADS_COMING_SOON = true;
+
 /** Desktop download URL: runtime (GitHub release) if set, else env fallback. */
 function getDesktopDownloadUrl(
   platform: Platform,
@@ -90,7 +93,7 @@ export const DownloadSection = () => {
             Download WhoNow
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Get the native app for your platform. Available on desktop and mobile.
+            Native apps for desktop and mobile are coming soon. We’re making sure everything works perfectly before release.
           </p>
         </div>
 
@@ -103,9 +106,9 @@ export const DownloadSection = () => {
             {desktopPlatforms.map((platformConfig) => {
               const { platform, icon: Icon, label, description } = platformConfig;
               const url = getUrl(platform, false);
-              const isAvailable = !!url;
+              const isAvailable = !DOWNLOADS_COMING_SOON && !!url;
               const isCurrentPlatform = currentPlatform === platform;
-              const isLoading = releasesLoading && !getDownloadUrl(platform);
+              const isLoading = !DOWNLOADS_COMING_SOON && releasesLoading && !getDownloadUrl(platform);
 
               return (
                 <div
@@ -184,7 +187,7 @@ export const DownloadSection = () => {
             {mobilePlatforms.map((platformConfig) => {
               const { platform, icon: Icon, label, description } = platformConfig;
               const url = getUrl(platform, true);
-              const isAvailable = !!url;
+              const isAvailable = !DOWNLOADS_COMING_SOON && !!url;
               const isCurrentPlatform = currentPlatform === platform;
 
               return (
