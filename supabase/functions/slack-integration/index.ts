@@ -262,46 +262,27 @@ serve(async (req) => {
           });
         }
         
-        // For org-level, check if user is admin
-        if (scope === 'organization') {
-          const { data: isAdminData } = await supabase.rpc('has_role', {
-            user_id: user.id,
-            role_to_check: 'admin'
+        // Slack is only available as an organization integration
+        if (scope !== 'organization') {
+          return new Response(JSON.stringify({
+            error: "Slack is only available as an organization integration. Have your org admin connect Slack in Settings → Organization → Organization Integrations.",
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
-          
-          if (!isAdminData) {
-            return new Response(JSON.stringify({ 
-              error: "Only organization admins can setup organization integrations" 
-            }), {
-              status: 403,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
         }
 
-        // For user-level, require Pro tier or higher
-        if (scope === 'user') {
-          const { data: userTier } = await supabase.rpc('get_user_subscription_tier', { _user_id: user.id });
-          let effectiveTier = (userTier ?? 'starter') as string;
-          if (effectiveTier === 'starter' && profile?.company_id) {
-            const { data: companySub } = await supabase
-              .from('subscriptions')
-              .select('tier')
-              .eq('company_id', profile.company_id)
-              .eq('status', 'active')
-              .limit(1)
-              .maybeSingle();
-            if (companySub?.tier) effectiveTier = companySub.tier as string;
-          }
-          const allowedTiers = ['pro', 'team', 'business'];
-          if (!allowedTiers.includes(effectiveTier)) {
-            return new Response(JSON.stringify({
-              error: "Slack integration requires a Pro subscription or higher.",
-            }), {
-              status: 403,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
+        const { data: isAdminData } = await supabase.rpc('has_role', {
+          _user_id: user.id,
+          _role: 'admin'
+        });
+        if (!isAdminData) {
+          return new Response(JSON.stringify({
+            error: "Only organization admins can setup organization integrations",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
         
         // Redirect URI should NOT include query params - Slack will add code & state
@@ -324,10 +305,9 @@ serve(async (req) => {
       case "import-members": {
         console.log("Starting import-members for user:", user.id, "scope:", scope);
         
-        // Get user's Slack integration (check org-level first, then user-level)
+        // Only organization-level integration is supported
         let integration = null;
-        
-        if (scope === 'organization' && profile?.company_id) {
+        if (profile?.company_id) {
           const { data: orgIntegration } = await supabase
             .from("integrations")
             .select("*")
@@ -336,23 +316,7 @@ serve(async (req) => {
             .eq("scope", "organization")
             .eq("is_active", true)
             .maybeSingle();
-          
           integration = orgIntegration;
-        }
-        
-        if (!integration) {
-          const { data: userIntegration, error: integrationError } = await supabase
-            .from("integrations")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("provider", "slack")
-            .maybeSingle();
-
-          if (integrationError) {
-            console.error("Error fetching integration:", integrationError);
-          }
-          
-          integration = userIntegration;
         }
 
         if (!integration?.access_token) {
@@ -482,7 +446,7 @@ serve(async (req) => {
       case "share-contact": {
         const { contactId, channelId } = params;
 
-        // Resolve integration: org-level first (if user has company), then user-level
+        // Only organization-level integration is supported
         let integration = null;
         if (profile?.company_id) {
           const { data: orgIntegration } = await supabase
@@ -494,15 +458,6 @@ serve(async (req) => {
             .eq("is_active", true)
             .maybeSingle();
           integration = orgIntegration;
-        }
-        if (!integration?.access_token) {
-          const { data: userIntegration } = await supabase
-            .from("integrations")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("provider", "slack")
-            .maybeSingle();
-          integration = userIntegration;
         }
 
         if (!integration?.access_token) {
@@ -636,7 +591,7 @@ serve(async (req) => {
       }
 
       case "get-channels": {
-        // Resolve integration: org-level first (if user has company), then user-level
+        // Only organization-level integration is supported
         let integration = null;
         if (profile?.company_id) {
           const { data: orgIntegration } = await supabase
@@ -648,15 +603,6 @@ serve(async (req) => {
             .eq("is_active", true)
             .maybeSingle();
           integration = orgIntegration;
-        }
-        if (!integration?.access_token) {
-          const { data: userIntegration } = await supabase
-            .from("integrations")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("provider", "slack")
-            .maybeSingle();
-          integration = userIntegration;
         }
 
         if (!integration?.access_token) {
@@ -730,9 +676,8 @@ serve(async (req) => {
       }
 
       case "get-status": {
-        // Check org-level first if user has a company (so Share to Slack works for org-connected users), then user-level
+        // Only organization-level integration is supported
         let integration = null;
-        
         if (profile?.company_id) {
           const { data: orgIntegration } = await supabase
             .from("integrations")
@@ -742,24 +687,12 @@ serve(async (req) => {
             .eq("scope", "organization")
             .eq("is_active", true)
             .maybeSingle();
-          
           integration = orgIntegration;
-        }
-        
-        if (!integration) {
-          const { data: userIntegration } = await supabase
-            .from("integrations")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("provider", "slack")
-            .maybeSingle();
-          
-          integration = userIntegration;
         }
 
         return new Response(JSON.stringify({ 
           connected: !!integration?.is_active,
-          scope: integration?.scope || 'user',
+          scope: integration?.scope || 'organization',
           settings: integration?.settings,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -771,8 +704,8 @@ serve(async (req) => {
         if (scope === 'organization' && profile?.company_id) {
           // Verify user is admin before allowing org-level disconnect
           const { data: isAdminData } = await supabase.rpc('has_role', {
-            user_id: user.id,
-            role_to_check: 'admin'
+            _user_id: user.id,
+            _role: 'admin'
           });
           
           if (!isAdminData) {

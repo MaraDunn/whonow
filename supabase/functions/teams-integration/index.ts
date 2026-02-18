@@ -236,46 +236,27 @@ serve(async (req) => {
           });
         }
 
-        // For org-level, check if user is admin
-        if (scope === 'organization') {
-          const { data: isAdminData } = await supabase.rpc('has_role', {
-            user_id: user.id,
-            role_to_check: 'admin'
+        // Microsoft Teams is only available as an organization integration
+        if (scope !== 'organization') {
+          return new Response(JSON.stringify({
+            error: "Microsoft Teams is only available as an organization integration. Have your org admin connect Teams in Settings → Organization → Organization Integrations.",
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
-          
-          if (!isAdminData) {
-            return new Response(JSON.stringify({ 
-              error: "Only organization admins can setup organization integrations" 
-            }), {
-              status: 403,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
         }
 
-        // For user-level, require Pro tier or higher
-        if (scope === 'user') {
-          const { data: userTier } = await supabase.rpc('get_user_subscription_tier', { _user_id: user.id });
-          let effectiveTier = (userTier ?? 'starter') as string;
-          if (effectiveTier === 'starter' && profile?.company_id) {
-            const { data: companySub } = await supabase
-              .from('subscriptions')
-              .select('tier')
-              .eq('company_id', profile.company_id)
-              .eq('status', 'active')
-              .limit(1)
-              .maybeSingle();
-            if (companySub?.tier) effectiveTier = companySub.tier as string;
-          }
-          const allowedTiers = ['pro', 'team', 'business'];
-          if (!allowedTiers.includes(effectiveTier)) {
-            return new Response(JSON.stringify({
-              error: "Microsoft Teams integration requires a Pro subscription or higher.",
-            }), {
-              status: 403,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
+        const { data: isAdminData } = await supabase.rpc('has_role', {
+          _user_id: user.id,
+          _role: 'admin'
+        });
+        if (!isAdminData) {
+          return new Response(JSON.stringify({
+            error: "Only organization admins can setup organization integrations",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
 
         const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
@@ -366,7 +347,18 @@ serve(async (req) => {
       }
 
       case "get-teams": {
-        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
+        let integration = null;
+        if (profile?.company_id) {
+          integration = await getValidIntegration(
+            supabase,
+            user.id,
+            MICROSOFT_CLIENT_ID,
+            MICROSOFT_CLIENT_SECRET,
+            MICROSOFT_TENANT_ID,
+            "organization",
+            profile.company_id
+          );
+        }
 
         if (!integration) {
           return new Response(JSON.stringify({ error: "Teams not connected" }), {
@@ -403,7 +395,18 @@ serve(async (req) => {
           });
         }
 
-        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
+        let integration = null;
+        if (profile?.company_id) {
+          integration = await getValidIntegration(
+            supabase,
+            user.id,
+            MICROSOFT_CLIENT_ID,
+            MICROSOFT_CLIENT_SECRET,
+            MICROSOFT_TENANT_ID,
+            "organization",
+            profile.company_id
+          );
+        }
 
         if (!integration) {
           return new Response(JSON.stringify({ error: "Teams not connected" }), {
@@ -433,10 +436,9 @@ serve(async (req) => {
       case "import-members": {
         console.log("Starting import-members for user:", user.id, "scope:", scope);
         
-        // Try org-level integration first if scope is organization
+        // Only organization-level integration is supported
         let integration = null;
-        
-        if (scope === 'organization' && profile?.company_id) {
+        if (profile?.company_id) {
           integration = await getValidIntegration(
             supabase,
             user.id,
@@ -445,16 +447,6 @@ serve(async (req) => {
             MICROSOFT_TENANT_ID,
             'organization',
             profile.company_id
-          );
-        }
-        
-        if (!integration) {
-          integration = await getValidIntegration(
-            supabase,
-            user.id,
-            MICROSOFT_CLIENT_ID,
-            MICROSOFT_CLIENT_SECRET,
-            MICROSOFT_TENANT_ID
           );
         }
 
@@ -596,7 +588,7 @@ serve(async (req) => {
           });
         }
 
-        // Resolve integration: org-first then user-level (mirror get-status)
+        // Only organization-level integration is supported
         let integration = null;
         if (profile?.company_id) {
           integration = await getValidIntegration(
@@ -607,15 +599,6 @@ serve(async (req) => {
             MICROSOFT_TENANT_ID,
             "organization",
             profile.company_id
-          );
-        }
-        if (!integration) {
-          integration = await getValidIntegration(
-            supabase,
-            user.id,
-            MICROSOFT_CLIENT_ID,
-            MICROSOFT_CLIENT_SECRET,
-            MICROSOFT_TENANT_ID
           );
         }
 
@@ -754,7 +737,18 @@ serve(async (req) => {
           });
         }
 
-        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
+        let integration = null;
+        if (profile?.company_id) {
+          integration = await getValidIntegration(
+            supabase,
+            user.id,
+            MICROSOFT_CLIENT_ID,
+            MICROSOFT_CLIENT_SECRET,
+            MICROSOFT_TENANT_ID,
+            "organization",
+            profile.company_id
+          );
+        }
 
         if (!integration) {
           return new Response(JSON.stringify({ error: "Teams not connected" }), {
@@ -804,7 +798,18 @@ serve(async (req) => {
       case "create-meeting": {
         const { contactId, subject, startTime, endTime, message } = params;
 
-        const integration = await getValidIntegration(supabase, user.id, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID);
+        let integration = null;
+        if (profile?.company_id) {
+          integration = await getValidIntegration(
+            supabase,
+            user.id,
+            MICROSOFT_CLIENT_ID,
+            MICROSOFT_CLIENT_SECRET,
+            MICROSOFT_TENANT_ID,
+            "organization",
+            profile.company_id
+          );
+        }
 
         if (!integration) {
           return new Response(JSON.stringify({ error: "Teams not connected" }), {
@@ -881,10 +886,9 @@ serve(async (req) => {
       }
 
       case "get-status": {
-        // Check for org-level integration first, then user-level
+        // Only organization-level integration is supported
         let integration = null;
-        
-        if (scope === 'organization' && profile?.company_id) {
+        if (profile?.company_id) {
           const { data: orgIntegration } = await supabase
             .from("integrations")
             .select("*")
@@ -893,24 +897,12 @@ serve(async (req) => {
             .eq("scope", "organization")
             .eq("is_active", true)
             .maybeSingle();
-          
           integration = orgIntegration;
-        }
-        
-        if (!integration) {
-          const { data: userIntegration } = await supabase
-            .from("integrations")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("provider", "teams")
-            .maybeSingle();
-          
-          integration = userIntegration;
         }
 
         return new Response(JSON.stringify({
           connected: !!integration?.is_active,
-          scope: integration?.scope || 'user',
+          scope: integration?.scope || 'organization',
           settings: integration?.settings,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -922,8 +914,8 @@ serve(async (req) => {
         if (scope === 'organization' && profile?.company_id) {
           // Verify user is admin before allowing org-level disconnect
           const { data: isAdminData } = await supabase.rpc('has_role', {
-            user_id: user.id,
-            role_to_check: 'admin'
+            _user_id: user.id,
+            _role: 'admin'
           });
           
           if (!isAdminData) {

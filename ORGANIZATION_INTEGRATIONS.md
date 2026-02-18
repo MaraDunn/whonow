@@ -153,8 +153,8 @@ For org-level operations, functions verify admin role:
 
 ```typescript
 const { data: isAdminData } = await supabase.rpc('has_role', {
-  user_id: user.id,
-  role_to_check: 'admin'
+  _user_id: user.id,
+  _role: 'admin'
 });
 ```
 
