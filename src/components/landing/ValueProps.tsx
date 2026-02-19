@@ -18,8 +18,8 @@ const features = [
   },
   {
     icon: Link2,
-    title: "Slack and Teams integration",
-    description: "Connect Slack or Microsoft Teams to import workspace members as contacts and share contact cards directly from your chat.",
+    title: "Slack and Teams (org-level)",
+    description: "Organization admins connect Slack or Microsoft Teams once; all members can import workspace contacts and share contact cards from chat.",
   },
 ];
 

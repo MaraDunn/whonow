@@ -61,6 +61,20 @@ export function handleCorsPreflightRequest(req: Request): Response | null {
 }
 
 /**
+ * JSON error response with CORS headers (for consistent error handling).
+ */
+export function jsonErrorResponse(
+  message: string,
+  status: number,
+  origin?: string | null
+): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { ...getCorsHeaders(origin), "Content-Type": "application/json" },
+  });
+}
+
+/**
  * Sanitize a string to prevent injection attacks
  * Removes/escapes potentially dangerous characters
  */

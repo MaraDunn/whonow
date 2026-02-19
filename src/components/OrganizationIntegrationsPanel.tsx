@@ -14,6 +14,7 @@ export function OrganizationIntegrationsPanel() {
     slackStatus,
     teamsStatus,
     isAdmin,
+    hasCompany,
     getAllStatus,
     connectSlack,
     connectTeams,
@@ -41,6 +42,30 @@ export function OrganizationIntegrationsPanel() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [getAllStatus]);
+
+  if (!hasCompany) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Organization Integrations
+          </CardTitle>
+          <CardDescription>
+            Connect Slack and Microsoft Teams for your organization
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Create or join an organization to connect Slack or Teams. Go to the Organization tab above to create a company or join one with an invite code.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!isAdmin) {
     return (
@@ -147,12 +172,12 @@ export function OrganizationIntegrationsPanel() {
           <CardContent className="space-y-3">
             {slackStatus?.connected ? (
               <>
-                <p className="text-sm text-muted-foreground">
+                <div className="text-sm text-muted-foreground">
                   Connected to <strong>{slackStatus.settings?.team_name}</strong>
                   {slackStatus.scope === 'organization' && (
                     <Badge variant="outline" className="ml-2">Organization-wide</Badge>
                   )}
-                </p>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
@@ -240,12 +265,12 @@ export function OrganizationIntegrationsPanel() {
               </p>
             ) : teamsStatus?.connected ? (
               <>
-                <p className="text-sm text-muted-foreground">
+                <div className="text-sm text-muted-foreground">
                   Connected as <strong>{teamsStatus.settings?.email}</strong>
                   {teamsStatus.scope === 'organization' && (
                     <Badge variant="outline" className="ml-2">Organization-wide</Badge>
                   )}
-                </p>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
+import { checkLaunchMode, waitlistModeBlockedResponse, sanitizeString, secureLog } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,16 +24,29 @@ type TeamsContactRow = {
   tags: string[];
 };
 
+/** True when the request is from a test/dev origin (localhost or INTEGRATION_TEST_ORIGINS). */
+function isTestOrigin(origin: string | null): boolean {
+  if (!origin) return false;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
+  const allowed = Deno.env.get("INTEGRATION_TEST_ORIGINS");
+  if (!allowed) return false;
+  return allowed.split(",").some((o) => origin === o.trim());
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Check launch mode - block in waitlist mode
+  // Check launch mode - block in waitlist mode unless: skip flag, test origin, or OAuth callback
+  const skipWaitlistForIntegrations = Deno.env.get("INTEGRATION_SKIP_WAITLIST") === "true";
   const { blocked } = checkLaunchMode();
-  if (blocked) {
+  if (!skipWaitlistForIntegrations && blocked) {
     const origin = req.headers.get("origin");
-    return waitlistModeBlockedResponse(origin);
+    const isOAuthCallback = req.method === "GET" && new URL(req.url).searchParams.has("code");
+    if (!isTestOrigin(origin) && !isOAuthCallback) {
+      return waitlistModeBlockedResponse(origin);
+    }
   }
 
   try {
@@ -54,8 +67,7 @@ serve(async (req) => {
 
     if (req.method === "GET" && (code || oauthError)) {
       // Handle OAuth callback
-      console.log("Teams OAuth callback received");
-      console.log("Teams OAuth state received:", state);
+      secureLog("TEAMS", "OAuth callback received", { hasState: !!state });
       
       if (oauthError) {
         return new Response(`OAuth error: ${oauthError}`, { status: 400 });
@@ -122,7 +134,7 @@ serve(async (req) => {
       );
 
       const tokenData = await tokenResponse.json();
-      console.log("Microsoft OAuth response received");
+      secureLog("TEAMS", "Microsoft OAuth response received");
 
       if (tokenData.error) {
         const errorRedirect = appOrigin
@@ -130,7 +142,7 @@ serve(async (req) => {
           : null;
 
         if (errorRedirect) {
-          console.log("Teams OAuth redirecting to (error):", errorRedirect);
+          secureLog("TEAMS", "OAuth redirecting to error URL");
           return new Response(null, {
             status: 302,
             headers: { Location: errorRedirect },
@@ -183,7 +195,7 @@ serve(async (req) => {
         ? `${appOrigin}/?integration=teams&status=success`
         : "/?integration=teams&status=success";
 
-      console.log("Teams OAuth redirecting to (success):", successRedirect);
+      secureLog("TEAMS", "OAuth redirecting to success URL");
 
       return new Response(null, {
         status: 302,
@@ -196,10 +208,10 @@ serve(async (req) => {
     const body = await req.json();
     const { action, scope = 'user', jwt, ...params } = body;
     
-    console.log("[teams-integration] Action:", action, "Scope:", scope, "JWT present:", !!jwt);
+    secureLog("TEAMS", "Request", { action, scope, hasJwt: !!jwt });
     
     if (!jwt) {
-      console.log("[teams-integration] No JWT in request body");
+      secureLog("TEAMS", "No JWT in request body");
       return new Response(JSON.stringify({ error: "No JWT token provided" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -216,7 +228,7 @@ serve(async (req) => {
       });
     }
 
-    console.log("[teams-integration] User verified:", user.id);
+    secureLog("TEAMS", "User verified", { userId: user.id });
 
     // Get user's company for org-level integrations
     const { data: profile } = await supabase
@@ -246,13 +258,29 @@ serve(async (req) => {
           });
         }
 
-        const { data: isAdminData } = await supabase.rpc('has_role', {
+        const { data: isAdminData, error: hasRoleError } = await supabase.rpc('has_role', {
           _user_id: user.id,
           _role: 'admin'
         });
-        if (!isAdminData) {
+        if (hasRoleError) {
+          secureLog("TEAMS", "has_role RPC error", { error: hasRoleError.message, code: hasRoleError.code });
+        }
+        // Allow company owner even if admin role row is missing (e.g. legacy data)
+        let canManageIntegrations = !!isAdminData;
+        if (!canManageIntegrations && profile?.company_id) {
+          const { data: isOwner, error: isOwnerError } = await supabase.rpc('is_super_admin', {
+            _user_id: user.id,
+            _company_id: profile.company_id
+          });
+          if (isOwnerError) {
+            secureLog("TEAMS", "is_super_admin RPC error", { error: isOwnerError.message, code: isOwnerError.code });
+          }
+          canManageIntegrations = !!isOwner;
+        }
+        if (!canManageIntegrations) {
+          const hint = hasRoleError?.message ? ` (Backend: ${hasRoleError.message})` : "";
           return new Response(JSON.stringify({
-            error: "Only organization admins can setup organization integrations",
+            error: "Only organization admins can connect integrations. If you created this organization, have another admin grant you the Admin role in Settings → Organization → Members." + hint,
           }), {
             status: 403,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -434,7 +462,7 @@ serve(async (req) => {
       }
 
       case "import-members": {
-        console.log("Starting import-members for user:", user.id, "scope:", scope);
+        secureLog("TEAMS", "Starting import-members", { userId: user.id, scope });
         
         // Only organization-level integration is supported
         let integration = null;
@@ -451,7 +479,7 @@ serve(async (req) => {
         }
 
         if (!integration) {
-          console.log("No valid Teams integration found");
+          secureLog("TEAMS", "No valid Teams integration found");
           return new Response(JSON.stringify({ error: "Teams not connected" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -466,9 +494,8 @@ serve(async (req) => {
           },
         });
 
-        console.log("Teams API response status:", teamsResponse.status);
+        secureLog("TEAMS", "Teams API response", { status: teamsResponse.status });
         const teamsData = (await teamsResponse.json()) as TeamsListResponse;
-        console.log("Teams API response:", JSON.stringify(teamsData).substring(0, 200));
 
         // Graph returns 401/403 when the account/app lacks required permissions (often needs admin consent).
         // IMPORTANT: return 200 with an { error } payload so the web client can show a friendly toast
@@ -503,11 +530,11 @@ serve(async (req) => {
 
         const allMembers: TeamsContactRow[] = [];
         const teamsList = teamsData.value || [];
-        console.log("Found", teamsList.length, "teams");
+        secureLog("TEAMS", "Teams list fetched", { count: teamsList.length });
 
         // Fetch members from each team
         for (const team of teamsList) {
-          console.log("Fetching members for team:", team.displayName);
+          secureLog("TEAMS", "Fetching members for team", { teamId: team.id });
           const membersResponse = await fetch(
             `${GRAPH_API_BASE}/teams/${team.id}/members`,
             { 
@@ -519,7 +546,7 @@ serve(async (req) => {
           );
 
           const membersData = (await membersResponse.json()) as TeamMembersResponse;
-          console.log("Team members response status:", membersResponse.status);
+          secureLog("TEAMS", "Team members response", { status: membersResponse.status });
 
           if (membersData.value) {
             for (const member of membersData.value) {
@@ -540,7 +567,7 @@ serve(async (req) => {
           }
         }
 
-        console.log("Total members to import:", allMembers.length);
+        secureLog("TEAMS", "Total members to import", { count: allMembers.length });
 
         if (allMembers.length === 0) {
           return new Response(JSON.stringify({ success: true, imported: 0 }), {
@@ -616,6 +643,16 @@ serve(async (req) => {
           .single();
 
         if (!contact) {
+          return new Response(JSON.stringify({ error: "Contact not found" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const canAccess =
+          contact.owner_id === user.id ||
+          (contact.is_shared && contact.company_id && profile?.company_id && contact.company_id === profile.company_id);
+        if (!canAccess) {
           return new Response(JSON.stringify({ error: "Contact not found" }), {
             status: 404,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -737,6 +774,8 @@ serve(async (req) => {
           });
         }
 
+        const safeMessage = sanitizeString(String(message ?? ""), 4000);
+
         let integration = null;
         if (profile?.company_id) {
           integration = await getValidIntegration(
@@ -768,7 +807,7 @@ serve(async (req) => {
             body: JSON.stringify({
               body: {
                 contentType: "html",
-                content: message,
+                content: safeMessage,
               },
             }),
           }
@@ -818,7 +857,7 @@ serve(async (req) => {
           });
         }
 
-        // Get contact details if provided
+        // Get contact details if provided (only if user has access)
         let attendees: Array<{ emailAddress: { address: string; name: string }; type: "required" }> = [];
         if (contactId) {
           const { data: contact } = await supabase
@@ -827,7 +866,11 @@ serve(async (req) => {
             .eq("id", contactId)
             .single();
 
-          if (contact?.email) {
+          const canAccess =
+            contact &&
+            (contact.owner_id === user.id ||
+              (contact.is_shared && contact.company_id && profile?.company_id && contact.company_id === profile.company_id));
+          if (contact?.email && canAccess) {
             attendees = [{
               emailAddress: {
                 address: contact.email,
@@ -912,13 +955,20 @@ serve(async (req) => {
       case "disconnect": {
         // Delete based on scope
         if (scope === 'organization' && profile?.company_id) {
-          // Verify user is admin before allowing org-level disconnect
+          // Verify user is admin or company owner before allowing org-level disconnect
           const { data: isAdminData } = await supabase.rpc('has_role', {
             _user_id: user.id,
             _role: 'admin'
           });
-          
-          if (!isAdminData) {
+          let canManage = !!isAdminData;
+          if (!canManage) {
+            const { data: isOwner } = await supabase.rpc('is_super_admin', {
+              _user_id: user.id,
+              _company_id: profile.company_id
+            });
+            canManage = !!isOwner;
+          }
+          if (!canManage) {
             return new Response(JSON.stringify({ 
               error: "Only organization admins can disconnect organization integrations" 
             }), {

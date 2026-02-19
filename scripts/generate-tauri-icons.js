@@ -1,6 +1,6 @@
 import sharp from 'sharp';
-import toIco from 'to-ico';
-import { writeFileSync, mkdirSync, existsSync, rmSync } from 'fs';
+import ico from 'sharp-ico';
+import { mkdirSync, existsSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
@@ -37,24 +37,20 @@ async function generateIcons() {
       console.log(`✓ Generated ${name}`);
     }
 
-    // Generate .ico file (Windows) with multiple sizes
+    // Generate .ico file (Windows) with multiple sizes (sharp-ico: no vulnerable deps)
     console.log('\nGenerating icon.ico...');
     const icoSizes = [16, 32, 48, 64, 128, 256];
-    const icoBuffers = await Promise.all(
-      icoSizes.map(async (size) => {
-        return await sharp(sourceIcon)
-          .resize(size, size, {
-            fit: 'contain',
-            background: { r: 0, g: 0, b: 0, alpha: 0 }
-          })
-          .png()
-          .toBuffer();
-      })
+    const icoSharps = await Promise.all(
+      icoSizes.map((size) =>
+        sharp(sourceIcon).resize(size, size, {
+          fit: 'contain',
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        })
+      )
     );
 
     const icoPath = join(outputDir, 'icon.ico');
-    const icoBuffer = await toIco(icoBuffers);
-    writeFileSync(icoPath, icoBuffer);
+    await ico.sharpsToIco(icoSharps, icoPath);
     console.log('✓ Generated icon.ico');
 
     // Generate .icns file (macOS)

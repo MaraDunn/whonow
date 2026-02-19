@@ -2,36 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getStripeRedirectOrigin } from "../_shared/appUrl.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  // Allow the browser to read these response headers (useful for debugging)
-  "Access-Control-Expose-Headers": "sb-request-id",
-};
-
-// Stripe price IDs are environment-specific (test vs live).
-// Prefer configuring them as Supabase Edge Function secrets:
-// - STRIPE_PRICE_ID_PRO
-// - STRIPE_PRICE_ID_TEAM
-// - STRIPE_PRICE_ID_BUSINESS
-//
-// These defaults are kept for backwards compatibility but should be overridden via secrets.
-const DEFAULT_TIER_PRICES: Record<string, string> = {
-  pro: "price_1RifXqDXpGeDw1xnkNvKgEzI",
-  team: "price_1RifYIDXpGeDw1xn1rBKxeH7",
-  business: "price_1RifYIDXpGeDw1xni9LJxRLQ",
-};
-
-function getTierPriceId(tier: string): string | undefined {
-  const envMap: Record<string, string | undefined> = {
-    pro: Deno.env.get("STRIPE_PRICE_ID_PRO") || undefined,
-    team: Deno.env.get("STRIPE_PRICE_ID_TEAM") || undefined,
-    business: Deno.env.get("STRIPE_PRICE_ID_BUSINESS") || undefined,
-  };
-  return envMap[tier] || DEFAULT_TIER_PRICES[tier];
-}
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
+import { getTierPriceId } from "../_shared/stripeConfig.ts";
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -39,9 +11,10 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = { ...getCorsHeaders(origin), "Access-Control-Expose-Headers": "sb-request-id" };
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Not blocked by waitlist mode so users with access can start checkout
   const supabaseClient = createClient(
@@ -77,7 +50,7 @@ serve(async (req) => {
     const { tier } = body;
     const priceId = tier ? getTierPriceId(String(tier)) : undefined;
     if (!tier || !priceId) {
-      throw new Error(`Invalid tier: ${tier}. Valid tiers are: ${Object.keys(DEFAULT_TIER_PRICES).join(", ")}`);
+      throw new Error("Invalid tier");
     }
     logStep("Tier selected", { tier, priceId });
 
@@ -122,15 +95,8 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in create-checkout", { message: errorMessage });
-
-    // Important: always return a readable JSON error to the browser so it doesn't become an opaque "non-2xx" error.
-    // This message should be safe (no secrets). Stripe/Supabase SDK error messages are generally safe here.
     return new Response(
-      JSON.stringify({
-        error: errorMessage,
-        hint:
-          "Common causes: STRIPE_SECRET_KEY missing, priceId not found in this Stripe mode (test vs live), or Stripe product/price misconfigured.",
-      }),
+      JSON.stringify({ error: "Checkout failed" }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,

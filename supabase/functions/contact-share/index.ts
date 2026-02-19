@@ -1,10 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import {
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  checkRateLimit,
+  rateLimitExceededResponse,
+} from "../_shared/security.ts";
 
 /** Contact payload shape stored in contact_share_tokens (camelCase for frontend). */
 type ContactPayload = {
@@ -81,15 +82,24 @@ function sanitizeFilename(name: string): string {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   if (req.method !== "GET") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  const clientIP = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || req.headers.get("x-real-ip")
+    || "unknown";
+  const { allowed, resetIn } = checkRateLimit(`contact-share:${clientIP}`, 60, 60000);
+  if (!allowed) {
+    return rateLimitExceededResponse(resetIn, origin);
   }
 
   const url = new URL(req.url);

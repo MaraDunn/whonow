@@ -1,38 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
-
-// Stripe IDs differ between test and live mode.
-// Prefer mapping by PRICE ID (stable per environment and easy to configure via secrets).
-const DEFAULT_PRICE_TO_TIER: Record<string, string> = {
-  // Backwards-compatible defaults (override via secrets for test mode)
-  "price_1RifXqDXpGeDw1xnkNvKgEzI": "pro",
-  "price_1RifYIDXpGeDw1xn1rBKxeH7": "team",
-  "price_1RifYIDXpGeDw1xni9LJxRLQ": "business",
-};
-
-function priceToTier(priceId: string | undefined): string {
-  if (!priceId) return "pro";
-  const envMap: Record<string, string | undefined> = {
-    [Deno.env.get("STRIPE_PRICE_ID_PRO") || ""]: "pro",
-    [Deno.env.get("STRIPE_PRICE_ID_TEAM") || ""]: "team",
-    [Deno.env.get("STRIPE_PRICE_ID_BUSINESS") || ""]: "business",
-  };
-  return envMap[priceId] || DEFAULT_PRICE_TO_TIER[priceId] || "pro";
-}
-
-const SEAT_LIMITS: Record<string, number> = {
-  starter: 1,
-  pro: 1,
-  team: 25,
-  business: 100,
-};
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
+import { priceToTier, SEAT_LIMITS } from "../_shared/stripeConfig.ts";
 
 // Secure logging - no PII
 const logStep = (step: string, details?: Record<string, string | number | boolean | undefined>) => {
@@ -41,9 +11,10 @@ const logStep = (step: string, details?: Record<string, string | number | boolea
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Not blocked by waitlist mode so users with access can refresh subscription after checkout
   const supabaseClient = createClient(

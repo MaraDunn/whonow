@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { checkLaunchMode, waitlistModeBlockedResponse, getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
 
 /**
  * Deterministic Search Query Parser - NO AI/LLM
@@ -145,21 +141,60 @@ function parseSearchQuery(query: string, contacts: Contact[]): ParsedResult {
   };
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+export async function handler(req: Request): Promise<Response> {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
-  // Check launch mode - block in waitlist mode
   const { blocked } = checkLaunchMode();
   if (blocked) {
-    const origin = req.headers.get("origin");
     return waitlistModeBlockedResponse(origin);
   }
 
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return new Response(
+      JSON.stringify({ error: "Missing authorization header" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
+  const token = authHeader.replace("Bearer ", "");
+  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !user) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
-    const { query, contacts } = await req.json();
-    
+    let body: { query?: unknown; contacts?: unknown };
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { query, contacts } = body;
+    const contactsList = Array.isArray(contacts) ? contacts : [];
+    const MAX_CONTACTS = 2000;
+    if (contactsList.length > MAX_CONTACTS) {
+      return new Response(
+        JSON.stringify({ error: `Contacts array exceeds maximum of ${MAX_CONTACTS}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (!query) {
       return new Response(
         JSON.stringify({ error: 'Query is required' }),
@@ -177,8 +212,7 @@ serve(async (req) => {
 
     console.log('Deterministic search for:', sanitizedQuery);
 
-    // Use deterministic parsing - NO AI
-    const result = parseSearchQuery(sanitizedQuery, contacts || []);
+    const result = parseSearchQuery(sanitizedQuery, contactsList);
 
     console.log('Search result:', result);
 
@@ -194,4 +228,6 @@ serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}
+
+serve(handler);

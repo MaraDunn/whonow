@@ -1,34 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { priceToTier, SEAT_LIMITS } from "../_shared/stripeConfig.ts";
 
 // No CORS headers needed - webhooks come from Stripe servers, not browsers
 // Stripe webhook is never blocked by waitlist mode so subscription updates apply for users with access.
-
-// Stripe IDs differ between test and live mode.
-// Prefer mapping by PRICE ID (easy to configure via secrets).
-const DEFAULT_PRICE_TO_TIER: Record<string, string> = {
-  "price_1RifXqDXpGeDw1xnkNvKgEzI": "pro",
-  "price_1RifYIDXpGeDw1xn1rBKxeH7": "team",
-  "price_1RifYIDXpGeDw1xni9LJxRLQ": "business",
-};
-
-function priceToTier(priceId: string | undefined): string {
-  if (!priceId) return "pro";
-  const envMap: Record<string, string | undefined> = {
-    [Deno.env.get("STRIPE_PRICE_ID_PRO") || ""]: "pro",
-    [Deno.env.get("STRIPE_PRICE_ID_TEAM") || ""]: "team",
-    [Deno.env.get("STRIPE_PRICE_ID_BUSINESS") || ""]: "business",
-  };
-  return envMap[priceId] || DEFAULT_PRICE_TO_TIER[priceId] || "pro";
-}
-
-const SEAT_LIMITS: Record<string, number> = {
-  starter: 1,
-  pro: 1,
-  team: 25,
-  business: 100,
-};
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   // Only log non-sensitive data

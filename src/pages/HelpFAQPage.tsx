@@ -12,7 +12,7 @@ const faqItems = [
   {
     question: "How do I add a contact?",
     answer:
-      "Click the 'Add Contact' button in the header, then choose 'Add Contact' from the dropdown. Fill in the contact's name, email, phone, company, and any other details. You can also add contacts by scanning a business card, importing from a file, or syncing from Google or Slack.",
+      "Click the 'Add Contact' button in the header, then choose 'Add Contact' from the dropdown. Fill in the contact's name, email, phone, company, and any other details. You can also add contacts by scanning a business card, importing from a file, syncing from Google, or (if your organization has connected Slack or Teams) importing from your workspace.",
   },
   {
     question: "How do I search my contacts?",
@@ -27,7 +27,7 @@ const faqItems = [
   {
     question: "How do I import contacts?",
     answer:
-      "Click 'Add Contact' and choose one of the import options: 'Scan Business Card' to capture a card with your camera, 'Import from File' to upload a vCard, CSV, or PDF, 'Sync from Google' to connect your Google contacts, or 'Import from Slack' (if available on your plan) to pull in your Slack workspace members.",
+      "Click 'Add Contact' and choose one of the import options: 'Scan Business Card' to capture a card with your camera, 'Import from File' to upload a vCard, CSV, or PDF, 'Sync from Google' to connect your Google contacts, or 'Import from Slack' or 'Import from Teams' (when your organization has connected Slack or Microsoft Teams) to pull in workspace members.",
   },
   {
     question: "How do I export contacts?",

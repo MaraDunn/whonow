@@ -229,7 +229,8 @@ jobs:
           xcrun stapler validate "/tmp/Applications/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Stapled ticket lost after cp -R (simulated Finder copy). Users must use Install WhoNow.command."; exit 1; }
           spctl -a -t execute -v -- "/tmp/Applications/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper would reject app after cp -R (simulated Finder copy). Users must use Install WhoNow.command."; exit 1; }
           hdiutil detach /Volumes/WhoNow
-          gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" --clobber
+          shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
+          gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" "$DMG_NAME.sha256" --clobber
           echo "Post-upload verification: download asset and confirm app inside has staple..."
           gh release download "$GITHUB_REF_NAME" -p "$DMG_NAME" --clobber
           hdiutil attach "$DMG_NAME" -readonly -nobrowse

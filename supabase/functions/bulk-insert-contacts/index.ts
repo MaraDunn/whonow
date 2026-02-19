@@ -285,7 +285,6 @@ serve(async (req) => {
         let query = supabase
           .from("contacts")
           .select("id, email, phone, tags, description, name, company, role, avatar, folder_id, address, city, state, zip_code, country, latitude, longitude, business_name, business_type")
-          .or('email.not.is.null,phone.not.is.null') // Only contacts with email or phone
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (accessConditions.length > 0) {
@@ -296,7 +295,6 @@ serve(async (req) => {
 
         if (fetchError) {
           console.error(`[bulk-insert-contacts] Error fetching existing contacts (page ${page}):`, fetchError);
-          // If query fails, break and use what we have (better than failing completely)
           console.warn("[bulk-insert-contacts] Stopping duplicate check due to error, using contacts found so far");
           break;
         }
@@ -304,7 +302,8 @@ serve(async (req) => {
         if (!pageContacts || pageContacts.length === 0) {
           hasMore = false;
         } else {
-          allContacts.push(...pageContacts);
+          const withEmailOrPhone = pageContacts.filter((c: { email?: string | null; phone?: string | null }) => c.email != null || c.phone != null);
+          allContacts.push(...withEmailOrPhone);
           // If we got fewer than pageSize, we've reached the end
           hasMore = pageContacts.length === pageSize;
           page++;
@@ -417,15 +416,11 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("[bulk-insert-contacts] Unexpected error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
     const stack = error instanceof Error ? error.stack : undefined;
-    console.error("[bulk-insert-contacts] Error stack:", stack);
+    console.error("[bulk-insert-contacts] Unexpected error:", error);
+    if (stack) console.error("[bulk-insert-contacts] Error stack:", stack);
     return new Response(
-      JSON.stringify({ 
-        error: message,
-        details: process.env.DENO_ENV === "development" ? stack : undefined,
-      }),
+      JSON.stringify({ error: "An error occurred while processing your request" }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

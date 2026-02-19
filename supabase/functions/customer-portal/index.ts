@@ -2,30 +2,18 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getStripeRedirectOrigin } from "../_shared/appUrl.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Expose-Headers": "sb-request-id",
-};
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[CUSTOMER-PORTAL] ${step}${detailsStr}`);
 };
 
-function jsonError(message: string, status: number): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-    status,
-  });
-}
-
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = { ...getCorsHeaders(origin), "Access-Control-Expose-Headers": "sb-request-id" };
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   try {
     // Not blocked by waitlist mode so users with access can open billing portal
@@ -58,10 +46,10 @@ serve(async (req) => {
     if (customers.data.length === 0) {
       const msg = "No billing account found. Subscribe first to manage your subscription.";
       logStep("No Stripe customer", { userId: user.id });
-      return new Response(
-        JSON.stringify({ error: msg }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
-      );
+      return new Response(JSON.stringify({ error: msg }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
@@ -82,12 +70,9 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in customer-portal", { message: errorMessage });
-
-    const isConfig = /STRIPE_SECRET_KEY|Billing Portal|Customer Portal|not enabled|not set up/i.test(errorMessage);
-    const userMessage = isConfig
-      ? "Billing portal is not configured. Set STRIPE_SECRET_KEY in Supabase Edge Function secrets and enable Customer Portal in Stripe Dashboard → Settings → Billing."
-      : errorMessage;
-
-    return jsonError(userMessage, 500);
+    return new Response(JSON.stringify({ error: "Billing portal is not available" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 });

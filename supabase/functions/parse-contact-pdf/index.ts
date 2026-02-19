@@ -1744,11 +1744,27 @@ serve(async (req) => {
 
     const body = await req.json();
     console.log('[parse-contact-pdf] Request body keys:', Object.keys(body));
-    
-    // Support pre-extracted text or base64 input
+
+    // Input size limits to mitigate DoS (documented for audit)
+    const MAX_EXTRACTED_TEXT = 500_000;
+    const MAX_PDF_BASE64 = 10_000_000;
+
     let extractedText = body.extractedText || body.text;
     const pdfBase64 = body.pdfBase64;
     const mimeType = body.mimeType || 'application/pdf';
+
+    if (typeof extractedText === 'string' && extractedText.length > MAX_EXTRACTED_TEXT) {
+      return new Response(
+        JSON.stringify({ error: `extractedText exceeds maximum length of ${MAX_EXTRACTED_TEXT}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (typeof pdfBase64 === 'string' && pdfBase64.length > MAX_PDF_BASE64) {
+      return new Response(
+        JSON.stringify({ error: `pdfBase64 exceeds maximum length of ${MAX_PDF_BASE64}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     console.log('[parse-contact-pdf] Input check:', {
       hasExtractedText: !!extractedText,

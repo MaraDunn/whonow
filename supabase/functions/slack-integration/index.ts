@@ -1,27 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { checkLaunchMode, waitlistModeBlockedResponse, sanitizeString, secureLog } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-function checkLaunchMode(): { blocked: boolean; mode: string } {
-  const mode = Deno.env.get("APP_LAUNCH_MODE") || "live";
-  return { blocked: mode === "waitlist", mode };
-}
-
-function waitlistModeBlockedResponse(_origin?: string | null): Response {
-  return new Response(
-    JSON.stringify({
-      error: "Slack is unavailable while the app is in waitlist mode. Set APP_LAUNCH_MODE to 'live' in Supabase Edge Function secrets to enable integrations.",
-    }),
-    {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    }
-  );
-}
 
 /** True when the request is from a test/dev origin (localhost or INTEGRATION_TEST_ORIGINS). */
 function isTestOrigin(origin: string | null): boolean {
@@ -57,7 +41,7 @@ type SlackUsersListResponse = {
 serve(async (req) => {
   const url = new URL(req.url);
   const authHeader = req.headers.get("Authorization");
-  console.log(`[slack-integration] ${req.method} ${url.pathname}${url.search} | Auth: ${authHeader ? "present" : "missing"}`);
+  secureLog("SLACK", "Request", { method: req.method, path: url.pathname, hasAuth: !!authHeader });
 
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -119,11 +103,11 @@ serve(async (req) => {
         integrationScope = parsedState.scope || 'user';
       } catch {
         // Legacy format: state is just the user ID
-        console.log("Using legacy state format (user ID only)");
+        secureLog("SLACK", "Using legacy state format");
       }
 
       const redirectUri = `${supabaseUrl}/functions/v1/slack-integration`;
-      console.log("Exchanging code for token with redirect URI:", redirectUri, "scope:", integrationScope);
+      secureLog("SLACK", "Exchanging code for token", { scope: integrationScope });
       
       const tokenResponse = await fetch("https://slack.com/api/oauth.v2.access", {
         method: "POST",
@@ -137,7 +121,7 @@ serve(async (req) => {
       });
 
       const tokenData = await tokenResponse.json();
-      console.log("Slack OAuth token response:", JSON.stringify(tokenData));
+      secureLog("SLACK", "OAuth token response received", { ok: !!tokenData?.ok });
 
       if (!tokenData.ok) {
         console.error("Slack OAuth failed:", tokenData.error);
@@ -188,7 +172,7 @@ serve(async (req) => {
         });
       }
 
-      console.log("Slack integration stored successfully, redirecting to:", `${appUrl}/?integration=slack&status=success`);
+      secureLog("SLACK", "Integration stored, redirecting to success");
       
       // Redirect back to the app
       return new Response(null, {
@@ -199,13 +183,12 @@ serve(async (req) => {
 
     // For all other requests, require authentication
     // Parse body to get JWT (since Supabase strips Authorization header when verify_jwt=false)
-    console.log("[slack-integration] Parsing request body...");
+    secureLog("SLACK", "Parsing request body");
     let body;
     try {
       const bodyText = await req.text();
-      console.log("[slack-integration] Raw body (first 200 chars):", bodyText.substring(0, 200));
       body = JSON.parse(bodyText);
-      console.log("[slack-integration] Parsed body keys:", Object.keys(body));
+      secureLog("SLACK", "Parsed body", { keyCount: Object.keys(body).length });
     } catch (e) {
       console.error("[slack-integration] Failed to parse request body:", e);
       return new Response(JSON.stringify({ error: "Invalid request body", details: String(e) }), {
@@ -216,7 +199,7 @@ serve(async (req) => {
     
     const { action, scope = 'user', jwt, ...params } = body;
     
-    console.log("[slack-integration] Action:", action, "Scope:", scope, "JWT present:", !!jwt, "JWT length:", jwt?.length || 0);
+    secureLog("SLACK", "Request", { action, scope, hasJwt: !!jwt });
     
     if (!jwt) {
       console.error("[slack-integration] No JWT in request body. Full body:", JSON.stringify(body));
@@ -236,13 +219,13 @@ serve(async (req) => {
       });
     }
 
-    console.log("[slack-integration] User verified:", user.id);
+    secureLog("SLACK", "User verified", { userId: user.id });
 
     const SLACK_CLIENT_ID = Deno.env.get("SLACK_CLIENT_ID");
     const SLACK_CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
     const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN");
     
-    console.log("[slack-integration] Secrets check - CLIENT_ID:", !!SLACK_CLIENT_ID, "CLIENT_SECRET:", !!SLACK_CLIENT_SECRET);
+    secureLog("SLACK", "Secrets check", { hasClientId: !!SLACK_CLIENT_ID, hasClientSecret: !!SLACK_CLIENT_SECRET });
 
     // Get user's company for org-level integrations
     const { data: profile } = await supabase
@@ -276,9 +259,17 @@ serve(async (req) => {
           _user_id: user.id,
           _role: 'admin'
         });
-        if (!isAdminData) {
+        let canManageIntegrations = !!isAdminData;
+        if (!canManageIntegrations && profile?.company_id) {
+          const { data: isOwner } = await supabase.rpc('is_super_admin', {
+            _user_id: user.id,
+            _company_id: profile.company_id
+          });
+          canManageIntegrations = !!isOwner;
+        }
+        if (!canManageIntegrations) {
           return new Response(JSON.stringify({
-            error: "Only organization admins can setup organization integrations",
+            error: "Only organization admins can connect integrations. If you created this organization, have another admin grant you the Admin role in Settings → Organization → Members.",
           }), {
             status: 403,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -295,7 +286,7 @@ serve(async (req) => {
         
         const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodedState}`;
         
-        console.log("Generated OAuth URL with redirect:", redirectUri, "scope:", scope);
+        secureLog("SLACK", "Generated OAuth URL", { scope });
         
         return new Response(JSON.stringify({ url: oauthUrl }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -303,7 +294,7 @@ serve(async (req) => {
       }
 
       case "import-members": {
-        console.log("Starting import-members for user:", user.id, "scope:", scope);
+        secureLog("SLACK", "Starting import-members", { userId: user.id, scope });
         
         // Only organization-level integration is supported
         let integration = null;
@@ -327,7 +318,7 @@ serve(async (req) => {
           });
         }
 
-        console.log("Found Slack integration:", integration.id, "Team:", integration.settings?.team_name, "Scope:", integration.scope);
+        secureLog("SLACK", "Found Slack integration", { integrationId: integration.id, scope: integration.scope });
 
         // Fetch Slack workspace members
         const membersResponse = await fetch("https://slack.com/api/users.list", {
@@ -335,7 +326,7 @@ serve(async (req) => {
         });
         const membersData = (await membersResponse.json()) as SlackUsersListResponse;
 
-        console.log("Slack users.list response ok:", membersData.ok, "Member count:", membersData.members?.length);
+        secureLog("SLACK", "users.list response", { ok: membersData.ok, memberCount: membersData.members?.length ?? 0 });
 
         if (!membersData.ok) {
           console.error("Slack API error:", membersData.error);
@@ -350,7 +341,7 @@ serve(async (req) => {
           (m) => !m.is_bot && !m.deleted && m.id !== "USLACKBOT"
         );
 
-        console.log("Valid members after filtering:", validMembers.length);
+        secureLog("SLACK", "Valid members after filtering", { count: validMembers.length });
 
         // Build contacts to import
         // For org-level imports, set company_id so contacts are shared
@@ -385,7 +376,7 @@ serve(async (req) => {
             .map((c) => (c as { email: string | null }).email)
             .filter((e): e is string => Boolean(e));
           existingEmailSet = new Set(emails);
-          console.log("Found existing contacts:", existingEmailSet.size);
+          secureLog("SLACK", "Found existing contacts", { count: existingEmailSet.size });
         }
 
         // Filter out duplicates
@@ -394,7 +385,7 @@ serve(async (req) => {
         );
         const skippedCount = contactsToImport.length - newContacts.length;
 
-        console.log("New contacts to insert:", newContacts.length, "Skipped duplicates:", skippedCount);
+        secureLog("SLACK", "Import batch", { newCount: newContacts.length, skippedCount });
 
         if (newContacts.length === 0) {
           return new Response(JSON.stringify({ 
@@ -420,7 +411,7 @@ serve(async (req) => {
           });
         }
 
-        console.log("Successfully inserted contacts:", inserted?.length);
+        secureLog("SLACK", "Inserted contacts", { count: inserted?.length ?? 0 });
 
         // Log the action
         await supabase.from("integration_logs").insert({
@@ -475,6 +466,16 @@ serve(async (req) => {
           .single();
 
         if (!contact) {
+          return new Response(JSON.stringify({ error: "Contact not found" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const canAccess =
+          contact.owner_id === user.id ||
+          (contact.is_shared && contact.company_id && profile?.company_id && contact.company_id === profile.company_id);
+        if (!canAccess) {
           return new Response(JSON.stringify({ error: "Contact not found" }), {
             status: 404,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -633,25 +634,44 @@ serve(async (req) => {
       case "send-notification": {
         const { webhookUrl, message, contactData } = params;
 
-        if (!webhookUrl) {
+        if (!webhookUrl || typeof webhookUrl !== "string") {
           return new Response(JSON.stringify({ error: "No webhook URL provided" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
+        try {
+          const parsed = new URL(webhookUrl);
+          if (parsed.protocol !== "https:" || parsed.hostname !== "hooks.slack.com") {
+            return new Response(JSON.stringify({ error: "Invalid webhook URL" }), {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        } catch {
+          return new Response(JSON.stringify({ error: "Invalid webhook URL" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const safeMessage = sanitizeString(String(message ?? ""), 4000);
+        const safeName = contactData?.name != null ? sanitizeString(String(contactData.name), 200) : "N/A";
+        const safeEmail = contactData?.email != null ? sanitizeString(String(contactData.email), 254) : "N/A";
+
         const payload = {
-          text: message,
+          text: safeMessage,
           blocks: [
             {
               type: "section",
-              text: { type: "mrkdwn", text: message },
+              text: { type: "mrkdwn", text: safeMessage },
             },
             ...(contactData ? [{
               type: "section",
               fields: [
-                { type: "mrkdwn", text: `*Name:* ${contactData.name}` },
-                { type: "mrkdwn", text: `*Email:* ${contactData.email || "N/A"}` },
+                { type: "mrkdwn", text: `*Name:* ${safeName}` },
+                { type: "mrkdwn", text: `*Email:* ${safeEmail}` },
               ],
             }] : []),
           ],
@@ -702,13 +722,20 @@ serve(async (req) => {
       case "disconnect": {
         // Delete based on scope
         if (scope === 'organization' && profile?.company_id) {
-          // Verify user is admin before allowing org-level disconnect
+          // Verify user is admin or company owner before allowing org-level disconnect
           const { data: isAdminData } = await supabase.rpc('has_role', {
             _user_id: user.id,
             _role: 'admin'
           });
-          
-          if (!isAdminData) {
+          let canManage = !!isAdminData;
+          if (!canManage) {
+            const { data: isOwner } = await supabase.rpc('is_super_admin', {
+              _user_id: user.id,
+              _company_id: profile.company_id
+            });
+            canManage = !!isOwner;
+          }
+          if (!canManage) {
             return new Response(JSON.stringify({ 
               error: "Only organization admins can disconnect organization integrations" 
             }), {

@@ -130,6 +130,24 @@ If you confirm your **account and credentials** with sections 1–5 and 6, we ca
 
 ---
 
+## If the app inside the DMG shows as Unnotarized after download
+
+CI verifies that the app inside the DMG has the staple after uploading and re-downloading. If your download shows `rejected` / `Unnotarized Developer ID` when you check the app on the mounted DMG:
+
+1. **Verify you have the same file as CI:** From the release page, download the `.sha256` file for your architecture (e.g. `WhoNow_1.0.52_aarch64.dmg.sha256`). Put it in the same folder as your DMG and run:
+   ```bash
+   shasum -c WhoNow_1.0.52_aarch64.dmg.sha256
+   ```
+   If it reports "No such file or directory" or fails, your DMG is different from what CI uploaded (e.g. cached or wrong file). Re-download the DMG and try again.
+
+2. **Try removing quarantine from the DMG before mounting:** Sometimes the quarantine attribute on the downloaded `.dmg` file affects how macOS presents the volume. After downloading, run (replace with your DMG path):
+   ```bash
+   xattr -d com.apple.quarantine ~/Downloads/WhoNow_1.0.52_aarch64.dmg
+   ```
+   Then open/mount the DMG and run `xcrun stapler validate "/Volumes/WhoNow/WhoNow.app"` again. Do **not** use `xattr -cr` on the DMG (that clears all attributes).
+
+---
+
 ## Verifying Gatekeeper acceptance
 
 Notarization and stapling alone do not guarantee Gatekeeper will accept the app. **Copy the app to Applications** (or another folder) before first launch; do not run it directly from the mounted DMG.

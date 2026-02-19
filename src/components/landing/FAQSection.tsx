@@ -14,7 +14,7 @@ const faqs = [
   {
     question: "How does WhoNow integrate with my existing tools?",
     answer:
-      "WhoNow integrates with Slack and Microsoft Teams to import workspace members as contacts and share contact cards directly from your chat. You can also import contacts from CSV files and export your data when needed. We're designed to complement your existing workflow tools.",
+      "WhoNow integrates with Slack and Microsoft Teams at the organization level: your org admin connects once, and all members can import workspace members as contacts and share contact cards from chat. You can also import contacts from CSV files and export your data when needed. We're designed to complement your existing workflow tools.",
   },
   {
     question: "What makes WhoNow different from other contact management tools?",

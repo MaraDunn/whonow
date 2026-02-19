@@ -3,7 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
-import { devLog } from "@/lib/devLog";
 
 interface IntegrationStatus {
   connected: boolean;
@@ -28,14 +27,14 @@ export function useOrganizationIntegrations() {
   const [slackStatus, setSlackStatus] = useState<IntegrationStatus | null>(null);
   const [teamsStatus, setTeamsStatus] = useState<IntegrationStatus | null>(null);
   const { user } = useAuth();
-  const { isAdmin, company } = useProfile(user?.id);
+  const { isAdmin, isSuperAdmin, company } = useProfile(user?.id);
+  const canManageIntegrations = isAdmin || isSuperAdmin;
 
   /**
    * Get organization integration status for a specific provider
    */
   const getStatus = useCallback(async (provider: Provider) => {
     if (!user || !company?.id) {
-      devLog("No user or company found");
       return { connected: false };
     }
 
@@ -99,10 +98,10 @@ export function useOrganizationIntegrations() {
   }, [getStatus]);
 
   /**
-   * Connect organization-level integration (admin only)
+   * Connect organization-level integration (admin or company owner only)
    */
   const connect = useCallback(async (provider: Provider) => {
-    if (!isAdmin) {
+    if (!canManageIntegrations) {
       toast.error("Only organization admins can manage integrations");
       return;
     }
@@ -176,13 +175,13 @@ export function useOrganizationIntegrations() {
     } finally {
       setIsLoading(false);
     }
-  }, [isAdmin, company]);
+  }, [canManageIntegrations, company]);
 
   /**
-   * Disconnect organization-level integration (admin only)
+   * Disconnect organization-level integration (admin or company owner only)
    */
   const disconnect = useCallback(async (provider: Provider) => {
-    if (!isAdmin) {
+    if (!canManageIntegrations) {
       toast.error("Only organization admins can manage integrations");
       return;
     }
@@ -233,7 +232,7 @@ export function useOrganizationIntegrations() {
     } finally {
       setIsLoading(false);
     }
-  }, [isAdmin, company]);
+  }, [canManageIntegrations, company]);
 
   /**
    * Import members from integration (uses org-level token)
@@ -298,7 +297,8 @@ export function useOrganizationIntegrations() {
     isLoading,
     slackStatus,
     teamsStatus,
-    isAdmin,
+    isAdmin: canManageIntegrations,
+    hasCompany: !!company?.id,
     getStatus,
     getAllStatus,
     connectSlack: () => connect('slack'),

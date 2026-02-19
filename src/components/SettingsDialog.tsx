@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle } from "lucide-react";
 import { useTheme } from "next-themes";
-import { IntegrationsPanel } from "@/components/IntegrationsPanel";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 import { BrandingSettings } from "@/components/BrandingSettings";
 import { DuplicateCleanupDialog } from "@/components/DuplicateCleanupDialog";
