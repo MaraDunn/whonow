@@ -4,6 +4,7 @@ import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -465,14 +466,14 @@ export function ContactDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg md:max-w-2xl max-h-[90vh] w-[calc(100vw-2rem)] sm:w-full flex flex-col p-0 [&>button]:hidden overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-border gap-2 shrink-0">
-          <h2 className="font-display font-semibold text-base sm:text-lg text-foreground truncate min-w-0">
+        {/* Header: pr-12 reserves space for close button on mobile to avoid overlap with Shared pill */}
+        <div className="relative flex items-center justify-between px-3 sm:px-4 pr-12 sm:pr-4 py-2 sm:py-3 border-b border-border gap-2 shrink-0">
+          <DialogTitle className="font-display font-semibold text-base sm:text-lg text-foreground truncate min-w-0">
             {isEditing ? "Edit Contact" : "Contact Details"}
-          </h2>
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          </DialogTitle>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
             {!isEditing && hasCompany && onSave && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Label htmlFor="quick-shared" className="text-xs font-medium text-muted-foreground whitespace-nowrap flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5" />
                   Shared
@@ -582,7 +583,7 @@ export function ContactDetailsDialog({
                 setIsEditing(false);
                 onOpenChange(false);
               }}
-              className="h-8 w-8"
+              className="h-8 w-8 absolute right-2 top-1/2 -translate-y-1/2 sm:static sm:translate-y-0"
             >
               <X className="h-4 w-4" />
             </Button>

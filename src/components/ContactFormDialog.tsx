@@ -487,9 +487,10 @@ export function ContactFormDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[calc(100vh-2rem)] flex flex-col p-0 sm:rounded-lg rounded-none border-0 sm:border">
-        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 shrink-0 border-b border-border">
-          <div className="flex items-center justify-between gap-4">
-            <DialogTitle className="font-display text-xl sm:text-lg text-center sm:text-left">
+        {/* pr-14 on mobile reserves space for dialog close (X) so Shared pill doesn't overlap */}
+        <DialogHeader className="px-4 sm:px-6 pr-14 sm:pr-6 pt-4 sm:pt-6 pb-4 shrink-0 border-b border-border">
+          <div className="flex items-center justify-between gap-4 min-w-0">
+            <DialogTitle className="font-display text-xl sm:text-lg text-center sm:text-left truncate min-w-0">
               {getDialogTitle()}
             </DialogTitle>
             {hasCompany && (
