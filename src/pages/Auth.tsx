@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation, Link } from "react-router-dom";
 import { z } from "zod";
 import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
@@ -49,7 +50,8 @@ const Auth = () => {
   const [signUpEmailSent, setSignUpEmailSent] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isResending, setIsResending] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string; agreeToTerms?: string }>({});
 
   // Resend cooldown timer
   useEffect(() => {
@@ -118,7 +120,7 @@ const Auth = () => {
   }, [searchParams, navigate]);
 
   const validateForm = (isSignUp: boolean) => {
-    const newErrors: { email?: string; password?: string; fullName?: string } = {};
+    const newErrors: { email?: string; password?: string; fullName?: string; agreeToTerms?: string } = {};
 
     const emailResult = emailSchema.safeParse(email);
     if (!emailResult.success) {
@@ -132,6 +134,10 @@ const Auth = () => {
 
     if (isSignUp && !fullName.trim()) {
       newErrors.fullName = "Please enter your name";
+    }
+
+    if (isSignUp && !agreeToTerms) {
+      newErrors.agreeToTerms = "You must agree to the Terms of Service and Privacy Policy";
     }
 
     setErrors(newErrors);
@@ -452,6 +458,25 @@ const Auth = () => {
                     Must be 8+ characters with uppercase, lowercase, number, and special character.
                   </p>
                 </div>
+
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="signup-agree-tos"
+                    checked={agreeToTerms}
+                    onCheckedChange={(v) => setAgreeToTerms(v === true)}
+                  />
+                  <label htmlFor="signup-agree-tos" className="text-sm text-muted-foreground cursor-pointer leading-tight">
+                    I agree to the{" "}
+                    <Link to="/terms" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link to="/privacy" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">
+                      Privacy Policy
+                    </Link>
+                  </label>
+                </div>
+                {errors.agreeToTerms && <p className="text-sm text-destructive">{errors.agreeToTerms}</p>}
 
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting ? (

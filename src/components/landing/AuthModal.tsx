@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,7 +37,8 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
   const [signUpEmailSent, setSignUpEmailSent] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isResending, setIsResending] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string; agreeToTerms?: string }>({});
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -47,7 +49,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
   if (!isOpen) return null;
 
   const validateForm = (isSignUp: boolean) => {
-    const newErrors: { email?: string; password?: string; fullName?: string } = {};
+    const newErrors: { email?: string; password?: string; fullName?: string; agreeToTerms?: string } = {};
 
     const emailResult = emailSchema.safeParse(email);
     if (!emailResult.success) {
@@ -61,6 +63,10 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
 
     if (isSignUp && !fullName.trim()) {
       newErrors.fullName = "Please enter your name";
+    }
+
+    if (isSignUp && !agreeToTerms) {
+      newErrors.agreeToTerms = "You must agree to the Terms of Service and Privacy Policy";
     }
 
     setErrors(newErrors);
@@ -150,6 +156,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
     setEmail("");
     setPassword("");
     setFullName("");
+    setAgreeToTerms(false);
     setSignUpEmailSent(null);
     setResendCooldown(0);
     setErrors({});
@@ -411,6 +418,25 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                   </div>
 
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="signup-agree-tos-modal"
+                      checked={agreeToTerms}
+                      onCheckedChange={(v) => setAgreeToTerms(v === true)}
+                    />
+                    <label htmlFor="signup-agree-tos-modal" className="text-sm text-muted-foreground cursor-pointer leading-tight">
+                      I agree to the{" "}
+                      <Link to="/terms" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">
+                        Terms of Service
+                      </Link>{" "}
+                      and{" "}
+                      <Link to="/privacy" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">
+                        Privacy Policy
+                      </Link>
+                    </label>
+                  </div>
+                  {errors.agreeToTerms && <p className="text-sm text-destructive">{errors.agreeToTerms}</p>}
+
                   <Button type="submit" className="w-full gradient-hero text-primary-foreground" disabled={isSubmitting}>
                     {isSubmitting ? (
                       <span className="flex items-center gap-2">
@@ -424,20 +450,6 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
                       </span>
                     )}
                   </Button>
-                  
-                  <p className="text-xs text-center text-muted-foreground mt-4">
-                    By creating an account, you agree to our{" "}
-                    <Link 
-                      to="/privacy" 
-                      className="text-primary hover:underline" 
-                      onClick={() => {
-                        resetForm();
-                        onClose();
-                      }}
-                    >
-                      Privacy Policy
-                    </Link>
-                  </p>
                 </form>
               </TabsContent>
             </Tabs>
