@@ -68,11 +68,13 @@ async function diagnose() {
     issues.push(`Error: ${error.message}`);
   }
 
-  // Test 2: Try a test signup
+  // Test 2: Try a test signup (use TEST_PASSWORD from .env or process.env; never hardcode)
   console.log('\n2. Testing signup functionality...');
+  const testPassword = envVars.TEST_PASSWORD || process.env.TEST_PASSWORD;
+  if (!testPassword) {
+    console.log('   ⏭️  Skipped (set TEST_PASSWORD in .env to run signup test)');
+  } else {
   const testEmail = `test-${Date.now()}@example.com`;
-  const testPassword = 'Test1234!';
-  
   try {
     const { data, error } = await supabase.auth.signUp({
       email: testEmail,
@@ -107,6 +109,7 @@ async function diagnose() {
   } catch (error) {
     console.log(`   ❌ Error: ${error.message}`);
     issues.push(`Error: ${error.message}`);
+  }
   }
 
   // Test 3: Check if profiles table structure is correct

@@ -146,6 +146,15 @@ If you use the Supabase Dashboard: run the migration in the SQL Editor and deplo
 
    With `organizations`, only work/school accounts can sign in (recommended for Teams). Omit or use your specific **Directory (tenant) ID** if you want single-tenant behavior.
 
+5. **Required in production — OAuth state secret:**  
+   Add a secret used to sign OAuth `state` so callbacks cannot be tampered with (prevents binding a token to the wrong user):
+
+   | Name | Value |
+   |------|--------|
+   | `OAUTH_STATE_SECRET` | A random string at least 16 characters (e.g. from `openssl rand -hex 32`) |
+
+   The same secret is used by both Teams and Slack integrations. **In production** (when `APP_LAUNCH_MODE` is not `waitlist`), `OAUTH_STATE_SECRET` **must** be set; otherwise the OAuth callback will fail with a misconfiguration error. In waitlist or local dev, callbacks can run without it (less secure).
+
 ---
 
 ## Part 3: Connect Teams in WhoNow (as org admin)

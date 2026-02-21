@@ -59,19 +59,18 @@ You have **17 migration files** to run. Execute them in this order:
 
 ## Phase 4: Deploy Edge Functions
 
-You have **13 Edge Functions** to deploy:
+You have **12 Edge Functions** to deploy:
 
 1. [ ] `check-subscription`
 2. [ ] `create-checkout`
 3. [ ] `customer-portal`
 4. [ ] `generate-test-contacts`
-5. [ ] `parse-contact-input`
-6. [ ] `parse-contact-pdf`
-7. [ ] `parse-search-query`
-8. [ ] `scan-business-card`
-9. [ ] `slack-integration`
-10. [ ] `stripe-webhook`
-11. [ ] `teams-integration`
+5. [ ] `parse-contact-pdf`
+6. [ ] `parse-search-query`
+7. [ ] `scan-business-card`
+8. [ ] `slack-integration`
+9. [ ] `stripe-webhook`
+10. [ ] `teams-integration`
 
 **How to deploy functions:**
 1. Go to Supabase Dashboard → Edge Functions

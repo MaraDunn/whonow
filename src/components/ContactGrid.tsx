@@ -15,6 +15,8 @@ const SAMPLE_CONTACT: Contact = {
   role: "Product Manager",
   tags: [],
   description: "This is what a contact card looks like. Add your own contacts to get started.",
+  isClient: true,
+  lastContactedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
 };
 import { ActionType } from "@/hooks/useActionSearch";
 import { devLog } from "@/lib/devLog";
@@ -307,7 +309,7 @@ export function ContactGrid({
                 folder={undefined}
                 folders={folders}
                 showOwnershipBadge={showOwnershipBadge}
-                hasClientAccess={hasClientAccess}
+                hasClientAccess={true}
                 isInternal={false}
                 isCurrentUser={false}
                 compact={isCompactMode}
@@ -315,6 +317,8 @@ export function ContactGrid({
                 onToggleExpand={() => {}}
                 isSelected={false}
                 selectionMode={false}
+                onMarkContacted={() => {}}
+                onToggleClient={() => {}}
               />
             </div>
           </div>

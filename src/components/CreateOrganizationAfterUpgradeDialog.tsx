@@ -80,7 +80,7 @@ export function CreateOrganizationAfterUpgradeDialog({
               ) : (
                 <span className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
-                  Create organization
+                  Create an Organization
                 </span>
               )}
             </Button>

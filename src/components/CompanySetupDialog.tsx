@@ -130,7 +130,7 @@ export function CompanySetupDialog({
               ) : (
                 <span className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4" />
-                  Upgrade to Create Organization
+                  Upgrade to Create an Organization
                 </span>
               )}
             </Button>

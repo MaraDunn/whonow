@@ -109,12 +109,7 @@ serve(async (req) => {
         );
       }
 
-      console.error("Error inserting email:", {
-        message: insertError.message,
-        code: insertError.code,
-        details: insertError.details,
-        hint: insertError.hint,
-      });
+      console.error("Error inserting email:", insertError.code || insertError.message);
       return new Response(JSON.stringify({ error: "Failed to register email" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

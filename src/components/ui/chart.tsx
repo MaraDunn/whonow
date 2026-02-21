@@ -6,6 +6,29 @@ import { cn } from "@/lib/utils";
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
 
+/**
+ * Chart config must be from app-controlled sources only—do not pass user-supplied config,
+ * to avoid XSS risk when using dangerouslySetInnerHTML for theme styles.
+ */
+/** Allow only safe chars for CSS selector / data attribute to prevent XSS when using dangerouslySetInnerHTML. */
+function sanitizeChartId(id: string): string {
+  if (typeof id !== "string") return "";
+  return id.replace(/[^a-zA-Z0-9-_]/g, "").slice(0, 64) || "chart";
+}
+
+/** Allow only CSS color values that are safe to inject (hex, rgb, rgba, hsl, hsla, or transparent). */
+function sanitizeCssColor(value: string): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(trimmed)) return trimmed;
+  if (/^rgb\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*\)$/.test(trimmed)) return trimmed;
+  if (/^rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*\)$/.test(trimmed)) return trimmed;
+  if (/^hsl\(\s*[\d.]+\s*,\s*[\d.]+%\s*,\s*[\d.]+%\s*\)$/.test(trimmed)) return trimmed;
+  if (/^hsla\(\s*[\d.]+\s*,\s*[\d.]+%\s*,\s*[\d.]+%\s*,\s*[\d.]+\s*\)$/.test(trimmed)) return trimmed;
+  if (trimmed === "transparent" || trimmed === "currentColor") return trimmed;
+  return "";
+}
+
 export type ChartConfig = {
   [k in string]: {
     label?: React.ReactNode;
@@ -37,7 +60,7 @@ const ChartContainer = React.forwardRef<
   }
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId();
-  const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
+  const chartId = sanitizeChartId(`chart-${id || uniqueId.replace(/:/g, "")}`) || "chart";
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -59,6 +82,7 @@ const ChartContainer = React.forwardRef<
 ChartContainer.displayName = "Chart";
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+  const safeId = sanitizeChartId(id);
   const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
 
   if (!colorConfig.length) {
@@ -71,12 +95,14 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart=${safeId}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
+    const raw = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+    const color = raw ? sanitizeCssColor(String(raw)) : "";
+    return color ? `  --color-${key.replace(/[^a-zA-Z0-9-_]/g, "")}: ${color};` : null;
   })
+  .filter(Boolean)
   .join("\n")}
 }
 `,

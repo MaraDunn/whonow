@@ -104,11 +104,12 @@ Ensure:
 
 ### 7. Test Direct API Call
 
-Run this in your browser console (on your app page):
+Run this in your browser console (on your app page). Use a strong password that meets your Supabase auth rules (e.g. 8+ chars, mixed case, number, symbol):
+
 ```javascript
 const { data, error } = await supabase.auth.signUp({
   email: 'test@example.com',
-  password: 'Test1234!',
+  password: 'YOUR_SECURE_TEST_PASSWORD',  // Replace with a real password; never commit real passwords
   options: {
     data: {
       full_name: 'Test User'

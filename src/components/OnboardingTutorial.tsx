@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useSidebar } from "@/components/ui/sidebar";
 
 export interface OnboardingStep {
   id: string;
@@ -17,15 +20,46 @@ interface OnboardingTutorialProps {
   onSkip: () => void;
 }
 
+const DIRECTORIES_STEP_ID = "directories";
+
+// Z-index order: backdrop < elevated sidebar < spotlight < tooltip (so sidebar is visible but highlight and popup stay on top)
+const Z_BACKDROP = 9999;
+const Z_SIDEBAR_ELEVATED = 10001;
+const Z_SPOTLIGHT = 10002;
+const Z_TOOLTIP = 10003;
+
 export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTutorialProps) {
+  const isMobile = useIsMobile();
+  const { setOpenMobile, openMobile } = useSidebar();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const [portalEl, setPortalEl] = useState<HTMLDivElement | null>(null);
 
   const currentStep = steps[currentStepIndex];
   const isLastStep = currentStepIndex === steps.length - 1;
   const progress = ((currentStepIndex + 1) / steps.length) * 100;
+  const isDirectoriesStep = currentStep?.id === DIRECTORIES_STEP_ID;
+
+  // Portal container so spotlight and tooltip render above the Sheet (same level as body)
+  useEffect(() => {
+    const el = document.createElement("div");
+    el.setAttribute("data-onboarding-portal", "");
+    el.style.cssText = "position:fixed;inset:0;z-index:10002;pointer-events:none";
+    document.body.appendChild(el);
+    setPortalEl(el);
+    return () => {
+      document.body.removeChild(el);
+      setPortalEl(null);
+    };
+  }, []);
+
+  // On mobile, open the sidebar when we're on the directories step (do not close here; close in handleNext)
+  useEffect(() => {
+    if (!isMobile) return;
+    if (isDirectoriesStep) setOpenMobile(true);
+  }, [isMobile, isDirectoriesStep, setOpenMobile]);
 
   // Update target element position
   useEffect(() => {
@@ -42,7 +76,7 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
         setIsVisible(true);
       } else {
         setTargetRect(null);
-        setIsVisible(false);
+        setIsVisible(true);
       }
     };
 
@@ -59,12 +93,42 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
     let elevatedEl: HTMLElement | null = null;
     let originalZIndex = "";
     let originalPosition = "";
+    let elevatedSidebar: HTMLElement | null = null;
+    let sidebarOriginalZIndex = "";
+
     if (targetElement && targetElement instanceof HTMLElement) {
       elevatedEl = targetElement;
       originalZIndex = targetElement.style.zIndex;
       originalPosition = targetElement.style.position;
-      targetElement.style.zIndex = "10001";
+      targetElement.style.zIndex = String(Z_SIDEBAR_ELEVATED);
       targetElement.style.position = "relative";
+
+      // If target is inside the sidebar, elevate the sidebar (or Sheet portal) so it isn't covered by the backdrop.
+      const sidebarRoot = targetElement.closest("[data-sidebar=\"sidebar\"]") as HTMLElement | null;
+      if (sidebarRoot) {
+        const isMobileSidebar = sidebarRoot.getAttribute("data-mobile") === "true";
+        if (isMobileSidebar) {
+          // Mobile: elevate the Sheet portal (direct child of body) so the whole Sheet is above the backdrop.
+          // Defer so the Sheet has painted and the portal is in the DOM.
+          let portalRoot: HTMLElement | null = sidebarRoot;
+          while (portalRoot.parentElement && portalRoot.parentElement !== document.body) {
+            portalRoot = portalRoot.parentElement as HTMLElement;
+          }
+          if (portalRoot) {
+            elevatedSidebar = portalRoot;
+            sidebarOriginalZIndex = portalRoot.style.zIndex;
+            portalRoot.style.zIndex = String(Z_SIDEBAR_ELEVATED);
+          }
+        } else {
+          // Desktop: elevate the fixed sidebar column (parent of [data-sidebar="sidebar"]).
+          const sidebarWrapper = sidebarRoot.parentElement;
+          if (sidebarWrapper && sidebarWrapper instanceof HTMLElement) {
+            elevatedSidebar = sidebarWrapper;
+            sidebarOriginalZIndex = sidebarWrapper.style.zIndex;
+            sidebarWrapper.style.zIndex = String(Z_SIDEBAR_ELEVATED);
+          }
+        }
+      }
     }
 
     // Update on scroll, resize, or DOM changes
@@ -86,10 +150,14 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
         elevatedEl.style.zIndex = originalZIndex;
         elevatedEl.style.position = originalPosition;
       }
+      if (elevatedSidebar) {
+        elevatedSidebar.style.zIndex = sidebarOriginalZIndex;
+      }
     };
-  }, [currentStep.targetSelector]);
+  }, [currentStep.targetSelector, openMobile]);
 
   const handleNext = () => {
+    const leavingDirectories = currentStep?.id === DIRECTORIES_STEP_ID;
     if (isLastStep) {
       setIsVisible(false);
       setTimeout(onComplete, 200);
@@ -97,6 +165,7 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
       setIsVisible(false);
       setTimeout(() => {
         setCurrentStepIndex((prev) => prev + 1);
+        if (leavingDirectories && isMobile) setOpenMobile(false);
       }, 200);
     }
   };
@@ -108,8 +177,22 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
 
   if (!currentStep) return null;
 
-  // Calculate tooltip position
+  // On mobile, pin tooltip to bottom safe area so it never moves off screen
   const getTooltipStyle = (): React.CSSProperties => {
+    if (isMobile) {
+      return {
+        position: "fixed",
+        bottom: "max(env(safe-area-inset-bottom, 0px), 16px)",
+        left: "16px",
+        right: "16px",
+        width: "auto",
+        maxWidth: "min(400px, calc(100vw - 32px))",
+        marginLeft: "auto",
+        marginRight: "auto",
+        zIndex: Z_TOOLTIP,
+      };
+    }
+
     if (!targetRect) {
       // Center on screen if no target
       return {
@@ -117,7 +200,7 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
         top: "50%",
         left: "50%",
         transform: "translate(-50%, -50%)",
-        zIndex: 10000,
+        zIndex: Z_TOOLTIP,
       };
     }
 
@@ -155,48 +238,39 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
           : position === "left"
           ? "translate(-100%, -50%)"
           : "translate(0, -50%)",
-      zIndex: 10000,
+      zIndex: Z_TOOLTIP,
     };
   };
 
-  return (
+  const spotlightAndTooltip = (
     <>
-      {/* Backdrop overlay */}
-      <div
-        className={cn(
-          "fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-200",
-          isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
-        style={{ zIndex: 9999 }}
-        onClick={handleSkip}
-      />
-
-      {/* Spotlight on target element */}
+      {/* Spotlight - above elevated sidebar so the highlight is visible */}
       {targetRect && (
         <div
           className="fixed pointer-events-none transition-all duration-200"
           style={{
-            zIndex: 9999,
+            zIndex: Z_SPOTLIGHT,
             top: targetRect.top - 4,
             left: targetRect.left - 4,
             width: targetRect.width + 8,
             height: targetRect.height + 8,
-            boxShadow: "0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 0 9999px rgba(0, 0, 0, 0.5)",
+            boxShadow: "0 0 0 4px hsl(var(--ring) / 0.5), 0 0 0 9999px rgba(0, 0, 0, 0.5)",
             borderRadius: "8px",
           }}
         />
       )}
 
-      {/* Tooltip */}
+      {/* Tooltip - pointer-events auto so Next/Skip are clickable */}
       <div
         ref={tooltipRef}
-        style={getTooltipStyle()}
+        style={{ ...getTooltipStyle(), pointerEvents: "auto" }}
         className={cn(
           "transition-all duration-200",
+          isMobile && "flex flex-col items-center",
           isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
         )}
       >
-        <div className="bg-card border border-border shadow-lg rounded-lg p-4 max-w-sm w-[320px]">
+        <div className={cn("bg-card border border-border shadow-lg rounded-lg p-4 max-w-sm w-[320px]", isMobile && "w-full max-w-[calc(100vw-32px)]")}>
           {/* Progress bar */}
           <div className="mb-3">
             <div className="h-1 bg-muted rounded-full overflow-hidden">
@@ -252,6 +326,24 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
           </div>
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Backdrop overlay - no blur and lighter on directories step so the sidebar target stays readable */}
+      <div
+        className={cn(
+          "fixed inset-0 transition-opacity duration-200",
+          isDirectoriesStep && isMobile ? "bg-background/50" : "bg-background/80 backdrop-blur-sm",
+          isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        style={{ zIndex: Z_BACKDROP }}
+        onClick={handleSkip}
+      />
+
+      {/* Spotlight + tooltip: in a portal when ready (above Sheet), otherwise in place */}
+      {portalEl ? createPortal(spotlightAndTooltip, portalEl) : spotlightAndTooltip}
     </>
   );
 }

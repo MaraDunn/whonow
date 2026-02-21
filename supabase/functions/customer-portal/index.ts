@@ -35,7 +35,7 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
+    if (userError) throw new Error("Authentication failed");
     const user = userData.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
     // Log only user ID, not email (PII)
@@ -55,11 +55,11 @@ serve(async (req) => {
     logStep("Found Stripe customer", { customerId });
 
     // Redirect to canonical app (whonow.co) so Stripe always returns users to the deployed app
-    const origin = getStripeRedirectOrigin(req);
-    logStep("Redirect origin", { origin });
+    const redirectOrigin = getStripeRedirectOrigin(req);
+    logStep("Redirect origin", { redirectOrigin });
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${origin}/app?subscription=success`,
+      return_url: `${redirectOrigin}/app?subscription=success`,
     });
     logStep("Customer portal session created", { sessionId: portalSession.id, url: portalSession.url });
 

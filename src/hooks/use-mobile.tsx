@@ -42,34 +42,6 @@ export function useIsMobile() {
   return isMobile;
 }
 
-export function useIsTablet() {
-  const [isTablet, setIsTablet] = React.useState<boolean>(false);
-
-  React.useEffect(() => {
-    const checkTablet = () => {
-      const isTouch = isTouchDevice();
-      const width = window.innerWidth;
-      const isTabletSize = width >= MOBILE_BREAKPOINT && width < TABLET_BREAKPOINT;
-      // Only consider tablet if it's a touch device AND tablet-sized screen
-      setIsTablet(isTouch && isTabletSize);
-    };
-    
-    const mqlMin = window.matchMedia(`(min-width: ${MOBILE_BREAKPOINT}px)`);
-    const mqlMax = window.matchMedia(`(max-width: ${TABLET_BREAKPOINT - 1}px)`);
-    
-    mqlMin.addEventListener("change", checkTablet);
-    mqlMax.addEventListener("change", checkTablet);
-    checkTablet();
-    
-    return () => {
-      mqlMin.removeEventListener("change", checkTablet);
-      mqlMax.removeEventListener("change", checkTablet);
-    };
-  }, []);
-
-  return isTablet;
-}
-
 export type ResponsiveView = 'mobile' | 'tablet' | 'desktop';
 
 export function useResponsiveView(): ResponsiveView {

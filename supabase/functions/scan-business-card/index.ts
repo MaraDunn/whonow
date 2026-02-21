@@ -1,10 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  checkLaunchMode,
+  waitlistModeBlockedResponse,
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  secureLog,
+  checkRateLimit,
+  rateLimitExceededResponse,
+} from "../_shared/security.ts";
+import { formatName } from "../_shared/contactFormatting.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Rate limit: 20 scan requests per minute per user (expensive parsing)
+const RATE_LIMIT_REQUESTS = 20;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /**
  * Deterministic Business Card Scanner - Expects OCR text input
@@ -43,36 +52,6 @@ interface ExtractionContext {
   company: { value: string | null; position?: number };
   role: { value: string | null; position?: number };
   name: { value: string | null; position?: number };
-}
-
-// Format name with proper capitalization
-function formatName(name: string): string {
-  if (!name || typeof name !== 'string') return '';
-  const trimmed = name.trim();
-  if (!trimmed) return '';
-  
-  const lowerParticles = new Set(['von', 'van', 'de', 'del', 'della', 'der', 'di', 'du', 'la', 'le', 'lo']);
-  const specialPrefixes: Record<string, string> = { 'mc': 'Mc', 'mac': 'Mac', "o'": "O'" };
-  
-  return trimmed.split(/\s+/).map((word, wordIndex) => {
-    if (word.includes('-')) {
-      return word.split('-').map((part, i) => capitalizeWord(part, wordIndex === 0 && i === 0, lowerParticles, specialPrefixes)).join('-');
-    }
-    return capitalizeWord(word, wordIndex === 0, lowerParticles, specialPrefixes);
-  }).join(' ');
-}
-
-function capitalizeWord(word: string, isFirst: boolean, lowerParticles: Set<string>, specialPrefixes: Record<string, string>): string {
-  if (!word) return '';
-  const lower = word.toLowerCase();
-  if (!isFirst && lowerParticles.has(lower)) return lower;
-  for (const [prefix, replacement] of Object.entries(specialPrefixes)) {
-    if (lower.startsWith(prefix) && lower.length > prefix.length) {
-      const rest = lower.slice(prefix.length);
-      return replacement + rest.charAt(0).toUpperCase() + rest.slice(1).toLowerCase();
-    }
-  }
-  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 }
 
 /**
@@ -2187,15 +2166,43 @@ function parseBusinessCard(
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Check launch mode - block in waitlist mode
   const { blocked } = checkLaunchMode();
   if (blocked) {
-    const origin = req.headers.get("origin");
     return waitlistModeBlockedResponse(origin);
+  }
+
+  // Require authentication so only authenticated users can call the parser
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Missing authorization header" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
+  const token = authHeader.replace("Bearer ", "");
+  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !user) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+  secureLog("SCAN-BUSINESS-CARD", "User authenticated", { userId: user.id });
+
+  const rateLimit = checkRateLimit(`scan-business-card:${user.id}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_MS);
+  if (!rateLimit.allowed) {
+    return rateLimitExceededResponse(rateLimit.resetIn, origin);
   }
 
   try {
@@ -2261,24 +2268,9 @@ serve(async (req) => {
       );
     }
 
-    console.log("Parsing business card OCR text (length:", ocrText.length, ")", ocrText.substring(0, 200));
-    console.log("=== FULL OCR TEXT FOR DEBUGGING ===");
-    console.log(ocrText);
-    console.log("=== END OCR TEXT ===");
-    if (structure) {
-      console.log("Using structured layout data with", structure.lines?.length || 0, "lines");
-    }
+    secureLog("SCAN-BUSINESS-CARD", "Parsing OCR text", { length: ocrText.length, hasStructure: !!structure, structureLines: structure?.lines?.length ?? 0 });
 
     const contact = parseBusinessCard(ocrText, structure);
-
-    console.log("Parsed contact:", {
-      name: contact.name,
-      email: contact.email,
-      phone: contact.phone,
-      company: contact.company,
-      role: contact.role,
-      confidence: contact.confidence,
-    });
 
     // Validate results - warn if confidence is too low
     const confidences = contact.confidence || {};

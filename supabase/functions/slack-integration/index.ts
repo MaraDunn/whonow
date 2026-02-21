@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse, sanitizeString, secureLog } from "../_shared/security.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { checkLaunchMode, waitlistModeBlockedResponse, sanitizeString, secureLog, getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
+import { createOAuthState, parseOAuthState } from "../_shared/oauthState.ts";
 
 /** True when the request is from a test/dev origin (localhost or INTEGRATION_TEST_ORIGINS). */
 function isTestOrigin(origin: string | null): boolean {
@@ -40,12 +36,13 @@ type SlackUsersListResponse = {
 
 serve(async (req) => {
   const url = new URL(req.url);
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
   const authHeader = req.headers.get("Authorization");
   secureLog("SLACK", "Request", { method: req.method, path: url.pathname, hasAuth: !!authHeader });
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Check launch mode - block in waitlist mode unless: skip flag is set, or test origin, or OAuth callback
   const skipWaitlistForIntegrations = Deno.env.get("INTEGRATION_SKIP_WAITLIST") === "true";
@@ -93,18 +90,29 @@ serve(async (req) => {
         });
       }
 
-      // Parse state to extract userId and scope
-      let userId = stateParam;
-      let integrationScope = 'user';
-      
-      try {
-        const parsedState = JSON.parse(decodeURIComponent(stateParam));
-        userId = parsedState.userId;
-        integrationScope = parsedState.scope || 'user';
-      } catch {
-        // Legacy format: state is just the user ID
-        secureLog("SLACK", "Using legacy state format");
+      // In production, OAUTH_STATE_SECRET must be set to prevent OAuth state tampering (binding attacks)
+      const stateSecret = Deno.env.get("OAUTH_STATE_SECRET");
+      const launchMode = Deno.env.get("APP_LAUNCH_MODE") || "live";
+      if (launchMode !== "waitlist" && (!stateSecret || stateSecret.length < 16)) {
+        console.error("Slack OAuth: OAUTH_STATE_SECRET must be set in production (APP_LAUNCH_MODE is not waitlist)");
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/?integration=slack&status=error&message=oauth_misconfigured` },
+        });
       }
+      const rawState = stateParam ? decodeURIComponent(stateParam) : null;
+      const payload = await parseOAuthState(stateSecret, rawState);
+
+      if (!payload?.userId) {
+        secureLog("SLACK", "Invalid or missing state on callback");
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `${appUrl}/?integration=slack&status=error&message=invalid_state` },
+        });
+      }
+
+      const userId = payload.userId;
+      const integrationScope = payload.scope ?? "user";
 
       const redirectUri = `${supabaseUrl}/functions/v1/slack-integration`;
       secureLog("SLACK", "Exchanging code for token", { scope: integrationScope });
@@ -191,7 +199,7 @@ serve(async (req) => {
       secureLog("SLACK", "Parsed body", { keyCount: Object.keys(body).length });
     } catch (e) {
       console.error("[slack-integration] Failed to parse request body:", e);
-      return new Response(JSON.stringify({ error: "Invalid request body", details: String(e) }), {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -202,7 +210,7 @@ serve(async (req) => {
     secureLog("SLACK", "Request", { action, scope, hasJwt: !!jwt });
     
     if (!jwt) {
-      console.error("[slack-integration] No JWT in request body. Full body:", JSON.stringify(body));
+      secureLog("SLACK", "No JWT in request body", { bodyKeys: body ? Object.keys(body) : [], bodyLength: body ? JSON.stringify(body).length : 0 });
       return new Response(JSON.stringify({ error: "No JWT token provided in request body" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -213,7 +221,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized", details: authError?.message }), {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -280,9 +288,10 @@ serve(async (req) => {
         const redirectUri = `${supabaseUrl}/functions/v1/slack-integration`;
         const scopes = "users:read,users:read.email,chat:write,channels:read,groups:read";
         
-        // Encode scope in state along with user ID
-        const stateData = JSON.stringify({ userId: user.id, scope });
-        const encodedState = encodeURIComponent(stateData);
+        // Signed state (when OAUTH_STATE_SECRET is set) to prevent binding token to wrong userId
+        const stateSecret = Deno.env.get("OAUTH_STATE_SECRET");
+        const stateValue = await createOAuthState(stateSecret, { userId: user.id, scope });
+        const encodedState = encodeURIComponent(stateValue);
         
         const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodedState}`;
         
@@ -405,7 +414,7 @@ serve(async (req) => {
 
         if (insertError) {
           console.error("Error inserting contacts:", insertError);
-          return new Response(JSON.stringify({ error: insertError.message }), {
+          return new Response(JSON.stringify({ error: "Failed to import contacts" }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -772,8 +781,7 @@ serve(async (req) => {
     }
   } catch (error: unknown) {
     console.error("Slack integration error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Request failed" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

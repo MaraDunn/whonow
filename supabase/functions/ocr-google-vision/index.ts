@@ -1,26 +1,35 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
+import {
+  checkLaunchMode,
+  waitlistModeBlockedResponse,
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  checkRateLimit,
+  rateLimitExceededResponse,
+} from "../_shared/security.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Rate limit: 20 OCR requests per minute per user (expensive external API)
+const RATE_LIMIT_REQUESTS = 20;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /**
  * Google Cloud Vision API for Business Card OCR
  * Much more accurate than Tesseract.js for business cards
  */
 
+// Max base64 length (~5MB decoded); reject larger to prevent DoS and cost abuse
+const MAX_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
+
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Check launch mode - block in waitlist mode
   const { blocked } = checkLaunchMode();
   if (blocked) {
-    const origin = req.headers.get("origin");
     return waitlistModeBlockedResponse(origin);
   }
 
@@ -46,6 +55,11 @@ serve(async (req) => {
     );
   }
 
+  const rateLimit = checkRateLimit(`ocr-google-vision:${user.id}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_MS);
+  if (!rateLimit.allowed) {
+    return rateLimitExceededResponse(rateLimit.resetIn, origin);
+  }
+
   try {
     const { imageBase64 } = await req.json();
     
@@ -53,6 +67,13 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: "Image data is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (typeof imageBase64 !== "string" || imageBase64.length > MAX_IMAGE_BASE64_LENGTH) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Image data too large. Maximum size is 5MB." }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -91,11 +112,7 @@ serve(async (req) => {
       const errorText = await visionResponse.text();
       console.error("Google Vision API error:", errorText);
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "OCR service error", 
-          details: errorText 
-        }),
+        JSON.stringify({ success: false, error: "OCR service error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -175,11 +192,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("OCR error:", error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: "Failed to perform OCR",
-        details: error instanceof Error ? error.message : "Unknown error"
-      }),
+      JSON.stringify({ success: false, error: "Failed to perform OCR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

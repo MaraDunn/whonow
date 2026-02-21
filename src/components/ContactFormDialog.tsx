@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { formatName, formatPhoneNumber } from "@/utils/formatContact";
 import { lookupBusinessAtAddress } from "@/utils/businessLookup";
 import { DuplicateContactDialog } from "@/components/DuplicateContactDialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useContacts } from "@/hooks/useContacts";
 import { useRecentlyUsedKeywords } from "@/hooks/useRecentlyUsedKeywords";
 
@@ -486,7 +487,7 @@ export function ContactFormDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[calc(100vh-2rem)] flex flex-col p-0 sm:rounded-lg rounded-none border-0 sm:border">
+        <DialogContent className="sm:max-w-2xl w-full h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden p-0 sm:rounded-lg rounded-none border-0 sm:border">
         {/* pr-14 on mobile reserves space for dialog close (X) so Shared pill doesn't overlap */}
         <DialogHeader className="px-4 sm:px-6 pr-14 sm:pr-6 pt-4 sm:pt-6 pb-4 shrink-0 border-b border-border">
           <div className="flex items-center justify-between gap-4 min-w-0">
@@ -513,7 +514,8 @@ export function ContactFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 sm:py-6">
+        <ScrollArea className="flex-1 min-h-0 px-4 sm:px-6 py-4 sm:py-6">
+          <div className="pr-4">
           <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-4">
             {/* Avatar - Centered on mobile, left-aligned on desktop */}
             <div className="flex flex-col items-center sm:items-start gap-4">
@@ -973,7 +975,8 @@ export function ContactFormDialog({
               </Button>
             </div>
           </form>
-        </div>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
     

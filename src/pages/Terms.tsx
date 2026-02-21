@@ -61,6 +61,23 @@ const Terms = () => {
           </section>
 
           <section className="mb-8">
+            <h2 className="text-2xl font-semibold mb-4">Data Backup and Limitation of Liability</h2>
+            <p className="text-muted-foreground mb-4">
+              <strong>Data backup.</strong> You are solely responsible for maintaining backup copies of your data. 
+              We strongly recommend that you regularly export and back up any information or content you store or 
+              transmit through the Service. We do not guarantee the availability, integrity, or retention of your data.
+            </p>
+            <p className="text-muted-foreground">
+              <strong>No liability for data loss.</strong> To the maximum extent permitted by applicable law, we 
+              shall not be liable for any loss, corruption, or unavailability of your data or user information, 
+              including in the event of service outages, system failures, security breaches, force majeure, 
+              natural disasters, or any other catastrophic or unforeseen event. Your use of the Service is at your 
+              own risk, and you assume full responsibility for any loss of data arising from or related to your use 
+              of the Service.
+            </p>
+          </section>
+
+          <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4">Contact Us</h2>
             <p className="text-muted-foreground">
               If you have questions about these terms, please{" "}

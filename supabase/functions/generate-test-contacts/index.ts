@@ -1,10 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { checkLaunchMode, waitlistModeBlockedResponse, getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
 
 const firstNames = [
   'James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer', 'Michael', 'Linda', 'William', 'Elizabeth',
@@ -132,14 +127,14 @@ function generateDescription(firstName: string, role: string, company: string, d
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Check launch mode - block in waitlist mode
   const { blocked } = checkLaunchMode();
   if (blocked) {
-    const origin = req.headers.get("origin");
     return waitlistModeBlockedResponse(origin);
   }
 

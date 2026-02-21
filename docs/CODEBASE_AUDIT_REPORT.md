@@ -38,7 +38,6 @@ The following **top 5 critical/high issues have been remediated**:
 | **help-email** | POST, OPTIONS | Bug report / contact support (Resend) | Bearer JWT | Rate limited, uses shared security. |
 | **waitlist** | POST, OPTIONS | Waitlist signup (email) | None | Rate limited by IP; _shared CORS/rate limit (no `*` fallback). |
 | **parse-search-query** | POST, OPTIONS | Rule-based search query parsing | Bearer JWT | **Fixed;** CORS allowlisted; max contacts 2000. |
-| **parse-contact-input** | POST, OPTIONS | Parse freeform text to contact | Launch mode only | No JWT. |
 | **parse-contact-pdf** | POST, OPTIONS | Parse PDF/text to contacts | Bearer JWT | Uses shared security; max extractedText 500k, pdfBase64 10M. |
 | **llm-proxy** | GET, OPTIONS | Proxy Hugging Face model files (Xenova) | **None** | Model/file allowlist. |
 | **scan-business-card-ai** | POST, OPTIONS | OCR (PaddleOCR) + scan-business-card parsing | Bearer JWT | **Fixed.** |
@@ -48,7 +47,7 @@ The following **top 5 critical/high issues have been remediated**:
 | **bulk-insert-contacts** | POST, OPTIONS | Bulk insert/merge contacts | Bearer JWT | Batch limit 100; duplicate-check filter fixed; no stack in response. |
 | **generate-test-contacts** | POST, OPTIONS | Insert 500 test contacts | Bearer JWT + `ALLOW_GENERATE_TEST_CONTACTS` | **Fixed;** 403 if secret unset. |
 
-**Duplicate / overlapping routes:** None clearly redundant. `parse-contact-input` vs `parse-contact-pdf` serve different inputs (text vs PDF).
+**Duplicate / overlapping routes:** None clearly redundant.
 
 ---
 

@@ -64,7 +64,9 @@ async function callHelpEmail(payload: HelpEmailPayload): Promise<{ success: bool
           ? data.message
           : resp.status === 503
             ? "Email service is not configured yet. Please try again later or contact support another way."
-            : `Request failed (${resp.status})`;
+            : resp.status === 500
+              ? "Could not send message. You can email support@whonow.co directly."
+              : `Request failed (${resp.status})`;
     return { success: false, error: msg };
   }
   if (data?.error) {

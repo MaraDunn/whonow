@@ -61,7 +61,6 @@ VITE_SUPABASE_URL="https://[your-new-project-ref].supabase.co"
 - scan-business-card
 - slack-integration
 - teams-integration
-- parse-contact-input
 - parse-contact-pdf
 - check-subscription
 - create-checkout

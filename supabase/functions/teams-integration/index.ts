@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse, sanitizeString, secureLog } from "../_shared/security.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { checkLaunchMode, waitlistModeBlockedResponse, sanitizeString, secureLog, getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
+import { createOAuthState, parseOAuthState } from "../_shared/oauthState.ts";
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 
@@ -34,9 +30,10 @@ function isTestOrigin(origin: string | null): boolean {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Check launch mode - block in waitlist mode unless: skip flag, test origin, or OAuth callback
   const skipWaitlistForIntegrations = Deno.env.get("INTEGRATION_SKIP_WAITLIST") === "true";
@@ -77,43 +74,24 @@ serve(async (req) => {
         return new Response("Missing code or credentials", { status: 400 });
       }
 
-      // Parse the state to get user ID, origin, and scope
-      let userId = "";
-      let appOrigin = "";
-      let integrationScope = "user";
+      // In production, OAUTH_STATE_SECRET must be set to prevent OAuth state tampering (binding attacks)
+      const stateSecret = Deno.env.get("OAUTH_STATE_SECRET");
+      const launchMode = Deno.env.get("APP_LAUNCH_MODE") || "live";
+      if (launchMode !== "waitlist" && (!stateSecret || stateSecret.length < 16)) {
+        console.error("Teams OAuth: OAUTH_STATE_SECRET must be set in production (APP_LAUNCH_MODE is not waitlist)");
+        return new Response("OAuth is misconfigured. OAUTH_STATE_SECRET must be set in production.", { status: 503 });
+      }
+      const rawState = state ? decodeURIComponent(state) : null;
+      const payload = await parseOAuthState(stateSecret, rawState);
 
-      const rawState = state ?? "";
-      const parseState = (value: string) => {
-        try {
-          return JSON.parse(value);
-        } catch {
-          return null;
-        }
-      };
-
-      const parsedState =
-        parseState(rawState) ||
-        (() => {
-          try {
-            return parseState(decodeURIComponent(rawState));
-          } catch {
-            return null;
-          }
-        })();
-
-      if (parsedState && typeof parsedState === "object") {
-        const stateObj = parsedState as { userId?: unknown; origin?: unknown; scope?: unknown };
-        userId = String(stateObj.userId || "");
-        appOrigin = String(stateObj.origin || "");
-        integrationScope = String(stateObj.scope || "user");
-      } else {
-        // Fallback for old format where state was just the user ID
-        userId = rawState;
+      if (!payload?.userId) {
+        secureLog("TEAMS", "Invalid or missing state on callback");
+        return new Response("Invalid or expired state. Please try connecting again.", { status: 400 });
       }
 
-      if (!userId) {
-        return new Response("Missing user id in state", { status: 400 });
-      }
+      const userId = payload.userId;
+      const appOrigin = payload.origin ?? "";
+      const integrationScope = payload.scope ?? "user";
 
       const redirectUri = `${supabaseUrl}/functions/v1/teams-integration`;
 
@@ -222,7 +200,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized", details: authError?.message }), {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -301,13 +279,14 @@ serve(async (req) => {
           "OnlineMeetings.ReadWrite",
         ].join(" ");
         
-        // Encode user ID, origin, and scope in the state parameter
+        // Signed state (when OAUTH_STATE_SECRET is set) to prevent binding token to wrong userId
         const origin = typeof params.origin === "string" && params.origin
           ? params.origin
           : (req.headers.get("origin") || "");
 
-        const stateData = JSON.stringify({ userId: user.id, origin, scope });
-        const encodedState = encodeURIComponent(stateData);
+        const stateSecret = Deno.env.get("OAUTH_STATE_SECRET");
+        const stateValue = await createOAuthState(stateSecret, { userId: user.id, origin, scope });
+        const encodedState = encodeURIComponent(stateValue);
         
         const oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?` +
           `client_id=${MICROSOFT_CLIENT_ID}` +
@@ -402,7 +381,7 @@ serve(async (req) => {
         const teamsData = await teamsResponse.json();
 
         if (teamsData.error) {
-          return new Response(JSON.stringify({ error: teamsData.error.message }), {
+          return new Response(JSON.stringify({ error: "Failed to fetch teams" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -450,7 +429,7 @@ serve(async (req) => {
         const channelsData = await channelsResponse.json();
 
         if (channelsData.error) {
-          return new Response(JSON.stringify({ error: channelsData.error.message }), {
+          return new Response(JSON.stringify({ error: "Failed to fetch channels" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -501,14 +480,10 @@ serve(async (req) => {
         // IMPORTANT: return 200 with an { error } payload so the web client can show a friendly toast
         // instead of throwing a FunctionsHttpError.
         if (teamsResponse.status === 401 || teamsResponse.status === 403) {
-          const graphError = teamsData?.error;
           return new Response(
             JSON.stringify({
               error:
-                graphError?.message ||
                 "Microsoft Teams access denied. If you connected a personal Microsoft account, it won’t work for Teams import—please reconnect with a work/school account (your org admin may need to grant consent).",
-              graph_status: teamsResponse.status,
-              graph_code: graphError?.code,
             }),
             {
               status: 200,
@@ -520,7 +495,7 @@ serve(async (req) => {
         if (teamsData.error) {
           console.error("Teams API error:", teamsData.error);
           return new Response(
-            JSON.stringify({ error: teamsData.error.message || "Failed to fetch teams" }),
+            JSON.stringify({ error: "Failed to fetch teams" }),
             {
               status: 400,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -816,7 +791,7 @@ serve(async (req) => {
         const messageData = await response.json();
 
         if (messageData.error) {
-          return new Response(JSON.stringify({ error: messageData.error.message }), {
+          return new Response(JSON.stringify({ error: "Failed to send message to channel" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -906,7 +881,7 @@ serve(async (req) => {
         const meetingData = await response.json();
 
         if (meetingData.error) {
-          return new Response(JSON.stringify({ error: meetingData.error.message }), {
+          return new Response(JSON.stringify({ error: "Failed to create meeting" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -1005,8 +980,7 @@ serve(async (req) => {
     }
   } catch (error: unknown) {
     console.error("Teams integration error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Request failed" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

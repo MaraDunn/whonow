@@ -562,6 +562,7 @@ export function FolderSidebar({
                           isActive={showClientDirectory && selectedClientFolderId === null}
                           tooltip={isCollapsed ? `Client Directory (${clientDirectoryCount})` : undefined}
                           className="w-full min-w-0"
+                          data-onboarding-client-directory
                         >
                           <Briefcase className="h-4 w-4 shrink-0" />
                           {!isCollapsed && (
@@ -583,6 +584,7 @@ export function FolderSidebar({
                               )
                             } : undefined}
                             className="w-full opacity-70 min-w-0"
+                            data-onboarding-client-directory
                           >
                             <Briefcase className="h-4 w-4 shrink-0" />
                             {!isCollapsed && (

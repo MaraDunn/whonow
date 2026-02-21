@@ -8,6 +8,7 @@ import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
 import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { ContactSupportDialog } from "@/components/ContactSupportDialog";
 import { FolderSidebar } from "@/components/FolderSidebar";
 import { TeamDirectoryGrid } from "@/components/TeamDirectoryGrid";
 import { ImportContactsDialog } from "@/components/ImportContactsDialog";
@@ -115,6 +116,7 @@ const IndexContent = () => {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importDefaultTab, setImportDefaultTab] = useState<string | undefined>(undefined);
+  const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [showDirectory, setShowDirectory] = useState(false);
   const [showClientDirectory, setShowClientDirectory] = useState(false);
@@ -887,6 +889,7 @@ const IndexContent = () => {
                 onOpenAddDialog={handleOpenAddDialog}
                 onOpenProfile={handleOpenProfile}
                 onOpenSettings={() => setSettingsOpen(true)}
+                onOpenHelp={() => setSupportDialogOpen(true)}
                 onOpenImport={(tab) => {
                   setImportDefaultTab(tab);
                   setImportDialogOpen(true);
@@ -1092,6 +1095,7 @@ const IndexContent = () => {
                   hasClientAccess={hasClientAccess}
                   selectionMode={selectionMode}
                   onToggleSelectionMode={handleToggleSelectionMode}
+                  showSampleContact={needsOnboarding && !needsCompanySetup}
                 />
               )}
 
@@ -1146,6 +1150,11 @@ const IndexContent = () => {
                 onResetKeywords={resetToDefaults}
                 isCompanyKeywords={isCompanyKeywords}
                 canEditKeywords={canEditKeywords}
+              />
+
+              <ContactSupportDialog
+                open={supportDialogOpen}
+                onOpenChange={setSupportDialogOpen}
               />
 
               <ImportContactsDialog

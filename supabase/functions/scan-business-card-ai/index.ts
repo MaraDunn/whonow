@@ -1,24 +1,28 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
+import {
+  checkLaunchMode,
+  waitlistModeBlockedResponse,
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  checkRateLimit,
+  rateLimitExceededResponse,
+} from "../_shared/security.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+// Rate limit: 20 scan requests per minute per user (expensive AI/OCR)
+const RATE_LIMIT_REQUESTS = 20;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Check launch mode - block in waitlist mode
   const { blocked } = checkLaunchMode();
   if (blocked) {
-    const origin = req.headers.get("origin");
     return waitlistModeBlockedResponse(origin);
   }
 
@@ -44,6 +48,11 @@ serve(async (req) => {
     );
   }
 
+  const rateLimit = checkRateLimit(`scan-business-card-ai:${user.id}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_MS);
+  if (!rateLimit.allowed) {
+    return rateLimitExceededResponse(rateLimit.resetIn, origin);
+  }
+
   try {
     // Log request method and headers for debugging
     console.log("Request method:", req.method);
@@ -61,10 +70,7 @@ serve(async (req) => {
     if (contentLength && parseInt(contentLength) === 0) {
       console.error("Request has Content-Length: 0 (empty body)");
       return new Response(
-        JSON.stringify({
-          error: "Empty request body",
-          details: "Request body is empty (Content-Length: 0). Please provide a JSON object with an 'image' field containing base64 encoded image data.",
-        }),
+        JSON.stringify({ error: "Invalid request. Provide a JSON body with an 'image' field (base64)." }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -91,11 +97,7 @@ serve(async (req) => {
       // If it's a JSON parse error from Supabase runtime, handle it
       if (readError instanceof Error && readError.message.includes("JSON")) {
         return new Response(
-          JSON.stringify({
-            error: "Invalid or empty request body",
-            details: "The request body could not be parsed as JSON. This usually means the body is empty or malformed. Please ensure you're sending a valid JSON object with an 'image' field.",
-            help: "Check that your frontend is sending the request body correctly. The body should be: { image: 'data:image/...' }",
-          }),
+          JSON.stringify({ error: "Invalid request. Provide a JSON body with an 'image' field (base64)." }),
           {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -104,10 +106,7 @@ serve(async (req) => {
       }
       
       return new Response(
-        JSON.stringify({
-          error: "Failed to read request body",
-          details: `Could not read request body: ${readError instanceof Error ? readError.message : String(readError)}. This may indicate the request was sent without a body or the body was malformed.`,
-        }),
+        JSON.stringify({ error: "Invalid request. Could not read request body." }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -119,10 +118,7 @@ serve(async (req) => {
     if (!bodyText || bodyText.trim().length === 0) {
       console.error("Empty request body received");
       return new Response(
-        JSON.stringify({
-          error: "Empty request body",
-          details: "Request body is empty. Please provide a JSON object with an 'image' field containing base64 encoded image data.",
-        }),
+        JSON.stringify({ error: "Invalid request. Provide a JSON body with an 'image' field (base64)." }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -141,10 +137,7 @@ serve(async (req) => {
       console.error("JSON parse error:", parseError);
       console.error("Body preview (first 500 chars):", bodyText.substring(0, 500));
       return new Response(
-        JSON.stringify({
-          error: "Invalid JSON in request body",
-          details: `Failed to parse request body as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}. Body preview: ${bodyText.substring(0, 200)}`,
-        }),
+        JSON.stringify({ error: "Invalid request. Provide a JSON body with an 'image' field (base64)." }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -158,10 +151,7 @@ serve(async (req) => {
       console.error("No 'image' field in request body");
       console.error("Body structure:", JSON.stringify(body, null, 2).substring(0, 500));
       return new Response(
-        JSON.stringify({
-          error: "No image provided",
-          details: "Request body must contain an 'image' field with base64 encoded image data. Received body keys: " + Object.keys(body || {}).join(", "),
-        }),
+        JSON.stringify({ error: "Invalid request. Request body must contain an 'image' field (base64)." }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -172,10 +162,7 @@ serve(async (req) => {
     if (typeof image !== 'string' || image.trim().length === 0) {
       console.error("Image field is empty or not a string");
       return new Response(
-        JSON.stringify({
-          error: "Invalid image data",
-          details: "The 'image' field must be a non-empty string containing base64 encoded image data.",
-        }),
+        JSON.stringify({ error: "Invalid request. The 'image' field must be a non-empty base64 string." }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -194,21 +181,14 @@ serve(async (req) => {
     
     if (!OCR_SERVICE_URL) {
       console.error("OCR_SERVICE_URL environment variable not set");
-      console.error("Available environment variables:", Object.keys(Deno.env.toObject()).filter(k => k.includes("OCR") || k.includes("URL")));
       return new Response(
-        JSON.stringify({
-          error: "OCR service not configured",
-          details: "OCR_SERVICE_URL environment variable is not set. Please configure it in Supabase Edge Functions settings (Dashboard → Edge Functions → Settings → Manage secrets).",
-          help: "Add a secret named 'OCR_SERVICE_URL' with the value of your deployed OCR service URL (e.g., https://paddleocr-service.onrender.com)",
-        }),
+        JSON.stringify({ error: "OCR service is not configured. Please try again later." }),
         {
-          status: 500,
+          status: 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
-
-    console.log(`Calling OCR service at: ${OCR_SERVICE_URL}/ocr`);
 
     const totalTimeoutMs = 120000; // 2 minutes total for all attempts
     const retryDelayMs = 15000;
@@ -253,18 +233,12 @@ serve(async (req) => {
         const requestDuration = Date.now() - requestStartTime;
         if (err.name === "AbortError") {
           return new Response(
-            JSON.stringify({
-              error: "OCR service timeout",
-              details: `The OCR service did not respond within ${Math.round(requestDuration / 1000)} seconds. The scanner may still be starting up. Please try again in a moment.`,
-            }),
+            JSON.stringify({ error: "OCR service did not respond in time. Please try again." }),
             { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
         return new Response(
-          JSON.stringify({
-            error: "Failed to reach OCR service",
-            details: `Could not connect to OCR service at ${OCR_SERVICE_URL}. Error: ${err.message}. The service may be starting up; please try again in a moment.`,
-          }),
+          JSON.stringify({ error: "OCR service is temporarily unavailable. Please try again later." }),
           { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -272,10 +246,7 @@ serve(async (req) => {
 
     if (!ocrResponse) {
       return new Response(
-        JSON.stringify({
-          error: "Failed to reach OCR service",
-          details: "No response after retries. The service may be starting up; please try again in a moment.",
-        }),
+        JSON.stringify({ error: "OCR service is temporarily unavailable. Please try again later." }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -289,10 +260,7 @@ serve(async (req) => {
     } catch (readError) {
       console.error("Failed to read OCR response:", readError);
       return new Response(
-        JSON.stringify({
-          error: "Failed to read OCR response",
-          details: "Could not read response from OCR service. The service may have crashed or returned an invalid response.",
-        }),
+        JSON.stringify({ error: "OCR service returned an invalid response. Please try again." }),
         {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -302,12 +270,9 @@ serve(async (req) => {
 
     // Check if response is empty
     if (!responseText || responseText.trim().length === 0) {
-      console.error("OCR service returned empty response");
+      console.error("OCR service returned empty response", ocrResponse.status);
       return new Response(
-        JSON.stringify({
-          error: "Empty OCR response",
-          details: `OCR service returned empty response with status ${ocrResponse.status}. The service may not be properly configured or may be experiencing issues.`,
-        }),
+        JSON.stringify({ error: "OCR service returned an invalid response. Please try again." }),
         {
           status: ocrResponse.ok ? 502 : ocrResponse.status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -321,10 +286,7 @@ serve(async (req) => {
       
       if (ocrResponse.status === 503 || ocrResponse.status === 502) {
         return new Response(
-          JSON.stringify({
-            error: "OCR service temporarily unavailable",
-            details: `The OCR service returned error ${ocrResponse.status}. This may happen if: 1) This is the first request and PaddleOCR is downloading models (takes 30-60 seconds), 2) The service is starting up (Render free tier), or 3) The service is overloaded. Please wait 30-60 seconds and try again. Subsequent requests will be much faster once models are downloaded.`,
-          }),
+          JSON.stringify({ error: "OCR service is temporarily unavailable. Please try again in a moment." }),
           {
             status: 503,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -333,10 +295,7 @@ serve(async (req) => {
       }
       
       return new Response(
-        JSON.stringify({
-          error: "OCR service error",
-          details: `OCR service returned error ${ocrResponse.status}: ${responseText.substring(0, 300)}`,
-        }),
+        JSON.stringify({ error: "OCR service error. Please try again." }),
         {
           status: ocrResponse.status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -348,11 +307,7 @@ serve(async (req) => {
     if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
       console.error("OCR service returned HTML instead of JSON (likely error page)");
       return new Response(
-        JSON.stringify({
-          error: "OCR service returned error page",
-          details: "The OCR service appears to be down or not properly deployed. It returned an HTML error page instead of JSON. Please check that the service is deployed and running.",
-          help: "Verify your OCR service is running by visiting the /health endpoint in your browser.",
-        }),
+        JSON.stringify({ error: "OCR service is temporarily unavailable. Please try again later." }),
         {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -373,11 +328,7 @@ serve(async (req) => {
       const isLikelyError = responseText.includes("error") || responseText.includes("Error") || responseText.includes("exception");
       
       return new Response(
-        JSON.stringify({
-          error: "Invalid OCR response format",
-          details: `OCR service returned invalid JSON. ${isLikelyError ? "Response appears to be an error message." : ""} Response preview: ${responseText.substring(0, 300)}. The service may not be properly deployed or may be experiencing issues.`,
-          help: "Check your OCR service logs and verify the service is running correctly.",
-        }),
+        JSON.stringify({ error: "OCR service returned an invalid response. Please try again." }),
         {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -548,7 +499,7 @@ serve(async (req) => {
         }
         console.error("Parsing function failed with status:", parseResponse.status);
         
-        // Fallback: return basic parsed data with error
+        // Fallback: return basic parsed data with generic error (log details server-side only)
         return new Response(
           JSON.stringify({
             name: "",
@@ -563,7 +514,7 @@ serve(async (req) => {
               company: 0,
               role: 0,
             },
-            error: `Parsing function failed with status ${parseResponse.status}: ${errorText.substring(0, 300)}. OCR text extracted: ${ocrResult.text.substring(0, 200)}`,
+            error: "Contact extraction failed. Please try again.",
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -595,10 +546,7 @@ serve(async (req) => {
     } catch (parseFunctionError) {
       console.error("Error calling parsing function:", parseFunctionError);
       return new Response(
-        JSON.stringify({
-          error: "Parsing function error",
-          details: `Failed to call parsing function: ${parseFunctionError instanceof Error ? parseFunctionError.message : String(parseFunctionError)}. OCR was successful, but contact extraction failed.`,
-        }),
+        JSON.stringify({ error: "Contact extraction failed. Please try again." }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -611,16 +559,8 @@ serve(async (req) => {
     console.error("Error message:", error instanceof Error ? error.message : String(error));
     console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
     
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorDetails = error instanceof Error && error.stack 
-      ? `${errorMessage}\n\nStack: ${error.stack.substring(0, 500)}`
-      : errorMessage;
-    
     return new Response(
-      JSON.stringify({
-        error: errorMessage,
-        details: `Failed to process business card with AI OCR. ${errorDetails}. Please check that OCR_SERVICE_URL is configured and the OCR service is running. Check Supabase edge function logs for more details.`,
-      }),
+      JSON.stringify({ error: "Failed to process business card. Please try again later." }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

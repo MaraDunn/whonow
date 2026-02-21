@@ -125,9 +125,15 @@ export const useAuth = () => {
       error = { message: e instanceof Error ? e.message : String(e) };
     }
 
-    // Treat "session not found" as success - user is already logged out server-side
-    if (error && error.message?.toLowerCase().includes("session not found")) {
-      return { error: null };
+    // Treat "session not found" or 403 as success - user is already logged out server-side
+    // (403 can occur when session was invalidated/deleted but client still had a JWT)
+    if (error) {
+      const msg = (error.message ?? "").toLowerCase();
+      const isAlreadyLoggedOut =
+        msg.includes("session not found") ||
+        msg.includes("forbidden") ||
+        (error as any).status === 403;
+      if (isAlreadyLoggedOut) return { error: null };
     }
 
     return { error };

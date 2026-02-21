@@ -68,7 +68,15 @@ async function sendResendEmail(params: {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = data?.message ?? data?.error ?? `Resend API ${res.status}`;
+    console.error("[help-email] Resend API error:", res.status, JSON.stringify(data));
+    const err =
+      typeof data?.message === "string"
+        ? data.message
+        : typeof data?.error === "string"
+          ? data.error
+          : data?.error?.message != null
+            ? String(data.error.message)
+            : `Resend API ${res.status}`;
     return { error: err };
   }
   return { id: data?.id };
@@ -138,11 +146,12 @@ serve(async (req) => {
       ? sanitizeString(String(payload.userEmail), 254)
       : userData.user.email ?? undefined;
 
-    const resendKey = Deno.env.get("RESEND_API_KEY");
+    const resendKeyRaw = Deno.env.get("RESEND_API_KEY");
+    const resendKey = typeof resendKeyRaw === "string" ? resendKeyRaw.trim() : "";
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") ?? "notifications@whonow.co";
 
     if (!resendKey) {
-      console.error("[help-email] RESEND_API_KEY is not set");
+      console.error("[help-email] RESEND_API_KEY is missing or empty");
       return jsonResponse(
         { error: "Email service is not configured. Please try again later." },
         503,
@@ -207,14 +216,24 @@ serve(async (req) => {
       `<p><em>From: ${userEmail ?? "unknown"}</em></p>`,
     ].join("\n");
 
-    const result = await sendResendEmail({
-      apiKey: resendKey,
-      from: fromEmail,
-      to: "support@whonow.co",
-      subject: `Support request from ${userEmail ?? "unknown"}`,
-      html,
-      replyTo: userEmail,
-    });
+    let result: { id?: string; error?: string };
+    try {
+      result = await sendResendEmail({
+        apiKey: resendKey,
+        from: fromEmail,
+        to: "support@whonow.co",
+        subject: `Support request from ${userEmail ?? "unknown"}`,
+        html,
+        replyTo: userEmail,
+      });
+    } catch (sendErr) {
+      console.error("[help-email] Resend send exception:", sendErr);
+      return jsonResponse(
+        { error: "Email service temporarily unavailable. Please try again later or email support@whonow.co directly." },
+        500,
+        origin
+      );
+    }
 
     if (result.error) {
       console.error("[help-email] Resend contact_support error:", result.error);
@@ -226,10 +245,11 @@ serve(async (req) => {
     return jsonResponse({ success: true }, 200, origin);
   } catch (err) {
     console.error("[help-email] Unhandled error:", err);
+    const safeOrigin = typeof origin === "string" || origin === null ? origin : null;
     return jsonResponse(
       { error: "An unexpected error occurred. Please try again later." },
       500,
-      origin
+      safeOrigin
     );
   }
 });

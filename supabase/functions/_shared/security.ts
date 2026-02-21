@@ -185,9 +185,10 @@ interface RateLimitState {
 }
 
 /**
- * Simple in-memory rate limiter
- * Note: This resets on function cold starts - for production,
- * consider using Redis or database-backed rate limiting
+ * Simple in-memory rate limiter.
+ * For production at scale, use a shared store (e.g. Redis, Upstash, or Supabase table)
+ * so limits persist across cold starts and multiple function instances. This in-memory
+ * implementation resets on cold starts and is not shared across instances.
  */
 const rateLimitStore = new Map<string, RateLimitState>();
 

@@ -12,6 +12,8 @@ import { devLog } from "@/lib/devLog";
 const CONTACTS_INITIAL_PAGE_SIZE = 24;
 /** Page size for "load more" (and used to detect has-next). */
 const CONTACTS_PAGE_SIZE = 50;
+/** Max trashed contacts loaded at once. For very large trash, consider cursor-based pagination. */
+const TRASH_PAGE_SIZE = 1000;
 const CONTACTS_STALE_TIME_MS = 120_000;
 
 type DbContact = {
@@ -307,7 +309,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
     enabled: !!user,
   });
 
-  // Fetch trashed contacts (for display - may be limited to 1000 for performance)
+  // Fetch trashed contacts (for display; count from trashCount is accurate)
   const { data: trashedContacts = [], isLoading: trashLoading } = useQuery({
     queryKey: ["contacts", "trash", user?.id],
     queryFn: async () => {
@@ -316,7 +318,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
         .select("*")
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
-        .limit(1000); // Limit for display, but we have accurate count from trashCount
+        .limit(TRASH_PAGE_SIZE);
 
       if (error) throw error;
       return (data as DbContact[]).map(mapDbToContact);
@@ -1078,75 +1080,3 @@ export const useContacts = (options?: UseContactsListOptions) => {
     contactMarkedVersion,
   };
 };
-
-/** Cursor for list_contacts_slim keyset pagination (export). */
-type ExportListCursor = { created_at: string; id: string } | null;
-
-/** Map a slim RPC row (snake_case) to Contact for export. */
-function mapSlimRowToContact(row: Record<string, unknown>): Contact {
-  return {
-    id: String(row.id ?? ""),
-    name: String(row.name ?? ""),
-    email: String(row.email ?? ""),
-    phone: String(row.phone ?? ""),
-    company: String(row.company ?? ""),
-    role: String(row.role ?? ""),
-    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
-    avatar: row.avatar != null ? String(row.avatar) : undefined,
-    folderId: row.folder_id != null ? String(row.folder_id) : undefined,
-    isShared: Boolean(row.is_shared),
-    ownerId: row.owner_id != null ? String(row.owner_id) : undefined,
-    lastContactedAt: row.last_contacted_at != null ? String(row.last_contacted_at) : undefined,
-    isClient: Boolean(row.is_client),
-    companyId: row.company_id != null ? String(row.company_id) : undefined,
-    createdAt: row.created_at != null ? String(row.created_at) : undefined,
-  };
-}
-
-export type FetchAllContactsForExportOptions = {
-  folderId?: string | null;
-  clientOnly?: boolean;
-  ownershipFilter?: ContactOwnershipFilter;
-};
-
-/**
- * Fetch all contacts for export (cursor loop over list_contacts_slim).
- * Use folderId: null for all contacts, or a folder id for folder-scoped export.
- */
-export async function fetchAllContactsForExport(
-  client: { rpc: (name: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }> },
-  userId: string,
-  options: FetchAllContactsForExportOptions = {}
-): Promise<Contact[]> {
-  const { folderId = null, clientOnly = false, ownershipFilter = "all" } = options;
-  const limit = CONTACTS_PAGE_SIZE;
-  const results: Contact[] = [];
-  let cursor: ExportListCursor = null;
-
-  for (;;) {
-    const { data, error } = await client.rpc("list_contacts_slim", {
-      _user_id: userId,
-      _cursor_created_at: cursor?.created_at ?? null,
-      _cursor_id: cursor?.id ?? null,
-      _limit: limit,
-      _folder_id: folderId ?? null,
-      _client_only: clientOnly,
-      _ownership_filter: ownershipFilter,
-    });
-
-    if (error) throw new Error(error.message ?? "Failed to fetch contacts");
-    const rows = (data ?? []) as Record<string, unknown>[];
-    for (const row of rows) {
-      const contact = mapSlimRowToContact(row);
-      if (!contact.tags?.includes("my-profile")) results.push(contact);
-    }
-    if (rows.length < limit) break;
-    const lastRow = rows[rows.length - 1];
-    const created_at = lastRow?.created_at != null ? String(lastRow.created_at) : null;
-    const id = lastRow?.id != null ? String(lastRow.id) : null;
-    if (created_at == null || id == null) break;
-    cursor = { created_at, id };
-  }
-
-  return results;
-}

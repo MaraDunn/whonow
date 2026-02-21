@@ -1,46 +1,81 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  checkLaunchMode,
+  waitlistModeBlockedResponse,
+  sanitizeString,
+  isValidEmail,
+  isValidPhone,
+} from "../_shared/security.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Max lengths for contact fields (sanitization and validation)
+const MAX_LEN = {
+  name: 500,
+  email: 254,
+  phone: 50,
+  company: 500,
+  role: 500,
+  description: 5000,
+  address: 500,
+  city: 200,
+  state: 200,
+  zip_code: 50,
+  country: 200,
+  business_name: 500,
+  business_type: 200,
+  avatar: 2000,
+  tag: 100,
+  tags_count: 50,
+} as const;
 
-// Inline launch mode check to avoid shared module import issues
-function checkLaunchMode(): { blocked: boolean; mode: string } {
-  const mode = Deno.env.get("APP_LAUNCH_MODE") || "live";
+/** Sanitize and validate a single contact for insert; invalid email/phone become null. */
+function sanitizeContactForInsert(contact: Record<string, unknown>, isShared: boolean, userId: string, companyId: string | null): Record<string, unknown> {
+  const rawEmail = contact.email != null ? String(contact.email).trim() : "";
+  const rawPhone = contact.phone != null ? String(contact.phone).trim() : "";
+  const email = rawEmail && isValidEmail(sanitizeString(rawEmail, MAX_LEN.email)) ? sanitizeString(rawEmail, MAX_LEN.email) : null;
+  const phone = rawPhone && isValidPhone(sanitizeString(rawPhone, MAX_LEN.phone)) ? sanitizeString(rawPhone, MAX_LEN.phone) : null;
+
+  const tagsRaw = Array.isArray(contact.tags) ? contact.tags : [];
+  const tags = tagsRaw
+    .slice(0, MAX_LEN.tags_count)
+    .map((t) => (typeof t === "string" ? sanitizeString(t, MAX_LEN.tag) : ""))
+    .filter(Boolean);
+
   return {
-    blocked: mode === "waitlist",
-    mode,
+    name: sanitizeString((contact.name as string) ?? "", MAX_LEN.name) || "",
+    email,
+    phone,
+    company: sanitizeString((contact.company as string) ?? "", MAX_LEN.company) || null,
+    role: sanitizeString((contact.role as string) ?? "", MAX_LEN.role) || null,
+    description: sanitizeString((contact.description as string) ?? "", MAX_LEN.description) || null,
+    tags,
+    avatar: sanitizeString((contact.avatar as string) ?? "", MAX_LEN.avatar) || null,
+    folder_id: contact.folderId ?? null,
+    owner_id: isShared ? null : userId,
+    company_id: companyId,
+    is_shared: isShared,
+    address: sanitizeString((contact.address as string) ?? "", MAX_LEN.address) || null,
+    city: sanitizeString((contact.city as string) ?? "", MAX_LEN.city) || null,
+    state: sanitizeString((contact.state as string) ?? "", MAX_LEN.state) || null,
+    zip_code: sanitizeString((contact.zipCode as string) ?? "", MAX_LEN.zip_code) || null,
+    country: sanitizeString((contact.country as string) ?? "", MAX_LEN.country) || null,
+    latitude: typeof contact.latitude === "number" && Number.isFinite(contact.latitude) ? contact.latitude : null,
+    longitude: typeof contact.longitude === "number" && Number.isFinite(contact.longitude) ? contact.longitude : null,
+    business_name: sanitizeString((contact.businessName as string) ?? "", MAX_LEN.business_name) || null,
+    business_type: sanitizeString((contact.businessType as string) ?? "", MAX_LEN.business_type) || null,
   };
 }
 
-function waitlistModeBlockedResponse(origin?: string | null): Response {
-  return new Response(
-    JSON.stringify({
-      error: "Service is in waitlist mode",
-      message: "This feature is not yet available. Please check back later.",
-    }),
-    {
-      status: 503,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-}
-
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
-  // Check launch mode - block in waitlist mode
   const { blocked } = checkLaunchMode();
   if (blocked) {
-    const origin = req.headers.get("origin");
     return waitlistModeBlockedResponse(origin);
   }
 
@@ -221,33 +256,10 @@ serve(async (req) => {
       };
     };
 
-    // Map contacts to database format
-    const contactsToInsert = contacts.map((contact: any) => {
-      // Use contact-level isShared if provided, otherwise use request-level isShared
-      const contactIsShared = contact.isShared !== undefined ? contact.isShared : isShared;
-      return {
-        name: contact.name || "",
-        email: contact.email || null,
-        phone: contact.phone || null,
-        company: contact.company || null,
-        role: contact.role || null,
-        description: contact.description || null,
-        tags: contact.tags || [],
-        avatar: contact.avatar || null,
-        folder_id: contact.folderId || null,
-        owner_id: contactIsShared ? null : user.id,
-        company_id: companyId,
-        is_shared: contactIsShared,
-        address: contact.address || null,
-        city: contact.city || null,
-        state: contact.state || null,
-        zip_code: contact.zipCode || null,
-        country: contact.country || null,
-        latitude: contact.latitude || null,
-        longitude: contact.longitude || null,
-        business_name: contact.businessName || null,
-        business_type: contact.businessType || null,
-      };
+    // Map and sanitize contacts to database format (validation + XSS prevention)
+    const contactsToInsert = contacts.map((contact: Record<string, unknown>) => {
+      const contactIsShared = contact.isShared !== undefined ? Boolean(contact.isShared) : isShared;
+      return sanitizeContactForInsert(contact, contactIsShared, user.id, companyId);
     });
 
     // Check for existing contacts to find duplicates
@@ -263,9 +275,9 @@ serve(async (req) => {
       .map(c => normalizePhone(c.phone))
       .filter(p => p.length > 0);
 
-    // Only check for duplicates if we have emails or phones to check
+    // Only check for duplicates if we have emails or phones to check.
+    // Scope: user's own contacts or same company only (no global is_shared to avoid large fetches).
     if (emailsToCheck.length > 0 || phonesToCheck.length > 0) {
-      // Build base query to get contacts user has access to that might be duplicates
       const accessConditions: string[] = [];
       if (user.id) {
         accessConditions.push(`owner_id.eq.${user.id}`);
@@ -273,7 +285,9 @@ serve(async (req) => {
       if (companyId) {
         accessConditions.push(`company_id.eq.${companyId}`);
       }
-      accessConditions.push(`is_shared.eq.true`);
+      if (accessConditions.length === 0) {
+        accessConditions.push(`owner_id.eq.${user.id}`);
+      }
 
       // Fetch in pages to avoid hitting 1000 row limit
       const pageSize = 1000;
@@ -389,11 +403,9 @@ serve(async (req) => {
     }
 
     if (insertedCount === 0 && mergedCount === 0 && errors.length > 0) {
+      console.error("[bulk-insert-contacts] All operations failed:", errors);
       return new Response(
-        JSON.stringify({ 
-          error: "Failed to insert or merge contacts",
-          details: errors 
-        }),
+        JSON.stringify({ error: "Failed to insert or merge contacts. Please try again or contact support." }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

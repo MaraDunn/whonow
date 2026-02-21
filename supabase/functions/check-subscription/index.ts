@@ -38,7 +38,7 @@ serve(async (req) => {
     logStep("Authenticating user");
     
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
+    if (userError) throw new Error("Authentication failed");
     const user = userData.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
     // Log only user ID, not email (PII)

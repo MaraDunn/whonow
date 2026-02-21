@@ -30,6 +30,7 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
           isActive={isActive}
           tooltip={tooltip}
           className="w-full"
+          data-onboarding-all-contacts
         >
           <Users className="h-4 w-4 shrink-0" />
         </SidebarMenuButton>
@@ -42,6 +43,7 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
         onClick={onClick}
         isActive={isActive}
         className="w-full min-w-0"
+        data-onboarding-all-contacts
       >
         <Users className="h-4 w-4 shrink-0" />
         <span className="flex-1 text-left min-w-0 truncate">All Contacts</span>

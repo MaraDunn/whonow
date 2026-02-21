@@ -1,11 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse } from "../_shared/security.ts";
+import {
+  checkLaunchMode,
+  waitlistModeBlockedResponse,
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  checkRateLimit,
+  rateLimitExceededResponse,
+} from "../_shared/security.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Rate limit: 20 parse requests per minute per user (expensive parsing)
+const RATE_LIMIT_REQUESTS = 20;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /**
  * Deterministic PDF/Document Contact Parser - NO AI/LLM
@@ -1694,14 +1700,14 @@ function progressiveFallbackParse(text: string): DocumentContact[] {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin);
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
 
   // Check launch mode - block in waitlist mode
   const { blocked } = checkLaunchMode();
   if (blocked) {
-    const origin = req.headers.get("origin");
     return waitlistModeBlockedResponse(origin);
   }
 
@@ -1740,6 +1746,11 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
+    }
+
+    const rateLimit = checkRateLimit(`parse-contact-pdf:${user.id}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_MS);
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit.resetIn, origin);
     }
 
     const body = await req.json();

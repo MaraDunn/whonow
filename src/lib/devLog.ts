@@ -7,15 +7,3 @@ export function devLog(...args: unknown[]): void {
     console.log(...args);
   }
 }
-
-export function devDebug(...args: unknown[]): void {
-  if (import.meta.env.DEV) {
-    console.debug(...args);
-  }
-}
-
-export function devInfo(...args: unknown[]): void {
-  if (import.meta.env.DEV) {
-    console.info(...args);
-  }
-}

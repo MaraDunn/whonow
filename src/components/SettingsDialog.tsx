@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSubscription } from "@/hooks/useSubscription";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
+import { validatePassword, validatePasswordMatch } from "@/lib/passwordValidation";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -141,12 +142,14 @@ export function SettingsDialog({
   };
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    const passwordCheck = validatePassword(newPassword);
+    if (!passwordCheck.valid) {
+      toast.error(passwordCheck.error);
       return;
     }
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match");
+    const matchCheck = validatePasswordMatch(newPassword, confirmPassword);
+    if (!matchCheck.valid) {
+      toast.error(matchCheck.error);
       return;
     }
 
@@ -761,12 +764,12 @@ export function SettingsDialog({
                           {canAccessFeature("organization_creation") ? (
                             <>
                               <Building2 className="h-4 w-4 mr-2" />
-                              Create Organization
+                              Create an Organization
                             </>
                           ) : (
                             <>
                               <Sparkles className="h-4 w-4 mr-2" />
-                              Upgrade to Create Organization
+                              Upgrade to Create an Organization
                             </>
                           )}
                         </Button>

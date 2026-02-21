@@ -110,7 +110,6 @@ All tables have RLS enabled with policies that ensure:
 | `stripe-webhook` | No | No | Signature verified |
 | `parse-search-query` | No | Yes | AI usage |
 | `scan-business-card` | No | Yes | AI + image |
-| `parse-contact-input` | No | Yes | AI usage |
 | `parse-contact-pdf` | No | Yes | AI + file |
 | `slack-integration` | Partial | No | OAuth callback public |
 | `teams-integration` | Partial | No | OAuth callback public |

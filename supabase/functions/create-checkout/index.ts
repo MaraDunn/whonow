@@ -65,8 +65,8 @@ serve(async (req) => {
     }
 
     // Redirect to canonical app (whonow.co) so Stripe always sends users to the deployed app
-    const origin = getStripeRedirectOrigin(req);
-    logStep("Redirect origin", { origin });
+    const redirectOrigin = getStripeRedirectOrigin(req);
+    logStep("Redirect origin", { redirectOrigin });
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -78,8 +78,8 @@ serve(async (req) => {
         },
       ],
       mode: "subscription",
-      success_url: `${origin}/app?subscription=success`,
-      cancel_url: `${origin}/?subscription=cancelled`,
+      success_url: `${redirectOrigin}/app?subscription=success`,
+      cancel_url: `${redirectOrigin}/?subscription=cancelled`,
       metadata: {
         user_id: user.id,
         tier: tier,

@@ -65,6 +65,7 @@ import { TIER_CONFIGS, SubscriptionTier } from "@/types/subscription";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Folder } from "@/types/folder";
+import { validatePassword, validatePasswordMatch } from "@/lib/passwordValidation";
 
 interface AccountManagementDialogProps {
   open: boolean;
@@ -349,22 +350,14 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
   };
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters");
+    const passwordCheck = validatePassword(newPassword);
+    if (!passwordCheck.valid) {
+      toast.error(passwordCheck.error);
       return;
     }
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    // Check password strength
-    const hasUppercase = /[A-Z]/.test(newPassword);
-    const hasLowercase = /[a-z]/.test(newPassword);
-    const hasNumber = /[0-9]/.test(newPassword);
-    const hasSpecial = /[^A-Za-z0-9]/.test(newPassword);
-    
-    if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
-      toast.error("Password must include uppercase, lowercase, number, and special character");
+    const matchCheck = validatePasswordMatch(newPassword, confirmPassword);
+    if (!matchCheck.valid) {
+      toast.error(matchCheck.error);
       return;
     }
 

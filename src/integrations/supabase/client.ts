@@ -98,17 +98,25 @@ export const supabase = (() => {
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const msg =
       "Supabase configuration is empty. Ensure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are non-empty at build time.";
-    console.error("[Supabase] Empty config:", {
-      urlPreview: safePreview(RAW_SUPABASE_URL, 32),
-      keyPreview: safePreview(RAW_SUPABASE_PUBLISHABLE_KEY, 12),
-      keyLength: (RAW_SUPABASE_PUBLISHABLE_KEY ?? "").length,
-    });
+    if (import.meta.env.DEV) {
+      console.error("[Supabase] Empty config:", {
+        urlPreview: safePreview(RAW_SUPABASE_URL, 32),
+        keyPreview: safePreview(RAW_SUPABASE_PUBLISHABLE_KEY, 12),
+        keyLength: (RAW_SUPABASE_PUBLISHABLE_KEY ?? "").length,
+      });
+    } else {
+      console.error("[Supabase] Empty config");
+    }
     return createSupabaseStub(msg);
   }
   if (!isValidHttpUrl(SUPABASE_URL)) {
     const msg =
       `Supabase URL is invalid: "${safePreview(RAW_SUPABASE_URL, 64)}". It must start with https://`;
-    console.error("[Supabase] Invalid URL:", { url: RAW_SUPABASE_URL });
+    if (import.meta.env.DEV) {
+      console.error("[Supabase] Invalid URL:", { url: RAW_SUPABASE_URL });
+    } else {
+      console.error("[Supabase] Invalid URL");
+    }
     return createSupabaseStub(msg);
   }
 
