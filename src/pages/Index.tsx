@@ -377,8 +377,17 @@ const IndexContent = () => {
 
   const handleSelectAll = async (selected: boolean) => {
     if (selected) {
-      // Fetch all contact IDs with pagination to avoid 1000 row limit
-      // This ensures we select all contacts that match the current filters
+      // Only run when we have a confirmed user so we never select orphan/other users' contacts
+      if (!user?.id) {
+        setSelectedContactIds(new Set());
+        return;
+      }
+      // Explicit visibility filter: same as RLS and list_contacts_slim — only own or shared company contacts
+      const hasCompany = profile?.companyId != null;
+      const visibilityFilter = hasCompany
+        ? `owner_id.eq.${user.id},and(company_id.eq.${profile!.companyId},is_shared.eq.true)`
+        : null;
+
       try {
         const allIds: string[] = [];
         const pageSize = 1000;
@@ -387,12 +396,15 @@ const IndexContent = () => {
 
         // Handle trash view differently
         if (showTrash) {
-          // For trash, fetch all trashed contacts
+          // For trash, fetch only trashed contacts visible to this user
           while (hasMore) {
             let query = supabase
               .from("contacts")
               .select("id")
-              .not("deleted_at", "is", null)
+              .not("deleted_at", "is", null);
+            if (visibilityFilter) query = query.or(visibilityFilter);
+            else query = query.eq("owner_id", user.id);
+            query = query
               .order("deleted_at", { ascending: false })
               .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -407,7 +419,7 @@ const IndexContent = () => {
             if (!data || data.length === 0) {
               hasMore = false;
             } else {
-              allIds.push(...data.map((c: any) => c.id));
+              allIds.push(...data.map((c: { id: string }) => c.id));
               hasMore = data.length === pageSize;
               page++;
             }
@@ -418,8 +430,10 @@ const IndexContent = () => {
             let query = supabase
               .from("contacts")
               .select("id, folder_id, is_shared, tags")
-              .is("deleted_at", null)
-              .range(page * pageSize, (page + 1) * pageSize - 1);
+              .is("deleted_at", null);
+            if (visibilityFilter) query = query.or(visibilityFilter);
+            else query = query.eq("owner_id", user.id);
+            query = query.range(page * pageSize, (page + 1) * pageSize - 1);
 
             // Apply folder filter if active
             if (selectedFolderId !== null) {
@@ -439,14 +453,14 @@ const IndexContent = () => {
             } else {
               // Filter out my-profile contacts and apply ownership filter
               const filtered = data
-                .filter((c: any) => !c.tags?.includes("my-profile"))
-                .filter((c: any) => {
+                .filter((c: { tags?: string[] }) => !c.tags?.includes("my-profile"))
+                .filter((c: { is_shared?: boolean }) => {
                   if (company && ownershipFilter !== "all") {
                     return ownershipFilter === "shared" ? c.is_shared : !c.is_shared;
                   }
                   return true;
                 })
-                .map((c: any) => c.id);
+                .map((c: { id: string }) => c.id);
 
               allIds.push(...filtered);
               hasMore = data.length === pageSize;
