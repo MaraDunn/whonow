@@ -3,7 +3,7 @@
   publish = "dist"
 
 [build.environment]
-  VITE_APP_LAUNCH_MODE = "waitlist"
+  VITE_APP_LAUNCH_MODE = "live"
   # Note: VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY should be set in Netlify UI
   # (Site settings → Environment variables) for security, but can be added here if needed
   # Landing page download buttons (replace tag/filenames with your actual GitHub release):
