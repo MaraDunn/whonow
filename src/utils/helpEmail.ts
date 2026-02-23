@@ -7,7 +7,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getRecentErrorLogs } from "@/utils/errorLogBuffer";
 
-export type HelpEmailType = "bug_report" | "contact_support";
+export type HelpEmailType = "bug_report" | "contact_support" | "contact_sales";
 
 export interface HelpEmailPayload {
   type: HelpEmailType;
@@ -16,6 +16,10 @@ export interface HelpEmailPayload {
   errorLogs?: string;
   attachmentBase64?: string;
   attachmentFilename?: string;
+  /** For contact_sales: sender name (required). */
+  name?: string;
+  /** For contact_sales: sender email (required). */
+  email?: string;
 }
 
 const MAX_BODY_LENGTH = 10000;
@@ -57,6 +61,9 @@ async function callHelpEmail(payload: HelpEmailPayload): Promise<{ success: bool
 
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
+    if (resp.status === 400) {
+      console.error("[help-email] 400 Bad Request:", data?.error ?? data);
+    }
     const msg =
       typeof data?.error === "string"
         ? data.error
@@ -125,4 +132,45 @@ export async function sendContactSupport(params: {
   };
 
   return callHelpEmail(payload);
+}
+
+export async function sendContactSales(params: {
+  name: string;
+  email: string;
+  body?: string;
+}): Promise<{ success: boolean; error?: string; useMailto?: boolean }> {
+  const session = await getValidSession();
+  const name = truncate(params.name.trim(), 200);
+  const email = truncate(params.email.trim(), 254);
+  if (!name) {
+    return { success: false, error: "Name is required" };
+  }
+  if (!email) {
+    return { success: false, error: "Email is required" };
+  }
+
+  if (!session?.access_token) {
+    return { success: false, useMailto: true };
+  }
+
+  const body = truncate((params.body ?? "").trim(), MAX_BODY_LENGTH);
+  const payload: HelpEmailPayload = {
+    type: "contact_sales",
+    body: body || "(No message provided)",
+    name,
+    email,
+  };
+
+  const result = await callHelpEmail(payload);
+  if (!result.success && result.error) {
+    const err = result.error.toLowerCase();
+    const is400 =
+      err.includes("invalid or missing type") ||
+      err.includes("request failed (400)") ||
+      err.includes("invalid json");
+    if (is400) {
+      return { success: false, useMailto: true };
+    }
+  }
+  return result;
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check, Star, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { TIER_CONFIGS, SubscriptionTier } from "@/types/subscription";
 import { cn } from "@/lib/utils";
+import { ContactSalesDialog } from "@/components/ContactSalesDialog";
 
 interface PricingSectionProps {
   onGetStarted: () => void;
@@ -14,6 +16,7 @@ interface PricingSectionProps {
 export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
   const { user } = useAuth();
   const { tier: currentTier, createCheckout, isLoading } = useSubscription();
+  const [contactSalesOpen, setContactSalesOpen] = useState(false);
 
   const handleSelectPlan = async (tier: SubscriptionTier) => {
     if (tier === "starter") {
@@ -174,14 +177,12 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
 
             <CardFooter className="pt-4">
               <Button
-                asChild
                 variant="outline"
                 className="w-full"
                 disabled={isLoading}
+                onClick={() => setContactSalesOpen(true)}
               >
-                <a href="mailto:sales@whonow.co?subject=WhoNow%20Enterprise%20Inquiry">
-                  Contact Sales
-                </a>
+                Contact Sales
               </Button>
             </CardFooter>
           </Card>
@@ -189,11 +190,16 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
 
         <p className="text-center text-sm text-muted-foreground mt-8">
           All prices in USD. Cancel anytime. Need custom pricing?{" "}
-          <a href="mailto:sales@whonow.co" className="text-primary hover:underline">
+          <button
+            type="button"
+            onClick={() => setContactSalesOpen(true)}
+            className="text-primary hover:underline"
+          >
             Contact us
-          </a>
+          </button>
         </p>
       </div>
+      <ContactSalesDialog open={contactSalesOpen} onOpenChange={setContactSalesOpen} />
     </section>
   );
 };

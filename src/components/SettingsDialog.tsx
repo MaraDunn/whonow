@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Download, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 import { BrandingSettings } from "@/components/BrandingSettings";
@@ -24,6 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSubscription } from "@/hooks/useSubscription";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
 import { validatePassword, validatePasswordMatch } from "@/lib/passwordValidation";
+import { fetchAllContactsForExport, contactsToCsv, downloadCsvFile } from "@/utils/exportContacts";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -97,6 +98,7 @@ export function SettingsDialog({
   const [selectedCategory, setSelectedCategory] = useState("general");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["general", "account", "organization"]));
   const [duplicateCleanupOpen, setDuplicateCleanupOpen] = useState(false);
+  const [isExportingContacts, setIsExportingContacts] = useState(false);
 
   const handleAddKeyword = () => {
     if (newKeyword.trim()) {
@@ -293,6 +295,27 @@ export function SettingsDialog({
     deleteCompany();
   };
 
+  const handleExportContacts = async () => {
+    if (!user?.id) return;
+    setIsExportingContacts(true);
+    try {
+      const contacts = await fetchAllContactsForExport(supabase, user.id);
+      if (contacts.length === 0) {
+        toast.info("No contacts to export");
+        return;
+      }
+      const csv = contactsToCsv(contacts);
+      const date = new Date().toISOString().slice(0, 10);
+      downloadCsvFile(csv, `whonow-contacts-${date}.csv`);
+      toast.success(`Exported ${contacts.length} contact${contacts.length !== 1 ? "s" : ""} to CSV`);
+    } catch (err) {
+      console.error("Export contacts error:", err);
+      toast.error("Failed to export contacts. Please try again.");
+    } finally {
+      setIsExportingContacts(false);
+    }
+  };
+
   const handleJoinCompany = () => {
     if (!inviteCode.trim()) {
       toast.error("Please enter an invite code");
@@ -354,6 +377,7 @@ export function SettingsDialog({
         items: [
           { id: "general", label: "Appearance", icon: Palette },
           { id: "keywords", label: "Keywords", icon: Tags },
+          { id: "export", label: "Export & backup", icon: Download },
           { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
         ],
       },
@@ -675,6 +699,48 @@ export function SettingsDialog({
                   Click on a keyword to remove it.
                 </p>
               )}
+              </div>
+            )}
+
+            {/* Export & backup */}
+            {selectedCategory === "export" && (
+              <div className="space-y-6 p-4 sm:p-6 md:p-8">
+                <div>
+                  <h2 className="text-2xl font-semibold mb-2">Export & backup</h2>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Download a CSV of all your contacts to back them up. Keeping a local copy helps prevent data loss if there are ever issues with our systems.
+                  </p>
+                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Download className="h-4 w-4" />
+                      Back up contacts
+                    </CardTitle>
+                    <CardDescription>
+                      Export all your contacts to a CSV file. The file includes name, email, phone, company, role, tags, and other fields you can open in Excel or re-import later.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      onClick={handleExportContacts}
+                      disabled={isExportingContacts}
+                      variant="default"
+                    >
+                      {isExportingContacts ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Exporting…
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          Download contacts as CSV
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             )}
 

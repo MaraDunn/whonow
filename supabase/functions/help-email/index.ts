@@ -14,7 +14,7 @@ const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB
 const RATE_LIMIT_REQUESTS = 5;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
-type PayloadType = "bug_report" | "contact_support";
+type PayloadType = "bug_report" | "contact_support" | "contact_sales";
 
 interface HelpEmailPayload {
   type: PayloadType;
@@ -23,6 +23,8 @@ interface HelpEmailPayload {
   errorLogs?: string;
   attachmentBase64?: string;
   attachmentFilename?: string;
+  name?: string;
+  email?: string;
 }
 
 function jsonResponse(
@@ -128,17 +130,20 @@ serve(async (req) => {
     let payload: HelpEmailPayload;
     try {
       payload = (await req.json()) as HelpEmailPayload;
-    } catch {
+    } catch (e) {
+      console.error("[help-email] Invalid JSON body:", String(e));
       return jsonResponse({ error: "Invalid JSON body" }, 400, origin);
     }
 
     const { type, body: rawBody } = payload;
-    if (!type || (type !== "bug_report" && type !== "contact_support")) {
+    if (!type || (type !== "bug_report" && type !== "contact_support" && type !== "contact_sales")) {
+      console.error("[help-email] Invalid or missing type:", type);
       return jsonResponse({ error: "Invalid or missing type" }, 400, origin);
     }
 
     const body = sanitizeString(String(rawBody ?? ""), MAX_BODY_LENGTH);
-    if (!body) {
+    if (!body && type !== "contact_sales") {
+      console.error("[help-email] Body is required for type:", type);
       return jsonResponse({ error: "Body is required" }, 400, origin);
     }
 
@@ -209,11 +214,41 @@ serve(async (req) => {
       return jsonResponse({ success: true }, 200, origin);
     }
 
+    if (type === "contact_sales") {
+      const salesName = payload.name ? sanitizeString(String(payload.name), 200) : "";
+      const salesEmail = payload.email ? sanitizeString(String(payload.email), 254) : userEmail ?? "unknown";
+      const salesBody = body || "(No message provided)";
+      const salesHtml = [
+        "<p><strong>Name:</strong> " + (salesName || "—") + "</p>",
+        "<p><strong>Email:</strong> " + salesEmail + "</p>",
+        "<p><strong>Message:</strong></p>",
+        "<p>" + salesBody.replace(/\n/g, "<br>") + "</p>",
+      ].join("\n");
+
+      const salesResult = await sendResendEmail({
+        apiKey: resendKey,
+        from: fromEmail,
+        to: "sales@whonow.co",
+        subject: "Sales inquiry from " + (salesName || salesEmail),
+        html: salesHtml,
+        replyTo: salesEmail,
+      });
+
+      if (salesResult.error) {
+        console.error("[help-email] Resend contact_sales error:", salesResult.error);
+        const clientMsg = sanitizeForClient(salesResult.error)
+          ? "Failed to send message: " + sanitizeForClient(salesResult.error)
+          : "Failed to send message";
+        return jsonResponse({ error: clientMsg }, 500, origin);
+      }
+      return jsonResponse({ success: true }, 200, origin);
+    }
+
     // contact_support
     const html = [
       "<p><strong>Message:</strong></p>",
-      `<p>${body.replace(/\n/g, "<br>")}</p>`,
-      `<p><em>From: ${userEmail ?? "unknown"}</em></p>`,
+      "<p>" + body.replace(/\n/g, "<br>") + "</p>",
+      "<p><em>From: " + (userEmail ?? "unknown") + "</em></p>",
     ].join("\n");
 
     let result: { id?: string; error?: string };
@@ -222,7 +257,7 @@ serve(async (req) => {
         apiKey: resendKey,
         from: fromEmail,
         to: "support@whonow.co",
-        subject: `Support request from ${userEmail ?? "unknown"}`,
+        subject: "Support request from " + (userEmail ?? "unknown"),
         html,
         replyTo: userEmail,
       });

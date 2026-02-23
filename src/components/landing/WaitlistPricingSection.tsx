@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { Check, Star } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TIER_CONFIGS, SubscriptionTier } from "@/types/subscription";
+import { ContactSalesDialog } from "@/components/ContactSalesDialog";
 
 export const WaitlistPricingSection = () => {
   const tiers: SubscriptionTier[] = ["starter", "pro", "team", "business"];
+  const [contactSalesOpen, setContactSalesOpen] = useState(false);
 
   return (
     <section id="pricing" className="py-24 sm:py-32 bg-background">
@@ -111,11 +114,16 @@ export const WaitlistPricingSection = () => {
 
         <p className="text-center text-sm text-muted-foreground mt-8">
           All prices in USD. Cancel anytime. Need custom pricing?{" "}
-          <a href="mailto:sales@whonow.co" className="text-primary hover:underline">
+          <button
+            type="button"
+            onClick={() => setContactSalesOpen(true)}
+            className="text-primary hover:underline"
+          >
             Contact us
-          </a>
+          </button>
         </p>
       </div>
+      <ContactSalesDialog open={contactSalesOpen} onOpenChange={setContactSalesOpen} />
     </section>
   );
 };

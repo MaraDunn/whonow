@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { LockedFeatureButton } from "@/components/LockedFeatureButton";
+import { LockedFeatureContainer } from "@/components/LockedFeatureButton";
 import { cn } from "@/lib/utils";
 import { Folder } from "@/types/folder";
 import { useState } from "react";
@@ -261,86 +261,89 @@ export function SelectionToolbar({
               </PopoverContent>
             </Popover>
           )}
-          {!isTrashView && onBulkMarkContacted && (
+          {!isTrashView && (onBulkMarkContacted || onBulkToggleClient) && (
             hasClientAccess ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const ids = Array.from(selectedContactIds);
-                      onBulkMarkContacted(ids);
-                    }}
-                    disabled={selectedCount === 0}
-                    className="shrink-0 h-8 px-2"
-                  >
-                    <Clock className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Mark as contacted</p>
-                </TooltipContent>
-              </Tooltip>
+              <>
+                {onBulkMarkContacted && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const ids = Array.from(selectedContactIds);
+                          onBulkMarkContacted(ids);
+                        }}
+                        disabled={selectedCount === 0}
+                        className="shrink-0 h-8 px-2"
+                      >
+                        <Clock className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Mark as contacted</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {onBulkToggleClient && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const ids = Array.from(selectedContactIds);
+                          onBulkToggleClient(ids, true);
+                        }}
+                        disabled={selectedCount === 0}
+                        className="shrink-0 h-8 px-2"
+                      >
+                        <Star className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Mark as client</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </>
             ) : (
-              <LockedFeatureButton feature="client_management" minimumTier="pro" className="shrink-0">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={selectedCount === 0}
-                      className="shrink-0 h-8 px-2 opacity-70"
-                    >
-                      <Clock className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Mark as contacted</p>
-                  </TooltipContent>
-                </Tooltip>
-              </LockedFeatureButton>
-            )
-          )}
-          {!isTrashView && onBulkToggleClient && (
-            hasClientAccess ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const ids = Array.from(selectedContactIds);
-                      onBulkToggleClient(ids, true);
-                    }}
-                    disabled={selectedCount === 0}
-                    className="shrink-0 h-8 px-2"
-                  >
-                    <Star className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Mark as client</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <LockedFeatureButton feature="client_management" minimumTier="pro" className="shrink-0">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={selectedCount === 0}
-                      className="shrink-0 h-8 px-2 opacity-70"
-                    >
-                      <Star className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Mark as client</p>
-                  </TooltipContent>
-                </Tooltip>
-              </LockedFeatureButton>
+              <LockedFeatureContainer feature="client_management" minimumTier="pro">
+                {onBulkMarkContacted && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={selectedCount === 0}
+                        className="shrink-0 h-8 px-2 opacity-70"
+                      >
+                        <Clock className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Mark as contacted (Pro)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {onBulkToggleClient && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={selectedCount === 0}
+                        className="shrink-0 h-8 px-2 opacity-70"
+                      >
+                        <Star className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Mark as client (Pro)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </LockedFeatureContainer>
             )
           )}
         </div>
