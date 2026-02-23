@@ -2,6 +2,14 @@ import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { devLog } from "@/lib/devLog";
 
+/** Get current session and optionally refresh so we have a valid token for Edge Function calls. */
+async function getValidSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return null;
+  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+  return refreshed ?? session;
+}
+
 interface ScannedContact {
   name: string;
   email: string;
@@ -114,49 +122,53 @@ export function useBusinessCardScannerAI() {
       
       devLog("Image data length:", imageBase64.length);
       devLog("Image preview:", imageBase64.substring(0, 50) + "...");
-      
-      // Call the new AI-powered edge function
-      const { data, error: functionError } = await supabase.functions.invoke(
-        "scan-business-card-ai",
-        {
-          body: { image: imageBase64 },
-        }
-      );
 
-      if (functionError) {
-        console.error("Edge function error:", functionError);
-        
-        // Try to extract detailed error message from response
-        let errorMessage = functionError.message || "Failed to process business card";
-        if (functionError.context && functionError.context.body) {
-          try {
-            const errorBody = typeof functionError.context.body === 'string' 
-              ? JSON.parse(functionError.context.body)
-              : functionError.context.body;
-            if (errorBody.error) {
-              errorMessage = errorBody.error;
-              if (errorBody.details) {
-                errorMessage += `: ${errorBody.details}`;
-              }
-            }
-          } catch (e) {
-            // Ignore parse errors, use default message
-          }
+      // Use raw fetch with explicit auth headers so Authorization is sent reliably
+      // (supabase.functions.invoke can omit or fail to send the JWT in some environments)
+      const session = await getValidSession();
+      if (!session?.access_token) {
+        throw new Error("Please sign in to scan business cards.");
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl || !anonKey) {
+        throw new Error("App configuration error. Please refresh the page.");
+      }
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/scan-business-card-ai`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ image: imageBase64 }),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        if (resp.status === 401) {
+          throw new Error("Session expired. Please sign in again to scan business cards.");
         }
-        
+        const errorMessage =
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.details === "string"
+              ? `${data?.error ?? "Scan failed"}: ${data.details}`
+              : "Failed to process business card";
         throw new Error(errorMessage);
       }
 
-      if (!data) {
+      // Response OK: body may be contact data or an error payload
+      if (data?.error && !data?.name) {
+        throw new Error(
+          typeof data.details === "string" ? `${data.error}: ${data.details}` : (data.error ?? "Scan failed")
+        );
+      }
+      if (!data || typeof data !== "object") {
         throw new Error("No data returned from OCR service");
-      }
-
-      // Check if data contains an error field (edge function returned error as data)
-      if (data.error) {
-        const errorMessage = data.details 
-          ? `${data.error}: ${data.details}`
-          : data.error;
-        throw new Error(errorMessage);
       }
 
       devLog("=== AI OCR Complete ===");

@@ -13,8 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useSubscription } from "@/hooks/useSubscription";
-import { Badge } from "@/components/ui/badge";
-
 interface CompanySetupDialogProps {
   open: boolean;
   onCreateCompany: (name: string) => void;
@@ -62,7 +60,7 @@ export function CompanySetupDialog({
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="text-xl">Welcome! Let's get you set up</DialogTitle>
           <DialogDescription>
@@ -84,20 +82,10 @@ export function CompanySetupDialog({
 
           <TabsContent value="create" className="space-y-4 mt-4">
             {!canCreateOrganization && (
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <Lock className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <h4 className="font-medium text-amber-900 dark:text-amber-100 mb-1">
-                      Organization Creation Requires Team or Business Tier
-                    </h4>
-                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
-                      You're currently on the <Badge variant="outline" className="mx-1">{tier}</Badge> tier. 
-                      Upgrade to Team or Business tier to create an organization and collaborate with your team.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <p className="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                <Lock className="h-4 w-4 flex-shrink-0" />
+                Team or Business tier required to create an organization. Upgrade to unlock.
+              </p>
             )}
             <div className="space-y-2">
               <Label htmlFor="company-name">Company Name</Label>

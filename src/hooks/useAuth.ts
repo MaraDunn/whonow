@@ -94,11 +94,17 @@ export const useAuth = () => {
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      return { error };
+      if (error) return { error };
+      // Enforce email verification: if Supabase has "Confirm email" off, it still issues a session
+      if (data.user && !data.user.email_confirmed_at) {
+        await supabase.auth.signOut({ scope: "local" });
+        return { error: { message: "Email not confirmed" } as any };
+      }
+      return { error: null };
     } catch (e) {
       const message =
         e instanceof Error ? e.message : "Sign in failed due to an unexpected error.";

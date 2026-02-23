@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, ChevronDown, UserCircle, Briefcase, Menu, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -116,8 +116,17 @@ export function FolderSidebar({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
   const [activeDirectoryType, setActiveDirectoryType] = useState<DirectoryType>("contacts");
-  const { state, toggleSidebar } = useSidebar();
+  const { state, toggleSidebar, setOpenMobile, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
+
+  // On mobile, close the sidebar (Sheet) after navigation so the user sees the selected content immediately.
+  const withCloseMobile = useCallback(
+    (fn: () => void) => () => {
+      fn();
+      if (isMobile) setOpenMobile(false);
+    },
+    [isMobile, setOpenMobile]
+  );
   const { canAccessFeature } = useSubscription();
   const branding = useBranding();
   
@@ -333,10 +342,10 @@ export function FolderSidebar({
                       ? selectedFolderId === null && !showTrash && !showDirectory && !showClientDirectory && ownershipFilter === "all"
                       : selectedFolderId === null && ownershipFilter === "all" && !showClientDirectory && !showDirectory}
                     totalContacts={totalContacts}
-                    onClick={() => {
+                    onClick={withCloseMobile(() => {
                       onSelectFolder(null);
                       onOwnershipFilterChange?.("all");
-                    }}
+                    })}
                     showTrash={showTrash}
                     collapsed={isCollapsed}
                     tooltip={isCollapsed ? `All Contacts (${totalContacts})` : undefined}
@@ -348,10 +357,10 @@ export function FolderSidebar({
                   <>
                     <SidebarMenuItem>
                       <SidebarMenuButton
-                        onClick={() => {
+                        onClick={withCloseMobile(() => {
                           onSelectFolder(null);
                           onOwnershipFilterChange?.("personal");
-                        }}
+                        })}
                         isActive={ownershipFilter === "personal" && !showTrash && !showDirectory && !showClientDirectory}
                         className="w-full pl-6 min-w-0"
                       >
@@ -362,10 +371,10 @@ export function FolderSidebar({
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                       <SidebarMenuButton
-                        onClick={() => {
+                        onClick={withCloseMobile(() => {
                           onSelectFolder(null);
                           onOwnershipFilterChange?.("shared");
-                        }}
+                        })}
                         isActive={ownershipFilter === "shared" && !showTrash && !showDirectory && !showClientDirectory}
                         className="w-full pl-6 min-w-0"
                       >
@@ -382,10 +391,10 @@ export function FolderSidebar({
                   <>
                     <SidebarMenuItem>
                       <SidebarMenuButton
-                        onClick={() => {
+                        onClick={withCloseMobile(() => {
                           onSelectFolder(null);
                           onOwnershipFilterChange?.("personal");
-                        }}
+                        })}
                         isActive={ownershipFilter === "personal" && !showTrash && !showDirectory && !showClientDirectory}
                         tooltip={`Personal (${personalContactsCount})`}
                         className="w-full"
@@ -395,10 +404,10 @@ export function FolderSidebar({
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                       <SidebarMenuButton
-                        onClick={() => {
+                        onClick={withCloseMobile(() => {
                           onSelectFolder(null);
                           onOwnershipFilterChange?.("shared");
-                        }}
+                        })}
                         isActive={ownershipFilter === "shared" && !showTrash && !showDirectory && !showClientDirectory}
                         tooltip={`Shared (${sharedContactsCount})`}
                         className="w-full"
@@ -416,7 +425,7 @@ export function FolderSidebar({
                       folder={folder}
                       isSelected={selectedFolderId === folder.id}
                       contactCount={contactCountByFolder[folder.id] || 0}
-                      onClick={() => onSelectFolder(folder.id)}
+                      onClick={withCloseMobile(() => onSelectFolder(folder.id))}
                       collapsed={isCollapsed}
                       tooltip={isCollapsed ? folder.name : undefined}
                     />
@@ -466,7 +475,7 @@ export function FolderSidebar({
                           folder={folder}
                           isSelected={selectedFolderId === folder.id}
                           contactCount={contactCountByFolder[folder.id] || 0}
-                          onClick={() => onSelectFolder(folder.id)}
+                          onClick={withCloseMobile(() => onSelectFolder(folder.id))}
                           collapsed={isCollapsed}
                           tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
                         />
@@ -555,10 +564,10 @@ export function FolderSidebar({
                     <SidebarMenuItem>
                       {hasClientAccess ? (
                         <SidebarMenuButton
-                          onClick={() => {
+                          onClick={withCloseMobile(() => {
                             onSelectClientDirectory();
                             onSelectClientFolder?.(null);
-                          }}
+                          })}
                           isActive={showClientDirectory && selectedClientFolderId === null}
                           tooltip={isCollapsed ? `Client Directory (${clientDirectoryCount})` : undefined}
                           className="w-full min-w-0"
@@ -599,10 +608,10 @@ export function FolderSidebar({
                     {hasClientAccess && wasClientDirectoryExpanded && clientFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <SidebarMenuButton
-                          onClick={() => {
+                          onClick={withCloseMobile(() => {
                             onSelectClientDirectory();
                             onSelectClientFolder?.(folder.id);
-                          }}
+                          })}
                           isActive={showClientDirectory && selectedClientFolderId === folder.id}
                           tooltip={isCollapsed ? folder.name : undefined}
                           className={isCollapsed ? "w-full" : "w-full pl-6"}
@@ -658,10 +667,10 @@ export function FolderSidebar({
                         {organizationClientFolders.map((folder) => (
                           <SidebarMenuItem key={folder.id} className="group relative">
                             <SidebarMenuButton
-                              onClick={() => {
+                              onClick={withCloseMobile(() => {
                                 onSelectClientDirectory();
                                 onSelectClientFolder?.(folder.id);
-                              }}
+                              })}
                               isActive={showClientDirectory && selectedClientFolderId === folder.id}
                               tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
                               className={isCollapsed ? "w-full" : "w-full pl-6"}
@@ -759,10 +768,10 @@ export function FolderSidebar({
                   <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton
-                          onClick={() => {
+                          onClick={withCloseMobile(() => {
                             onSelectDirectory();
                             onSelectTeamFolder?.(null);
-                          }}
+                          })}
                           isActive={showDirectory && selectedTeamFolderId === null}
                           tooltip={isCollapsed ? `Team Directory (${companyMembers.length})` : undefined}
                           className="w-full min-w-0"
@@ -781,10 +790,10 @@ export function FolderSidebar({
                     {wasTeamDirectoryExpanded && teamFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <SidebarMenuButton
-                          onClick={() => {
+                          onClick={withCloseMobile(() => {
                             onSelectDirectory();
                             onSelectTeamFolder?.(folder.id);
-                          }}
+                          })}
                           isActive={showDirectory && selectedTeamFolderId === folder.id}
                           tooltip={isCollapsed ? folder.name : undefined}
                           className={isCollapsed ? "w-full" : "w-full pl-6"}
@@ -840,10 +849,10 @@ export function FolderSidebar({
                         {organizationTeamFolders.map((folder) => (
                           <SidebarMenuItem key={folder.id} className="group relative">
                             <SidebarMenuButton
-                              onClick={() => {
+                              onClick={withCloseMobile(() => {
                                 onSelectDirectory();
                                 onSelectTeamFolder?.(folder.id);
-                              }}
+                              })}
                               isActive={showDirectory && selectedTeamFolderId === folder.id}
                               tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
                               className={isCollapsed ? "w-full" : "w-full pl-6"}
@@ -899,7 +908,7 @@ export function FolderSidebar({
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    onClick={onSelectTrash}
+                    onClick={onSelectTrash ? withCloseMobile(onSelectTrash) : undefined}
                     isActive={showTrash}
                     tooltip={isCollapsed ? `Trash${trashCount > 0 ? ` (${trashCount})` : ""}` : undefined}
                     className="w-full min-w-0"

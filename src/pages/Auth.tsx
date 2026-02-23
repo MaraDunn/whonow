@@ -37,7 +37,7 @@ const Auth = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const redirectParam = getSafeRedirect(searchParams.get("redirect"));
-  const { user, loading, signIn, signUp } = useAuth();
+  const { user, loading, signIn, signUp, signOut } = useAuth();
   const hasShownVerifiedToast = useRef(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -99,9 +99,9 @@ const Auth = () => {
     }
   }, [loading, user, isReturningFromEmailLink, hash, search]);
 
-  // Redirect if already authenticated. In waitlist mode, send verified users to landing with ?verified=1 so they see success there.
+  // Redirect if already authenticated and email is verified. In waitlist mode, send verified users to landing with ?verified=1 so they see success there.
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && user.email_confirmed_at) {
       const fromCallback = isReturningFromEmailLink;
       if (IS_WAITLIST_MODE_EFFECTIVE && fromCallback) {
         navigate("/?verified=1", { replace: true });
@@ -200,11 +200,12 @@ const Auth = () => {
     }
   };
 
+  const verificationEmail = signUpEmailSent || (user && !user.email_confirmed_at ? user.email : null);
   const handleResendVerification = async () => {
-    if (!signUpEmailSent || resendCooldown > 0 || isResending) return;
+    if (!verificationEmail || resendCooldown > 0 || isResending) return;
     setIsResending(true);
     try {
-      const { error } = await supabase.auth.resend({ email: signUpEmailSent, type: "signup" });
+      const { error } = await supabase.auth.resend({ email: verificationEmail, type: "signup" });
       if (error) {
         toast.error(error.message || "Failed to resend verification email.");
       } else {
@@ -286,13 +287,13 @@ const Auth = () => {
               This app build is missing backend configuration and cannot sign in. Please reinstall from the latest release.
             </div>
           )}
-          {signUpEmailSent ? (
+          {(signUpEmailSent || (user && !user.email_confirmed_at)) ? (
             <div className="space-y-4">
               <div className="rounded-lg bg-muted/50 p-4 text-center">
                 <Mail className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
                 <p className="font-medium">Check your email</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  We sent a verification link to <strong>{signUpEmailSent}</strong>. Click the link to verify your account, then sign in.
+                  We sent a verification link to <strong>{signUpEmailSent || user?.email}</strong>. Click the link to verify your account{user && !user.email_confirmed_at ? "" : ", then sign in"}.
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   If you don&apos;t see it, check your spam folder or use &quot;Resend verification email&quot; below.
@@ -304,6 +305,9 @@ const Auth = () => {
                   variant="outline"
                   className="w-full"
                   onClick={() => {
+                    if (user && !user.email_confirmed_at) {
+                      signOut();
+                    }
                     setSignUpEmailSent(null);
                     setResendCooldown(0);
                   }}
