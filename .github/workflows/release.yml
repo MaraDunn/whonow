@@ -251,9 +251,16 @@ jobs:
           # them into the HFS+ volume inside the UDBZ — no intermediate APFS volume, no convert.
           echo "Signing install script..."
           codesign --force --sign "$IDENTITY" "$STAGE/Install WhoNow.command"
-          echo "Creating UDBZ DMG directly from staged folder (preserves staple as POSIX xattr)..."
+          # Use -fs APFS so the UDBZ contains an APFS volume (not HFS+).
+          # On macOS 26, Gatekeeper with Chrome quarantine 0181 requires the notarization ticket
+          # to live on an APFS filesystem — HFS+ xattrs are present but not trusted by Gatekeeper
+          # (xcrun stapler validate exits 0 on HFS+ but opening still fails).
+          # With APFS inside UDBZ: (a) staple is stored as an APFS xattr, (b) Gatekeeper trusts it,
+          # (c) Finder drag from APFS DMG volume to APFS /Applications is a same-type copy that
+          # preserves xattrs, so the ticket survives into /Applications too.
+          echo "Creating UDBZ DMG with APFS volume directly from staged folder..."
           rm -f "$DMG_NAME"
-          hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDBZ -o "$DMG_NAME"
+          hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDBZ -fs APFS -o "$DMG_NAME"
           rm -rf "$STAGE"
           echo "Verifying LOCAL staple ticket is present inside UDBZ DMG (no network — exit 65 means broken)..."
           hdiutil attach "$DMG_NAME" -readonly -nobrowse
