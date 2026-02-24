@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { devLog } from "@/lib/devLog";
 
+import { useAuth } from "@/hooks/useAuth";
 import { useGoogleContacts } from "@/hooks/useGoogleContacts";
 import { useFileContacts } from "@/hooks/useFileContacts";
 import { useBusinessCardScannerAI as useBusinessCardScanner } from "@/hooks/useBusinessCardScannerAI";
@@ -75,11 +76,17 @@ export function ImportContactsDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  
-  
+
+  const { signOut } = useAuth();
   const google = useGoogleContacts();
   const fileImport = useFileContacts();
   const scanner = useBusinessCardScanner();
+
+  const isSessionExpiredError = scanner.error?.includes("Session expired") ?? false;
+  const handleSignInAgain = async () => {
+    await signOut();
+    onOpenChange(false);
+  };
 
   // Update edited contact when scanned contact changes
   useEffect(() => {
@@ -331,7 +338,7 @@ export function ImportContactsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col overflow-x-hidden w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:w-full sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Import Contacts</DialogTitle>
           <DialogDescription>
@@ -340,18 +347,18 @@ export function ImportContactsDialog({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col min-h-0 overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3 shrink-0">
-            <TabsTrigger value="scan" className="flex items-center gap-2">
-              <Camera className="h-4 w-4" />
-              Scan
+          <TabsList className="grid w-full grid-cols-3 shrink-0 min-w-0">
+            <TabsTrigger value="scan" className="flex items-center justify-center gap-1.5 min-w-0 sm:gap-2">
+              <Camera className="h-4 w-4 shrink-0" />
+              <span className="truncate">Scan</span>
             </TabsTrigger>
-            <TabsTrigger value="file" className="flex items-center gap-2">
-              <FileUp className="h-4 w-4" />
-              File
+            <TabsTrigger value="file" className="flex items-center justify-center gap-1.5 min-w-0 sm:gap-2">
+              <FileUp className="h-4 w-4 shrink-0" />
+              <span className="truncate">File</span>
             </TabsTrigger>
-            <TabsTrigger value="google" className="flex items-center gap-2">
-              <Chrome className="h-4 w-4" />
-              Google
+            <TabsTrigger value="google" className="flex items-center justify-center gap-1.5 min-w-0 sm:gap-2">
+              <Chrome className="h-4 w-4 shrink-0" />
+              <span className="truncate">Google</span>
             </TabsTrigger>
           </TabsList>
 
@@ -398,19 +405,19 @@ export function ImportContactsDialog({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                    <div className="flex gap-3">
-                      <Button onClick={handleStartCamera} size="lg" className="gap-2">
-                        <Camera className="h-4 w-4" />
+                  <div className="flex flex-col items-center justify-center py-8 space-y-4 w-full min-w-0">
+                    <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm sm:max-w-none sm:w-auto px-1">
+                      <Button onClick={handleStartCamera} size="lg" className="gap-2 w-full sm:w-auto sm:flex-1 min-w-0">
+                        <Camera className="h-4 w-4 shrink-0" />
                         Use Camera
                       </Button>
                       <Button
                         onClick={() => scanFileInputRef.current?.click()}
                         variant="outline"
                         size="lg"
-                        className="gap-2"
+                        className="gap-2 w-full sm:w-auto sm:flex-1 min-w-0"
                       >
-                        <Upload className="h-4 w-4" />
+                        <Upload className="h-4 w-4 shrink-0" />
                         Upload Image
                       </Button>
                     </div>
@@ -428,9 +435,16 @@ export function ImportContactsDialog({
                   </div>
                 )}
                 {scanner.error && (
-                  <div className="flex items-center gap-2 text-destructive text-sm">
-                    <AlertCircle className="h-4 w-4" />
-                    {scanner.error}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-destructive text-sm">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {scanner.error}
+                    </div>
+                    {isSessionExpiredError && (
+                      <Button onClick={handleSignInAgain} size="sm" variant="default">
+                        Sign in again
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -613,9 +627,16 @@ export function ImportContactsDialog({
                     </div>
                   </div>
                   {scanner.error && (
-                    <div className="flex items-center gap-2 text-destructive text-sm">
-                      <AlertCircle className="h-4 w-4" />
-                      {scanner.error}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2 text-destructive text-sm">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        {scanner.error}
+                      </div>
+                      {isSessionExpiredError && (
+                        <Button onClick={handleSignInAgain} size="sm" variant="default">
+                          Sign in again
+                        </Button>
+                      )}
                     </div>
                   )}
                   </div>
@@ -643,14 +664,22 @@ export function ImportContactsDialog({
                     className="w-full h-40 object-cover"
                   />
                 </div>
-                <div className="flex items-center gap-2 text-destructive text-sm">
-                  <AlertCircle className="h-4 w-4" />
-                  {scanner.error}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-destructive text-sm">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    {scanner.error}
+                  </div>
+                  {isSessionExpiredError ? (
+                    <Button onClick={handleSignInAgain} className="w-full">
+                      Sign in again
+                    </Button>
+                  ) : (
+                    <Button onClick={handleScanReset} variant="outline" className="w-full gap-2">
+                      <RotateCcw className="h-4 w-4" />
+                      Try Again
+                    </Button>
+                  )}
                 </div>
-                <Button onClick={handleScanReset} variant="outline" className="w-full gap-2">
-                  <RotateCcw className="h-4 w-4" />
-                  Try Again
-                </Button>
               </div>
             ) : null}
           </TabsContent>
