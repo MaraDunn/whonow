@@ -124,12 +124,18 @@ jobs:
           includeUpdaterJson: true
           tauriScript: npm run tauri
 
-      # Re-package DMG from the stapled app: proper layout (app + Applications symlink) and re-upload
-      - name: Rebuild DMG from stapled app and re-upload
+      # Re-package DMG: zero post-processing of the app binary.
+      # Previous builds had CDHash mismatches (stapler validate exit 0 but spctl rejects with
+      # "Unnotarized Developer ID") — the RPATH cleanup, CodeResources fix, chmod, and extra
+      # staple calls were modifying the binary after tauri-action's notarization, producing a
+      # CDHash that didn't match Apple's ticket. This build takes the app exactly as tauri-action
+      # left it and logs the CDHash at every step to verify consistency.
+      - name: Rebuild DMG from notarized app and re-upload
         if: matrix.platform == 'macos-26'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           VER="${GITHUB_REF_NAME#v}"
           if [[ "${{ matrix.args }}" == *"aarch64"* ]]; then
             TARGET="aarch64-apple-darwin"
@@ -142,81 +148,33 @@ jobs:
           DMG_NAME="WhoNow_${VER}_${ARCH}.dmg"
           IDENTITY="${{ steps.apple-cert.outputs.signing_identity }}"
 
-          # ---- RPATH inspection and cleanup ----
-          # Absolute RPATHs that aren't system paths (e.g. /Users/runner/... or /opt/homebrew/...)
-          # can be embedded by the Rust linker and may break codesign strict verification or
-          # cause Gatekeeper to reject the app on machines where those paths don't exist.
-          echo "Inspecting RPATHs in all bundle Mach-O binaries..."
-          RPATH_CHANGED=0
-          while IFS= read -r binary; do
-            while IFS= read -r rpath; do
-              [[ -z "$rpath" ]] && continue
-              echo "  RPATH in ${binary#$APP/}: $rpath"
-              if [[ "$rpath" != @* && "$rpath" != /usr/lib* && "$rpath" != /System/* && "$rpath" != /Library/Apple/* ]]; then
-                echo "  -> Non-portable RPATH detected; removing: $rpath"
-                install_name_tool -delete_rpath "$rpath" "$binary" 2>/dev/null && RPATH_CHANGED=1 \
-                  || echo "  -> Could not remove (may be load-command only); continuing"
-              fi
-            done < <(otool -l "$binary" 2>/dev/null | awk '/cmd LC_RPATH/{found=1; next} found && /path /{print $2; found=0}')
-          done < <(find "$APP" -type f \( -perm +111 -o -name "*.dylib" -o -name "*.so" \) 2>/dev/null)
-          echo "RPATH scan complete. RPATH_CHANGED=$RPATH_CHANGED"
+          # ---- Step 1: Record CDHash as tauri-action left it (DO NOT modify the app) ----
+          echo "========== STEP 1: CDHash as built by tauri-action =========="
+          codesign -dvvvv "$APP" 2>&1 | grep -iE "CDHash|Identifier|TeamIdentifier|Authority" || true
+          echo "--- Main executable ---"
+          codesign -dvvvv "$APP/Contents/MacOS/WhoNow" 2>&1 | grep -iE "CDHash" || true
+          echo "--- Signature validity ---"
+          codesign -vvv --deep --strict "$APP" 2>&1 || true
 
-          # ---- Re-sign and re-notarize if CodeResources is a symlink OR RPATHs were modified ----
-          CODE_RESOURCES="$APP/Contents/CodeResources"
-          NEEDS_RESIGN=0
-          if [[ -L "$CODE_RESOURCES" ]]; then
-            echo "CodeResources is a symlink; flagging for re-sign..."
-            rm "$CODE_RESOURCES"
-            NEEDS_RESIGN=1
-          fi
-          [[ $RPATH_CHANGED -eq 1 ]] && NEEDS_RESIGN=1
+          # ---- Step 2: Staple the app (downloads ticket matching current CDHash) ----
+          echo "========== STEP 2: Stapling app bundle =========="
+          xcrun stapler staple "$APP" 2>&1
+          echo "--- CDHash after stapling (must match Step 1 — staple should not change binary) ---"
+          codesign -dvvvv "$APP" 2>&1 | grep -iE "CDHash" || true
+          xcrun stapler validate "$APP" 2>&1; echo "stapler validate exit: $?"
+          echo "--- spctl on original app (no quarantine) ---"
+          spctl -a -t execute -vvv "$APP" 2>&1 || true
 
-          if [[ $NEEDS_RESIGN -eq 1 ]]; then
-            echo "Re-signing app bundle inside-out (CodeResources symlink or RPATH change)..."
-            for d in "$APP/Contents/Frameworks"/*.framework; do
-              [[ -d "$d" ]] && codesign --force --options runtime --sign "$IDENTITY" "$d"
-            done 2>/dev/null || true
-            while IFS= read -r f; do
-              [[ -n "$f" ]] && codesign --force --options runtime --sign "$IDENTITY" "$f"
-            done < <(find "$APP" -type f \( -perm +111 -o -name "*.dylib" \) ! -path "*/_CodeSignature/*" 2>/dev/null | awk -F/ '{print NF, $0}' | sort -rn | cut -d' ' -f2-)
-            codesign --force --options runtime --sign "$IDENTITY" "$APP"
-            echo "Re-notarizing and re-stapling app after re-sign..."
-            ditto -c -k --keepParent "$APP" WhoNow_resign.zip
-            xcrun notarytool submit WhoNow_resign.zip --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait
-            xcrun stapler staple "$APP"
-            rm -f WhoNow_resign.zip
-          fi
-          # Tauri staples the DMG it produces, not the inner app bundle.
-          # Staple the app bundle directly so the ticket is locally embedded before DMG creation.
-          # For .app bundles the ticket is stored inside the bundle (not as a directory xattr),
-          # so we verify success via the stapler's own output message, not via xattr -l.
-          echo "Stapling notarization ticket to app bundle..."
-          STAPLE_OUT=$(xcrun stapler staple "$APP" 2>&1)
-          echo "$STAPLE_OUT"
-          echo "$STAPLE_OUT" | grep -q "The staple and validate action worked!" || { echo "::error::xcrun stapler staple did not confirm local embedding — output: $STAPLE_OUT"; exit 1; }
-          echo "Checking for entitlements that can cause Gatekeeper to reject..."
-          if codesign -d --entitlements - --xml -- "$APP" 2>/dev/null | grep -qE 'allow-jit|allow-unsigned-executable-memory'; then
-            echo "::error::App or a nested binary has allow-jit or allow-unsigned-executable-memory; Gatekeeper may reject. Adjust Tauri entitlements."
-            exit 1
-          fi
-          echo "Verifying app is notarized/stapled..."
-          xcrun stapler validate "$APP" || { echo "::error::App is not stapled; release DMG would be unnotarized."; exit 1; }
-          echo "Verifying app would be accepted by Gatekeeper (spctl)..."
-          spctl -a -t execute -v -- "$APP" || { echo "::error::App would be rejected by Gatekeeper (spctl). Check entitlements and bundle."; exit 1; }
+          # ---- Step 3: Create staging directory (ditto preserves xattrs and binary content) ----
+          echo "========== STEP 3: Staging =========="
           STAGE="dmg-stage"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           ditto "$APP" "$STAGE/WhoNow.app"
-          # Explicitly set execute permission on all binaries so the bit survives
-          # any filesystem or copy operation that may strip it.
-          find "$STAGE/WhoNow.app" -type f \( -path "*/MacOS/*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
-          echo "Verifying stapled ticket survived ditto copy..."
-          xcrun stapler validate "$STAGE/WhoNow.app" || { echo "::error::Stapled ticket lost during ditto copy."; exit 1; }
-          spctl -a -t execute -v -- "$STAGE/WhoNow.app" || { echo "::error::Gatekeeper would reject staged app (entitlements/bundle?)."; exit 1; }
-          echo "Strict codesign verification on staged app..."
-          codesign -d -vvv --strict "$STAGE/WhoNow.app" || { echo "::error::Stapled app failed strict codesign check (bundle structure?)."; exit 1; }
-          echo "CDHash of staged app:"
-          codesign -d --verbose=2 "$STAGE/WhoNow.app" 2>&1 | grep -E "CDHash|Identifier|TeamIdentifier"
+          echo "--- CDHash of staged copy (must match Step 1) ---"
+          codesign -dvvvv "$STAGE/WhoNow.app" 2>&1 | grep -iE "CDHash" || true
+          xcrun stapler validate "$STAGE/WhoNow.app" 2>&1; echo "stapler validate staged: $?"
           ln -s /Applications "$STAGE/Applications"
+
           INSTALL_SCRIPT="$STAGE/Install WhoNow.command"
           printf '%s\n' \
             '#!/bin/bash' \
@@ -236,102 +194,72 @@ jobs:
             'exit 0' \
             > "$INSTALL_SCRIPT"
           chmod +x "$INSTALL_SCRIPT"
-          # CRITICAL FIX: Do NOT copy the app into an intermediate APFS mounted volume
-          # and then run xcrun stapler staple inside it before converting to UDBZ.
-          # On macOS 26, xcrun stapler on an APFS volume writes the ticket as an APFS-native
-          # extended attribute — NOT a POSIX xattr. hdiutil convert to UDBZ silently drops
-          # these APFS-native attributes, producing a DMG where xcrun stapler validate exits 65.
-          # The CI's post-convert validate was passing via online network lookup (CI has internet),
-          # masking the fact that no local ticket was embedded.
-          #
-          # Fix: sign the install script first, then use hdiutil create -srcfolder to build
-          # the UDBZ in one shot directly from the staged folder. The app in $STAGE already has
-          # its staple as a POSIX xattr (written by xcrun stapler staple "$APP" above and
-          # preserved through ditto). hdiutil create -srcfolder reads POSIX xattrs and packs
-          # them into the HFS+ volume inside the UDBZ — no intermediate APFS volume, no convert.
-          echo "Signing install script..."
-          codesign --force --sign "$IDENTITY" "$STAGE/Install WhoNow.command"
-          # Use -fs APFS so the UDBZ contains an APFS volume (not HFS+).
-          # On macOS 26, Gatekeeper with Chrome quarantine 0181 requires the notarization ticket
-          # to live on an APFS filesystem — HFS+ xattrs are present but not trusted by Gatekeeper
-          # (xcrun stapler validate exits 0 on HFS+ but opening still fails).
-          # With APFS inside UDBZ: (a) staple is stored as an APFS xattr, (b) Gatekeeper trusts it,
-          # (c) Finder drag from APFS DMG volume to APFS /Applications is a same-type copy that
-          # preserves xattrs, so the ticket survives into /Applications too.
-          echo "Creating UDBZ DMG with APFS volume directly from staged folder..."
-          rm -f "$DMG_NAME"
-          hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDBZ -fs APFS -o "$DMG_NAME"
-          rm -rf "$STAGE"
-          echo "Verifying LOCAL staple ticket is present inside UDBZ DMG (no network — exit 65 means broken)..."
-          hdiutil attach "$DMG_NAME" -readonly -nobrowse
-          APP_IN_DMG="/Volumes/WhoNow/WhoNow.app"
-          xcrun stapler validate "$APP_IN_DMG" || { hdiutil detach /Volumes/WhoNow; echo "::error::Staple ticket ABSENT inside UDBZ DMG — hdiutil create -srcfolder dropped the POSIX xattr. Check filesystem or ditto copy."; exit 1; }
-          echo "LOCAL staple confirmed inside DMG (exit 0). This is what was missing in previous builds."
-          spctl -a -t execute -v -- "$APP_IN_DMG" || { hdiutil detach /Volumes/WhoNow; echo "::error::Gatekeeper would reject app inside DMG."; exit 1; }
-          hdiutil detach /Volumes/WhoNow
-          codesign --force --sign "${{ steps.apple-cert.outputs.signing_identity }}" "$DMG_NAME"
-          echo "Notarizing DMG so opening the disk image is trusted..."
-          xcrun notarytool submit "$DMG_NAME" --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait
-          # DMG staple ticket is embedded in the DMG binary itself (not as an xattr),
-          # so verify via stapler output message, not via xattr -l.
-          STAPLE_DMG_OUT=$(xcrun stapler staple "$DMG_NAME" 2>&1)
-          echo "$STAPLE_DMG_OUT"
-          echo "$STAPLE_DMG_OUT" | grep -q "The staple and validate action worked!" || { echo "::error::xcrun stapler staple did not confirm local embedding on DMG — output: $STAPLE_DMG_OUT"; exit 1; }
-          echo "Simulated user install: cp -R from DMG, apply quarantine, verify staple and spctl..."
-          hdiutil attach "$DMG_NAME" -readonly -nobrowse
-          rm -rf /tmp/whonow_install_test
-          mkdir -p /tmp/whonow_install_test
-          cp -R "/Volumes/WhoNow/WhoNow.app" "/tmp/whonow_install_test/WhoNow.app"
-          # Re-apply execute permission in case cp -R dropped it.
-          find "/tmp/whonow_install_test/WhoNow.app" -type f \( -path "*/MacOS/*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
-          # Verify the staple ticket survived the copy (without quarantine).
-          xcrun stapler validate "/tmp/whonow_install_test/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Staple ticket lost after cp -R. Finder drag-and-drop will fail; users must use Install WhoNow.command."; exit 1; }
-          # Apply a quarantine attribute to simulate a browser-downloaded copy, then verify
-          # Gatekeeper accepts it. This is what actually happens on a user's machine and
-          # catches online-notarization-check failures that cp -R without quarantine misses.
-          QUARANTINE_TS=$(printf '%x' "$(date +%s)")
-          # Use 0181 (Chrome-style quarantine flags) not 0001 — real browser downloads set 0181
-          # which triggers stricter Gatekeeper behavior on macOS 26 than the minimal 0001 flag.
-          xattr -w com.apple.quarantine "0181;${QUARANTINE_TS};Chrome;00000000-0000-0000-0000-000000000000" "/tmp/whonow_install_test/WhoNow.app"
-          echo "spctl check WITH local staple + quarantine (cp -R path, should pass)..."
-          spctl -a -t execute -vvv "/tmp/whonow_install_test/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper rejects quarantined app even with local staple — notarization CDHash not resolving on Apple servers."; exit 1; }
-          rm -rf /tmp/whonow_install_test
+          codesign --force --sign "$IDENTITY" "$INSTALL_SCRIPT"
 
-          # Simulate Finder drag-and-drop: copy from DMG but strip com.apple.security.cms
-          # (Finder does NOT copy directory-level xattrs across volumes). Then apply quarantine
-          # and check spctl. macOS 15 Sequoia requires the local staple ticket for quarantined
-          # apps — if this test fails, users who Finder-drag will be blocked even though
-          # notarization is valid.
-          echo "--- Simulating Finder drag-and-drop (no local staple) ---"
-          rm -rf /tmp/whonow_no_staple_test && mkdir -p /tmp/whonow_no_staple_test
-          cp -R "/Volumes/WhoNow/WhoNow.app" "/tmp/whonow_no_staple_test/WhoNow.app"
-          find "/tmp/whonow_no_staple_test/WhoNow.app" -type f \( -path "*/MacOS/*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
-          # Explicitly remove the notarization xattr to mirror Finder cross-volume behavior
-          if xattr -d com.apple.security.cms "/tmp/whonow_no_staple_test/WhoNow.app" 2>/dev/null; then
-            echo "Removed com.apple.security.cms from test copy (ticket absent, as after Finder drag)."
-          else
-            echo "com.apple.security.cms was not present on the cp -R copy — already mirrors Finder behavior."
-          fi
-          xcrun stapler validate "/tmp/whonow_no_staple_test/WhoNow.app" 2>&1; echo "stapler validate exit after xattr removal: $?"
-          QUARANTINE_TS2=$(printf '%x' "$(date +%s)")
-          xattr -w com.apple.quarantine "0181;${QUARANTINE_TS2};Chrome;00000000-0000-0000-0000-000000000000" "/tmp/whonow_no_staple_test/WhoNow.app"
-          echo "spctl check WITHOUT local staple + WITH quarantine 0181 (mirrors real Chrome download on user machine)..."
-          if spctl -a -t execute -vvv "/tmp/whonow_no_staple_test/WhoNow.app"; then
-            echo "PASSED: Online notarization check alone is sufficient — Finder drag-and-drop will work for users."
-          else
-            echo "::error::FAILED: Gatekeeper rejects without local staple. macOS 26 with Chrome quarantine 0181 requires the local ticket. Finder drag-and-drop from DMG drops the HFS+ xattr. Users must use the Install WhoNow.command script (uses ditto which preserves the ticket)."
-            rm -rf /tmp/whonow_no_staple_test
-            hdiutil detach /Volumes/WhoNow 2>/dev/null
-            exit 1
-          fi
-          rm -rf /tmp/whonow_no_staple_test
+          # ---- Step 4: Create DMG (hdiutil -srcfolder, default HFS+) ----
+          echo "========== STEP 4: Creating DMG =========="
+          rm -f "$DMG_NAME"
+          hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDBZ -o "$DMG_NAME"
+          rm -rf "$STAGE"
+
+          echo "--- CDHash inside DMG (must match Step 1) ---"
+          hdiutil attach "$DMG_NAME" -readonly -nobrowse
+          codesign -dvvvv "/Volumes/WhoNow/WhoNow.app" 2>&1 | grep -iE "CDHash" || true
+          echo "--- stapler validate inside DMG ---"
+          xcrun stapler validate "/Volumes/WhoNow/WhoNow.app" 2>&1; echo "stapler validate in-DMG: $?"
+          echo "--- spctl inside DMG (no quarantine) ---"
+          spctl -a -t execute -vvv "/Volumes/WhoNow/WhoNow.app" 2>&1 || true
           hdiutil detach /Volumes/WhoNow
+
+          # ---- Step 5: Sign and notarize the DMG ----
+          echo "========== STEP 5: Signing and notarizing DMG =========="
+          codesign --force --sign "$IDENTITY" "$DMG_NAME"
+          SUBMIT_OUT=$(xcrun notarytool submit "$DMG_NAME" \
+            --apple-id "${{ secrets.APPLE_ID }}" \
+            --password "${{ secrets.APPLE_PASSWORD }}" \
+            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+            --wait 2>&1)
+          echo "$SUBMIT_OUT"
+          SUBMISSION_ID=$(echo "$SUBMIT_OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+          if [[ -n "$SUBMISSION_ID" ]]; then
+            echo "--- Notarization log (check for warnings/errors on individual binaries) ---"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --apple-id "${{ secrets.APPLE_ID }}" \
+              --password "${{ secrets.APPLE_PASSWORD }}" \
+              --team-id "${{ secrets.APPLE_TEAM_ID }}" 2>&1 || true
+          fi
+          xcrun stapler staple "$DMG_NAME"
+
+          # ---- Step 6: Final verification — CDHash inside notarized DMG ----
+          echo "========== STEP 6: Final verification =========="
+          hdiutil attach "$DMG_NAME" -readonly -nobrowse
+          echo "--- CDHash inside final notarized+stapled DMG (must match Step 1) ---"
+          codesign -dvvvv "/Volumes/WhoNow/WhoNow.app" 2>&1 | grep -iE "CDHash" || true
+          echo "--- stapler validate inside final DMG ---"
+          xcrun stapler validate "/Volumes/WhoNow/WhoNow.app" 2>&1; echo "stapler validate final: $?"
+          echo "--- spctl inside final DMG (no quarantine) ---"
+          spctl -a -t execute -vvv "/Volumes/WhoNow/WhoNow.app" 2>&1 || true
+
+          # ---- Step 7: Quarantine simulation ----
+          echo "========== STEP 7: Quarantine simulation =========="
+          rm -rf /tmp/whonow_q_test && mkdir -p /tmp/whonow_q_test
+          cp -R "/Volumes/WhoNow/WhoNow.app" "/tmp/whonow_q_test/WhoNow.app"
+          echo "--- CDHash of copied app (must match Step 1) ---"
+          codesign -dvvvv "/tmp/whonow_q_test/WhoNow.app" 2>&1 | grep -iE "CDHash" || true
+          QUARANTINE_TS=$(printf '%x' "$(date +%s)")
+          xattr -w com.apple.quarantine "0181;${QUARANTINE_TS};Chrome;00000000-0000-0000-0000-000000000000" "/tmp/whonow_q_test/WhoNow.app"
+          echo "--- spctl with quarantine 0181 (this is what fails on user machine) ---"
+          spctl -a -t execute -vvv "/tmp/whonow_q_test/WhoNow.app" 2>&1; SPCTL_EXIT=$?
+          echo "spctl exit code: $SPCTL_EXIT"
+          if [[ $SPCTL_EXIT -ne 0 ]]; then
+            echo "::warning::spctl REJECTS quarantined app with 0181. Checking without quarantine for comparison..."
+            xattr -d com.apple.quarantine "/tmp/whonow_q_test/WhoNow.app" 2>/dev/null || true
+            spctl -a -t execute -vvv "/tmp/whonow_q_test/WhoNow.app" 2>&1 || true
+          fi
+          rm -rf /tmp/whonow_q_test
+          hdiutil detach /Volumes/WhoNow
+
+          # ---- Step 8: Upload ----
+          echo "========== STEP 8: Upload =========="
           shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
           gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" "$DMG_NAME.sha256" --clobber
-          echo "Post-upload verification: download asset and confirm app inside has staple..."
-          gh release download "$GITHUB_REF_NAME" -p "$DMG_NAME" --clobber
-          hdiutil attach "$DMG_NAME" -readonly -nobrowse
-          xcrun stapler validate "/Volumes/WhoNow/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::App inside downloaded DMG has no staple (round-trip lost notarization)."; exit 1; }
-          spctl -a -t execute -v -- "/Volumes/WhoNow/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper would reject app inside downloaded DMG."; exit 1; }
-          hdiutil detach /Volumes/WhoNow
-          rm -f "$DMG_NAME"

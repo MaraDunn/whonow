@@ -1,6 +1,6 @@
 {
   "productName": "WhoNow",
-  "version": "1.0.62",
+  "version": "1.0.64",
   "identifier": "com.whonow.app",
   "build": {
     "beforeDevCommand": "npm run dev",
