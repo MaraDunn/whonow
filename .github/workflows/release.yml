@@ -236,36 +236,30 @@ jobs:
             'exit 0' \
             > "$INSTALL_SCRIPT"
           chmod +x "$INSTALL_SCRIPT"
-          # Use APFS for the internal DMG volume. On HFS+ the staple ticket is stored as a
-          # directory xattr, which Finder silently drops when dragging from HFS+ to APFS
-          # (/Applications). APFS-to-APFS Finder copies preserve directory xattrs, so the
-          # ticket survives the standard drag-and-drop install flow.
-          echo "Creating DMG via mounted APFS volume to preserve staple ticket across Finder copies..."
-          TEMP_APFS="temp_apfs.dmg"
-          rm -f "$DMG_NAME" "$TEMP_APFS"
-          hdiutil create -size 250m -fs APFS -volname "WhoNow" -o "$TEMP_APFS" -ov
-          hdiutil attach "$TEMP_APFS" -nobrowse
-          ditto "$STAGE/WhoNow.app" "/Volumes/WhoNow/WhoNow.app"
-          # Re-apply execute permission after ditto into the APFS volume.
-          find "/Volumes/WhoNow/WhoNow.app" -type f \( -path "*/MacOS/*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
-          cp -p "$STAGE/Install WhoNow.command" "/Volumes/WhoNow/Install WhoNow.command"
-          # Sign install script so Gatekeeper allows it when user double-clicks
-          codesign --force --sign "$IDENTITY" "/Volumes/WhoNow/Install WhoNow.command"
-          ln -s /Applications "/Volumes/WhoNow/Applications"
-          # Staple the app inside the mounted APFS volume. On APFS the ticket is stored as an
-          # APFS xattr that survives APFS-to-APFS Finder copies.
-          STAPLE_VOL_OUT=$(xcrun stapler staple "/Volumes/WhoNow/WhoNow.app" 2>&1)
-          echo "$STAPLE_VOL_OUT"
-          echo "$STAPLE_VOL_OUT" | grep -q "The staple and validate action worked!" || { hdiutil detach /Volumes/WhoNow; echo "::error::xcrun stapler staple did not confirm local embedding inside APFS volume — output: $STAPLE_VOL_OUT"; exit 1; }
-          hdiutil detach /Volumes/WhoNow
-          # Use UDBZ (bzip2 compressed, industry-standard macOS DMG format).
-          hdiutil convert "$TEMP_APFS" -format UDBZ -o "$DMG_NAME" -ov
-          rm -f "$TEMP_APFS"
+          # CRITICAL FIX: Do NOT copy the app into an intermediate APFS mounted volume
+          # and then run xcrun stapler staple inside it before converting to UDBZ.
+          # On macOS 26, xcrun stapler on an APFS volume writes the ticket as an APFS-native
+          # extended attribute — NOT a POSIX xattr. hdiutil convert to UDBZ silently drops
+          # these APFS-native attributes, producing a DMG where xcrun stapler validate exits 65.
+          # The CI's post-convert validate was passing via online network lookup (CI has internet),
+          # masking the fact that no local ticket was embedded.
+          #
+          # Fix: sign the install script first, then use hdiutil create -srcfolder to build
+          # the UDBZ in one shot directly from the staged folder. The app in $STAGE already has
+          # its staple as a POSIX xattr (written by xcrun stapler staple "$APP" above and
+          # preserved through ditto). hdiutil create -srcfolder reads POSIX xattrs and packs
+          # them into the HFS+ volume inside the UDBZ — no intermediate APFS volume, no convert.
+          echo "Signing install script..."
+          codesign --force --sign "$IDENTITY" "$STAGE/Install WhoNow.command"
+          echo "Creating UDBZ DMG directly from staged folder (preserves staple as POSIX xattr)..."
+          rm -f "$DMG_NAME"
+          hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDBZ -o "$DMG_NAME"
           rm -rf "$STAGE"
-          echo "Verifying app inside DMG still has stapled ticket and passes Gatekeeper..."
+          echo "Verifying LOCAL staple ticket is present inside UDBZ DMG (no network — exit 65 means broken)..."
           hdiutil attach "$DMG_NAME" -readonly -nobrowse
           APP_IN_DMG="/Volumes/WhoNow/WhoNow.app"
-          xcrun stapler validate "$APP_IN_DMG" || { hdiutil detach /Volumes/WhoNow; echo "::error::Stapled ticket lost inside UDBZ DMG after hdiutil convert."; exit 1; }
+          xcrun stapler validate "$APP_IN_DMG" || { hdiutil detach /Volumes/WhoNow; echo "::error::Staple ticket ABSENT inside UDBZ DMG — hdiutil create -srcfolder dropped the POSIX xattr. Check filesystem or ditto copy."; exit 1; }
+          echo "LOCAL staple confirmed inside DMG (exit 0). This is what was missing in previous builds."
           spctl -a -t execute -v -- "$APP_IN_DMG" || { hdiutil detach /Volumes/WhoNow; echo "::error::Gatekeeper would reject app inside DMG."; exit 1; }
           hdiutil detach /Volumes/WhoNow
           codesign --force --sign "${{ steps.apple-cert.outputs.signing_identity }}" "$DMG_NAME"
@@ -318,7 +312,7 @@ jobs:
           if spctl -a -t execute -vvv "/tmp/whonow_no_staple_test/WhoNow.app"; then
             echo "PASSED: Online notarization check alone is sufficient — Finder drag-and-drop will work for users."
           else
-            echo "::error::FAILED: Gatekeeper rejects without local staple. macOS 15 requires local ticket. Users must use the Install WhoNow.command script (uses ditto which preserves the ticket)."
+            echo "::error::FAILED: Gatekeeper rejects without local staple. macOS 26 with Chrome quarantine 0181 requires the local ticket. Finder drag-and-drop from DMG drops the HFS+ xattr. Users must use the Install WhoNow.command script (uses ditto which preserves the ticket)."
             rm -rf /tmp/whonow_no_staple_test
             hdiutil detach /Volumes/WhoNow 2>/dev/null
             exit 1
