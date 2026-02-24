@@ -159,6 +159,11 @@ jobs:
             xcrun stapler staple "$APP"
             rm -f WhoNow.zip
           fi
+          # Tauri staples the DMG it produces, not the inner app bundle.
+          # Staple the app bundle directly so the com.apple.security.cms xattr is embedded
+          # locally on disk before we copy it into our custom DMG.
+          echo "Stapling notarization ticket to app bundle..."
+          xcrun stapler staple "$APP"
           echo "Checking for entitlements that can cause Gatekeeper to reject..."
           if codesign -d --entitlements - --xml -- "$APP" 2>/dev/null | grep -qE 'allow-jit|allow-unsigned-executable-memory'; then
             echo "::error::App or a nested binary has allow-jit or allow-unsigned-executable-memory; Gatekeeper may reject. Adjust Tauri entitlements."
