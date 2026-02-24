@@ -141,11 +141,38 @@ jobs:
           APP="src-tauri/target/${TARGET}/release/bundle/macos/WhoNow.app"
           DMG_NAME="WhoNow_${VER}_${ARCH}.dmg"
           IDENTITY="${{ steps.apple-cert.outputs.signing_identity }}"
+
+          # ---- RPATH inspection and cleanup ----
+          # Absolute RPATHs that aren't system paths (e.g. /Users/runner/... or /opt/homebrew/...)
+          # can be embedded by the Rust linker and may break codesign strict verification or
+          # cause Gatekeeper to reject the app on machines where those paths don't exist.
+          echo "Inspecting RPATHs in all bundle Mach-O binaries..."
+          RPATH_CHANGED=0
+          while IFS= read -r binary; do
+            while IFS= read -r rpath; do
+              [[ -z "$rpath" ]] && continue
+              echo "  RPATH in ${binary#$APP/}: $rpath"
+              if [[ "$rpath" != @* && "$rpath" != /usr/lib* && "$rpath" != /System/* && "$rpath" != /Library/Apple/* ]]; then
+                echo "  -> Non-portable RPATH detected; removing: $rpath"
+                install_name_tool -delete_rpath "$rpath" "$binary" 2>/dev/null && RPATH_CHANGED=1 \
+                  || echo "  -> Could not remove (may be load-command only); continuing"
+              fi
+            done < <(otool -l "$binary" 2>/dev/null | awk '/cmd LC_RPATH/{found=1; next} found && /path /{print $2; found=0}')
+          done < <(find "$APP" -type f \( -perm +111 -o -name "*.dylib" -o -name "*.so" \) 2>/dev/null)
+          echo "RPATH scan complete. RPATH_CHANGED=$RPATH_CHANGED"
+
+          # ---- Re-sign and re-notarize if CodeResources is a symlink OR RPATHs were modified ----
           CODE_RESOURCES="$APP/Contents/CodeResources"
+          NEEDS_RESIGN=0
           if [[ -L "$CODE_RESOURCES" ]]; then
-            echo "CodeResources is a symlink; removing and re-signing (inside-out) so stapling can work..."
+            echo "CodeResources is a symlink; flagging for re-sign..."
             rm "$CODE_RESOURCES"
-            # Sign nested code first (Apple: avoid --deep; sign innermost then outer)
+            NEEDS_RESIGN=1
+          fi
+          [[ $RPATH_CHANGED -eq 1 ]] && NEEDS_RESIGN=1
+
+          if [[ $NEEDS_RESIGN -eq 1 ]]; then
+            echo "Re-signing app bundle inside-out (CodeResources symlink or RPATH change)..."
             for d in "$APP/Contents/Frameworks"/*.framework; do
               [[ -d "$d" ]] && codesign --force --options runtime --sign "$IDENTITY" "$d"
             done 2>/dev/null || true
@@ -154,10 +181,10 @@ jobs:
             done < <(find "$APP" -type f \( -perm +111 -o -name "*.dylib" \) ! -path "*/_CodeSignature/*" 2>/dev/null | awk -F/ '{print NF, $0}' | sort -rn | cut -d' ' -f2-)
             codesign --force --options runtime --sign "$IDENTITY" "$APP"
             echo "Re-notarizing and re-stapling app after re-sign..."
-            ditto -c -k --keepParent "$APP" WhoNow.zip
-            xcrun notarytool submit WhoNow.zip --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait
+            ditto -c -k --keepParent "$APP" WhoNow_resign.zip
+            xcrun notarytool submit WhoNow_resign.zip --apple-id "${{ secrets.APPLE_ID }}" --password "${{ secrets.APPLE_PASSWORD }}" --team-id "${{ secrets.APPLE_TEAM_ID }}" --wait
             xcrun stapler staple "$APP"
-            rm -f WhoNow.zip
+            rm -f WhoNow_resign.zip
           fi
           # Tauri staples the DMG it produces, not the inner app bundle.
           # Staple the app bundle directly so the ticket is locally embedded before DMG creation.
@@ -263,9 +290,38 @@ jobs:
           # catches online-notarization-check failures that cp -R without quarantine misses.
           QUARANTINE_TS=$(printf '%x' "$(date +%s)")
           xattr -w com.apple.quarantine "0001;${QUARANTINE_TS};Safari;00000000-0000-0000-0000-000000000000" "/tmp/whonow_install_test/WhoNow.app"
-          echo "spctl check with quarantine attribute (simulates Gatekeeper on user machine)..."
-          spctl -a -t execute -vvv "/tmp/whonow_install_test/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper would reject quarantined app — online notarization check is failing. The app CDHash is not resolving on Apple's servers."; exit 1; }
+          echo "spctl check WITH local staple + quarantine (cp -R path, should pass)..."
+          spctl -a -t execute -vvv "/tmp/whonow_install_test/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper rejects quarantined app even with local staple — notarization CDHash not resolving on Apple servers."; exit 1; }
           rm -rf /tmp/whonow_install_test
+
+          # Simulate Finder drag-and-drop: copy from DMG but strip com.apple.security.cms
+          # (Finder does NOT copy directory-level xattrs across volumes). Then apply quarantine
+          # and check spctl. macOS 15 Sequoia requires the local staple ticket for quarantined
+          # apps — if this test fails, users who Finder-drag will be blocked even though
+          # notarization is valid.
+          echo "--- Simulating Finder drag-and-drop (no local staple) ---"
+          rm -rf /tmp/whonow_no_staple_test && mkdir -p /tmp/whonow_no_staple_test
+          cp -R "/Volumes/WhoNow/WhoNow.app" "/tmp/whonow_no_staple_test/WhoNow.app"
+          find "/tmp/whonow_no_staple_test/WhoNow.app" -type f \( -path "*/MacOS/*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
+          # Explicitly remove the notarization xattr to mirror Finder cross-volume behavior
+          if xattr -d com.apple.security.cms "/tmp/whonow_no_staple_test/WhoNow.app" 2>/dev/null; then
+            echo "Removed com.apple.security.cms from test copy (ticket absent, as after Finder drag)."
+          else
+            echo "com.apple.security.cms was not present on the cp -R copy — already mirrors Finder behavior."
+          fi
+          xcrun stapler validate "/tmp/whonow_no_staple_test/WhoNow.app" 2>&1; echo "stapler validate exit after xattr removal: $?"
+          QUARANTINE_TS2=$(printf '%x' "$(date +%s)")
+          xattr -w com.apple.quarantine "0001;${QUARANTINE_TS2};Safari;00000000-0000-0000-0000-000000000000" "/tmp/whonow_no_staple_test/WhoNow.app"
+          echo "spctl check WITHOUT local staple + WITH quarantine (mirrors Finder drag-and-drop on user machine)..."
+          if spctl -a -t execute -vvv "/tmp/whonow_no_staple_test/WhoNow.app"; then
+            echo "PASSED: Online notarization check alone is sufficient — Finder drag-and-drop will work for users."
+          else
+            echo "::error::FAILED: Gatekeeper rejects without local staple. macOS 15 requires local ticket. Users must use the Install WhoNow.command script (uses ditto which preserves the ticket)."
+            rm -rf /tmp/whonow_no_staple_test
+            hdiutil detach /Volumes/WhoNow 2>/dev/null
+            exit 1
+          fi
+          rm -rf /tmp/whonow_no_staple_test
           hdiutil detach /Volumes/WhoNow
           shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
           gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" "$DMG_NAME.sha256" --clobber
