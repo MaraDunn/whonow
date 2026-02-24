@@ -124,12 +124,22 @@ jobs:
           includeUpdaterJson: true
           tauriScript: npm run tauri
 
-      # Re-package DMG: zero post-processing of the app binary.
-      # Previous builds had CDHash mismatches (stapler validate exit 0 but spctl rejects with
-      # "Unnotarized Developer ID") — the RPATH cleanup, CodeResources fix, chmod, and extra
-      # staple calls were modifying the binary after tauri-action's notarization, producing a
-      # CDHash that didn't match Apple's ticket. This build takes the app exactly as tauri-action
-      # left it and logs the CDHash at every step to verify consistency.
+      # Rebuild DMG with standalone app notarization and writable HFS+ to preserve staple.
+      #
+      # Root cause: tauri-action only notarizes its DMG — tickets created from DMG scans
+      # may not be retrievable via stapler on end-user machines (stapler staple fails with
+      # error 65 even though Apple's notarization log shows the CDHash as Accepted).
+      # Additionally, hdiutil create -srcfolder silently drops directory-level xattrs (the
+      # staple ticket), so stapler validate exits 0 on CI only via online fallback.
+      #
+      # Fix:
+      # 1. Explicitly notarize a ZIP of the app (standalone, not inside a DMG)
+      # 2. Staple the app after standalone notarization
+      # 3. Verify the staple xattr is physically present (xattr -p, not stapler validate)
+      # 4. Create a writable HFS+ sparse image, ditto the stapled app in, staple AGAIN
+      #    inside the mounted volume, detach, convert to UDBZ
+      # 5. Verify the staple xattr survives the UDBZ conversion
+      # 6. Sign and notarize the DMG, staple the DMG
       - name: Rebuild DMG from notarized app and re-upload
         if: matrix.platform == 'macos-26'
         env:
@@ -148,31 +158,54 @@ jobs:
           DMG_NAME="WhoNow_${VER}_${ARCH}.dmg"
           IDENTITY="${{ steps.apple-cert.outputs.signing_identity }}"
 
-          # ---- Step 1: Record CDHash as tauri-action left it (DO NOT modify the app) ----
-          echo "========== STEP 1: CDHash as built by tauri-action =========="
-          codesign -dvvvv "$APP" 2>&1 | grep -iE "CDHash|Identifier|TeamIdentifier|Authority" || true
-          echo "--- Main executable ---"
-          codesign -dvvvv "$APP/Contents/MacOS/WhoNow" 2>&1 | grep -iE "CDHash" || true
-          echo "--- Signature validity ---"
-          codesign -vvv --deep --strict "$APP" 2>&1 || true
+          echo "========== STEP 1: CDHash baseline =========="
+          codesign -dvvvv "$APP" 2>&1 | grep -iE "CDHash|Identifier|TeamIdentifier" || true
 
-          # ---- Step 2: Staple the app (downloads ticket matching current CDHash) ----
-          echo "========== STEP 2: Stapling app bundle =========="
+          # ---- STEP 2: Explicitly notarize a ZIP of the app (standalone) ----
+          # tauri-action only notarized its DMG; tickets from DMG scans may not be
+          # available via stapler on end-user machines. Submitting a zip creates a
+          # first-class ticket directly associated with the app's CDHash.
+          echo "========== STEP 2: Standalone app notarization (zip) =========="
+          ditto -c -k --keepParent "$APP" WhoNow_app.zip
+          SUBMIT_APP_OUT=$(xcrun notarytool submit WhoNow_app.zip \
+            --apple-id "${{ secrets.APPLE_ID }}" \
+            --password "${{ secrets.APPLE_PASSWORD }}" \
+            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+            --wait 2>&1)
+          echo "$SUBMIT_APP_OUT"
+          APP_SUB_ID=$(echo "$SUBMIT_APP_OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+          if [[ -n "$APP_SUB_ID" ]]; then
+            echo "--- App notarization log ---"
+            xcrun notarytool log "$APP_SUB_ID" \
+              --apple-id "${{ secrets.APPLE_ID }}" \
+              --password "${{ secrets.APPLE_PASSWORD }}" \
+              --team-id "${{ secrets.APPLE_TEAM_ID }}" 2>&1 || true
+          fi
+          rm -f WhoNow_app.zip
+
+          # ---- STEP 3: Staple the app ----
+          echo "========== STEP 3: Staple app after standalone notarization =========="
           xcrun stapler staple "$APP" 2>&1
-          echo "--- CDHash after stapling (must match Step 1 — staple should not change binary) ---"
-          codesign -dvvvv "$APP" 2>&1 | grep -iE "CDHash" || true
+          echo "--- Verify staple xattr is physically present (not relying on online check) ---"
+          XATTR_SIZE=$(xattr -p com.apple.security.cms "$APP" 2>/dev/null | wc -c || echo "0")
+          echo "com.apple.security.cms xattr size on app directory: $XATTR_SIZE bytes"
+          if [[ "$XATTR_SIZE" -lt 10 ]]; then
+            echo "::warning::Staple xattr appears missing or tiny on the app directory."
+            echo "All xattrs on app:"
+            xattr -l "$APP" 2>&1 || true
+            echo "Checking if ticket is inside the bundle instead:"
+            find "$APP" -name "CodeResources" -o -name "*.ticket" 2>/dev/null || true
+          fi
           xcrun stapler validate "$APP" 2>&1; echo "stapler validate exit: $?"
-          echo "--- spctl on original app (no quarantine) ---"
-          spctl -a -t execute -vvv "$APP" 2>&1 || true
 
-          # ---- Step 3: Create staging directory (ditto preserves xattrs and binary content) ----
-          echo "========== STEP 3: Staging =========="
+          # ---- STEP 4: Create staging directory ----
+          echo "========== STEP 4: Staging =========="
           STAGE="dmg-stage"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           ditto "$APP" "$STAGE/WhoNow.app"
-          echo "--- CDHash of staged copy (must match Step 1) ---"
-          codesign -dvvvv "$STAGE/WhoNow.app" 2>&1 | grep -iE "CDHash" || true
-          xcrun stapler validate "$STAGE/WhoNow.app" 2>&1; echo "stapler validate staged: $?"
+          echo "--- Staple xattr on staged copy ---"
+          XATTR_STAGED=$(xattr -p com.apple.security.cms "$STAGE/WhoNow.app" 2>/dev/null | wc -c || echo "0")
+          echo "com.apple.security.cms xattr size on staged copy: $XATTR_STAGED bytes"
           ln -s /Applications "$STAGE/Applications"
 
           INSTALL_SCRIPT="$STAGE/Install WhoNow.command"
@@ -196,70 +229,96 @@ jobs:
           chmod +x "$INSTALL_SCRIPT"
           codesign --force --sign "$IDENTITY" "$INSTALL_SCRIPT"
 
-          # ---- Step 4: Create DMG (hdiutil -srcfolder, default HFS+) ----
-          echo "========== STEP 4: Creating DMG =========="
-          rm -f "$DMG_NAME"
-          hdiutil create -volname "WhoNow" -srcfolder "$STAGE" -ov -format UDBZ -o "$DMG_NAME"
+          # ---- STEP 5: Create DMG via writable HFS+ sparse → convert to UDBZ ----
+          # hdiutil create -srcfolder silently drops directory-level xattrs (the staple).
+          # Instead: create a writable HFS+ sparse image, ditto the stapled app in,
+          # staple AGAIN inside the mounted HFS+ volume (writes to HFS+ attribute B-tree),
+          # detach, convert to UDBZ. The HFS+ attribute B-tree survives UDBZ compression.
+          echo "========== STEP 5: Create DMG (writable HFS+ → staple inside → UDBZ) =========="
+          SPARSE="WhoNow_temp.sparseimage"
+          rm -f "$DMG_NAME" "$SPARSE"
+          hdiutil create -size 200m -type SPARSE -fs HFS+ -volname "WhoNow" -ov "$SPARSE"
+          hdiutil attach "$SPARSE" -nobrowse
+          ditto "$STAGE/WhoNow.app" "/Volumes/WhoNow/WhoNow.app"
+          cp -p "$STAGE/Install WhoNow.command" "/Volumes/WhoNow/Install WhoNow.command"
+          codesign --force --sign "$IDENTITY" "/Volumes/WhoNow/Install WhoNow.command"
+          ln -s /Applications "/Volumes/WhoNow/Applications"
+          echo "--- Stapling app INSIDE the mounted HFS+ volume ---"
+          xcrun stapler staple "/Volumes/WhoNow/WhoNow.app" 2>&1
+          echo "--- Verify staple xattr inside mounted HFS+ volume ---"
+          XATTR_HFS=$(xattr -p com.apple.security.cms "/Volumes/WhoNow/WhoNow.app" 2>/dev/null | wc -c || echo "0")
+          echo "com.apple.security.cms xattr size inside HFS+ volume: $XATTR_HFS bytes"
+          xcrun stapler validate "/Volumes/WhoNow/WhoNow.app" 2>&1; echo "stapler validate HFS+ exit: $?"
+          hdiutil detach /Volumes/WhoNow
           rm -rf "$STAGE"
 
-          echo "--- CDHash inside DMG (must match Step 1) ---"
+          echo "--- Converting sparse HFS+ to UDBZ ---"
+          hdiutil convert "$SPARSE" -format UDBZ -o "$DMG_NAME" -ov
+          rm -f "$SPARSE"
+
+          echo "--- Verify staple xattr survived UDBZ conversion ---"
           hdiutil attach "$DMG_NAME" -readonly -nobrowse
-          codesign -dvvvv "/Volumes/WhoNow/WhoNow.app" 2>&1 | grep -iE "CDHash" || true
-          echo "--- stapler validate inside DMG ---"
-          xcrun stapler validate "/Volumes/WhoNow/WhoNow.app" 2>&1; echo "stapler validate in-DMG: $?"
-          echo "--- spctl inside DMG (no quarantine) ---"
+          XATTR_UDBZ=$(xattr -p com.apple.security.cms "/Volumes/WhoNow/WhoNow.app" 2>/dev/null | wc -c || echo "0")
+          echo "com.apple.security.cms xattr size inside UDBZ: $XATTR_UDBZ bytes"
+          xcrun stapler validate "/Volumes/WhoNow/WhoNow.app" 2>&1; echo "stapler validate UDBZ exit: $?"
+          if [[ "$XATTR_UDBZ" -lt 10 ]]; then
+            echo "::error::Staple xattr LOST during HFS+ sparse → UDBZ conversion. The HFS+ B-tree did not preserve the directory xattr."
+            hdiutil detach /Volumes/WhoNow
+            exit 1
+          fi
+          echo "--- spctl inside UDBZ DMG (no quarantine) ---"
           spctl -a -t execute -vvv "/Volumes/WhoNow/WhoNow.app" 2>&1 || true
           hdiutil detach /Volumes/WhoNow
 
-          # ---- Step 5: Sign and notarize the DMG ----
-          echo "========== STEP 5: Signing and notarizing DMG =========="
+          # ---- STEP 6: Sign and notarize the DMG ----
+          echo "========== STEP 6: Sign and notarize DMG =========="
           codesign --force --sign "$IDENTITY" "$DMG_NAME"
-          SUBMIT_OUT=$(xcrun notarytool submit "$DMG_NAME" \
+          SUBMIT_DMG_OUT=$(xcrun notarytool submit "$DMG_NAME" \
             --apple-id "${{ secrets.APPLE_ID }}" \
             --password "${{ secrets.APPLE_PASSWORD }}" \
             --team-id "${{ secrets.APPLE_TEAM_ID }}" \
             --wait 2>&1)
-          echo "$SUBMIT_OUT"
-          SUBMISSION_ID=$(echo "$SUBMIT_OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
-          if [[ -n "$SUBMISSION_ID" ]]; then
-            echo "--- Notarization log (check for warnings/errors on individual binaries) ---"
-            xcrun notarytool log "$SUBMISSION_ID" \
+          echo "$SUBMIT_DMG_OUT"
+          DMG_SUB_ID=$(echo "$SUBMIT_DMG_OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+          if [[ -n "$DMG_SUB_ID" ]]; then
+            echo "--- DMG notarization log ---"
+            xcrun notarytool log "$DMG_SUB_ID" \
               --apple-id "${{ secrets.APPLE_ID }}" \
               --password "${{ secrets.APPLE_PASSWORD }}" \
               --team-id "${{ secrets.APPLE_TEAM_ID }}" 2>&1 || true
           fi
           xcrun stapler staple "$DMG_NAME"
 
-          # ---- Step 6: Final verification — CDHash inside notarized DMG ----
-          echo "========== STEP 6: Final verification =========="
+          # ---- STEP 7: Final verification ----
+          echo "========== STEP 7: Final verification =========="
           hdiutil attach "$DMG_NAME" -readonly -nobrowse
-          echo "--- CDHash inside final notarized+stapled DMG (must match Step 1) ---"
+          echo "--- CDHash ---"
           codesign -dvvvv "/Volumes/WhoNow/WhoNow.app" 2>&1 | grep -iE "CDHash" || true
-          echo "--- stapler validate inside final DMG ---"
+          echo "--- staple xattr ---"
+          XATTR_FINAL=$(xattr -p com.apple.security.cms "/Volumes/WhoNow/WhoNow.app" 2>/dev/null | wc -c || echo "0")
+          echo "com.apple.security.cms xattr size in final DMG: $XATTR_FINAL bytes"
+          echo "--- stapler validate ---"
           xcrun stapler validate "/Volumes/WhoNow/WhoNow.app" 2>&1; echo "stapler validate final: $?"
-          echo "--- spctl inside final DMG (no quarantine) ---"
+          echo "--- spctl (no quarantine) ---"
           spctl -a -t execute -vvv "/Volumes/WhoNow/WhoNow.app" 2>&1 || true
-
-          # ---- Step 7: Quarantine simulation ----
-          echo "========== STEP 7: Quarantine simulation =========="
+          echo "--- spctl with quarantine 0181 ---"
           rm -rf /tmp/whonow_q_test && mkdir -p /tmp/whonow_q_test
           cp -R "/Volumes/WhoNow/WhoNow.app" "/tmp/whonow_q_test/WhoNow.app"
-          echo "--- CDHash of copied app (must match Step 1) ---"
-          codesign -dvvvv "/tmp/whonow_q_test/WhoNow.app" 2>&1 | grep -iE "CDHash" || true
           QUARANTINE_TS=$(printf '%x' "$(date +%s)")
           xattr -w com.apple.quarantine "0181;${QUARANTINE_TS};Chrome;00000000-0000-0000-0000-000000000000" "/tmp/whonow_q_test/WhoNow.app"
-          echo "--- spctl with quarantine 0181 (this is what fails on user machine) ---"
-          spctl -a -t execute -vvv "/tmp/whonow_q_test/WhoNow.app" 2>&1; SPCTL_EXIT=$?
-          echo "spctl exit code: $SPCTL_EXIT"
-          if [[ $SPCTL_EXIT -ne 0 ]]; then
-            echo "::warning::spctl REJECTS quarantined app with 0181. Checking without quarantine for comparison..."
-            xattr -d com.apple.quarantine "/tmp/whonow_q_test/WhoNow.app" 2>/dev/null || true
-            spctl -a -t execute -vvv "/tmp/whonow_q_test/WhoNow.app" 2>&1 || true
-          fi
+          spctl -a -t execute -vvv "/tmp/whonow_q_test/WhoNow.app" 2>&1 || true
           rm -rf /tmp/whonow_q_test
           hdiutil detach /Volumes/WhoNow
 
-          # ---- Step 8: Upload ----
-          echo "========== STEP 8: Upload =========="
+          # ---- STEP 8: Upload and round-trip verify ----
+          echo "========== STEP 8: Upload and round-trip =========="
           shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
           gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" "$DMG_NAME.sha256" --clobber
+          echo "--- Round-trip: download and verify staple xattr survived ---"
+          gh release download "$GITHUB_REF_NAME" -p "$DMG_NAME" -D /tmp --clobber
+          hdiutil attach "/tmp/$DMG_NAME" -readonly -nobrowse
+          XATTR_RT=$(xattr -p com.apple.security.cms "/Volumes/WhoNow/WhoNow.app" 2>/dev/null | wc -c || echo "0")
+          echo "com.apple.security.cms xattr size after round-trip: $XATTR_RT bytes"
+          xcrun stapler validate "/Volumes/WhoNow/WhoNow.app" 2>&1; echo "stapler validate round-trip: $?"
+          hdiutil detach /Volumes/WhoNow
+          rm -f "/tmp/$DMG_NAME"
