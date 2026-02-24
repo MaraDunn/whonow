@@ -1,13 +1,54 @@
 import { useState, useCallback, useRef } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { devLog } from "@/lib/devLog";
 
+/** Decode JWT payload without verification (we only need exp). Returns null if invalid. */
+function getJwtExp(accessToken: string): number | null {
+  try {
+    const parts = accessToken.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof payload.exp === "number" ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Returns true if the token is still valid for at least 30 seconds. */
+function isTokenValid(session: Session | null): boolean {
+  if (!session?.access_token) return false;
+  const exp = getJwtExp(session.access_token);
+  if (exp == null) return true; // unknown exp, allow
+  return exp > Date.now() / 1000 + 30;
+}
+
+const SESSION_EXPIRED_MSG = "Session expired. Please sign in again to scan business cards.";
+
+/** Clear local session so the app can show sign-in again (avoids stuck "signed in" state with invalid token). */
+function clearSessionSoUserCanReauth() {
+  void supabase.auth.signOut({ scope: "local" });
+}
+
 /** Get current session and optionally refresh so we have a valid token for Edge Function calls. */
-async function getValidSession() {
+async function getValidSession(): Promise<Session | null> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) return null;
-  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-  return refreshed ?? session;
+
+  const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
+
+  // If refresh failed, don't use the old session — it may have an expired access_token
+  if (error) {
+    devLog("Session refresh failed:", error.message);
+    return isTokenValid(session) ? session : null;
+  }
+
+  const active = refreshed ?? session;
+  if (!active?.access_token) return null;
+
+  // Only return session if token is still valid (avoids sending expired token to Edge Function)
+  return isTokenValid(active) ? active : null;
 }
 
 interface ScannedContact {
@@ -123,11 +164,11 @@ export function useBusinessCardScannerAI() {
       devLog("Image data length:", imageBase64.length);
       devLog("Image preview:", imageBase64.substring(0, 50) + "...");
 
-      // Use raw fetch with explicit auth headers so Authorization is sent reliably
-      // (supabase.functions.invoke can omit or fail to send the JWT in some environments)
+      // Refresh session so the Supabase client has a valid token, then invoke (client attaches JWT automatically).
       const session = await getValidSession();
       if (!session?.access_token) {
-        throw new Error("Please sign in to scan business cards.");
+        clearSessionSoUserCanReauth();
+        throw new Error(SESSION_EXPIRED_MSG);
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -136,28 +177,78 @@ export function useBusinessCardScannerAI() {
         throw new Error("App configuration error. Please refresh the page.");
       }
 
-      const resp = await fetch(`${supabaseUrl}/functions/v1/scan-business-card-ai`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: anonKey,
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ image: imageBase64 }),
-      });
+      // Use functions.invoke with explicit Authorization so the same token we validated is sent (avoids client/session skew).
+      const doInvoke = (token: string) =>
+        supabase.functions.invoke("scan-business-card-ai", {
+          body: { image: imageBase64 },
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-      const data = await resp.json().catch(() => ({}));
-
-      if (!resp.ok) {
-        if (resp.status === 401) {
-          throw new Error("Session expired. Please sign in again to scan business cards.");
+      let result = await doInvoke(session.access_token);
+      let data = result.data as Record<string, unknown> | null;
+      let status = 200;
+      if (result.error) {
+        if (result.error instanceof FunctionsHttpError && result.error.context) {
+          status = (result.error.context as Response).status ?? 200;
+        } else if (typeof (result.error as { status?: number }).status === "number") {
+          status = (result.error as { status: number }).status;
         }
+      }
+
+      // Retry once with a fresh token (e.g. expired between getSession and request).
+      if (status === 401) {
+        const retrySession = await getValidSession();
+        if (retrySession?.access_token) {
+          result = await doInvoke(retrySession.access_token);
+          data = result.data as Record<string, unknown> | null;
+          status = 200;
+          if (result.error) {
+            if (result.error instanceof FunctionsHttpError && result.error.context) {
+              status = (result.error.context as Response).status ?? 200;
+            } else if (typeof (result.error as { status?: number }).status === "number") {
+              status = (result.error as { status: number }).status;
+            }
+          }
+          if (status === 401) {
+            clearSessionSoUserCanReauth();
+            throw new Error(SESSION_EXPIRED_MSG);
+          }
+          if (status !== 200) {
+            const errPayload = (result.error as { message?: string } | null) ?? data;
+            const errorMessage =
+              typeof errPayload?.error === "string"
+                ? errPayload.error
+                : typeof (errPayload as { message?: string })?.message === "string"
+                  ? (errPayload as { message: string }).message
+                  : typeof data?.error === "string"
+                    ? data.error
+                    : typeof data?.details === "string"
+                      ? `${(data?.error as string) ?? "Scan failed"}: ${data.details}`
+                      : "Failed to process business card";
+            throw new Error(errorMessage);
+          }
+        } else {
+          clearSessionSoUserCanReauth();
+          throw new Error(SESSION_EXPIRED_MSG);
+        }
+      }
+
+      if (status !== 200) {
+        if (status === 401) {
+          clearSessionSoUserCanReauth();
+          throw new Error(SESSION_EXPIRED_MSG);
+        }
+        const errPayload = (result.error as { message?: string } | null) ?? data;
         const errorMessage =
-          typeof data?.error === "string"
-            ? data.error
-            : typeof data?.details === "string"
-              ? `${data?.error ?? "Scan failed"}: ${data.details}`
-              : "Failed to process business card";
+          typeof errPayload?.error === "string"
+            ? errPayload.error
+            : typeof (errPayload as { message?: string })?.message === "string"
+              ? (errPayload as { message: string }).message
+              : typeof data?.error === "string"
+                ? data.error
+                : typeof data?.details === "string"
+                  ? `${(data?.error as string) ?? "Scan failed"}: ${data.details}`
+                  : "Failed to process business card";
         throw new Error(errorMessage);
       }
 

@@ -32,28 +32,25 @@ export const DroppableFolder = React.forwardRef<HTMLButtonElement, DroppableFold
       );
     }
 
+    // Use SidebarMenuButton (same as All Contacts and client/team folders) for single-click behavior
     return (
-      <button
+      <SidebarMenuButton
         ref={ref}
         onClick={onClick}
-        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-          isSelected
-            ? "bg-primary text-primary-foreground"
-            : "text-foreground hover:bg-accent"
-        }`}
+        isActive={isSelected}
+        tooltip={tooltip}
+        className="w-full min-w-0 gap-3 px-3 py-2"
       >
-        <div className="flex items-center gap-3 w-full pr-6 min-w-0">
-          <FolderIcon
-            className="h-4 w-4 shrink-0"
-            style={{ color: isSelected ? undefined : folder?.color }}
-          />
-          <span className="flex-1 text-left truncate min-w-0">{folder?.name || "No folder"}</span>
-          <span className="text-xs opacity-70 shrink-0">
-            {contactCount}
-          </span>
-        </div>
+        <FolderIcon
+          className="h-4 w-4 shrink-0"
+          style={{ color: isSelected ? undefined : folder?.color }}
+        />
+        <span className="flex-1 text-left truncate min-w-0">{folder?.name || "No folder"}</span>
+        <span className="text-xs opacity-70 shrink-0">
+          {contactCount}
+        </span>
         {children}
-      </button>
+      </SidebarMenuButton>
     );
   }
 );

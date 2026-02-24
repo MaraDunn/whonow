@@ -42,6 +42,8 @@ serve(async (req) => {
   const token = authHeader.replace("Bearer ", "");
   const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user) {
+    // Log server-side only (Supabase Dashboard → Edge Functions → Logs) to debug 401s
+    console.error("[scan-business-card-ai] Auth failed:", userError?.message ?? "no user", "token length:", token?.length ?? 0);
     return new Response(
       JSON.stringify({ error: "Unauthorized" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }

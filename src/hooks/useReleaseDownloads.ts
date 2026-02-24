@@ -4,6 +4,8 @@ import type { Platform } from "@/utils/downloadLinks";
 type ReleaseUrls = Partial<Record<Platform, string>>;
 
 const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO as string | undefined;
+/** When "true", fetch latest release from GitHub. When unset/false, skip fetch to avoid 404 until a release exists. */
+const GITHUB_RELEASES_ENABLED = import.meta.env.VITE_GITHUB_RELEASES_ENABLED === "true";
 const GITHUB_API = "https://api.github.com";
 
 function mapAssetToPlatform(name: string): Platform | null {
@@ -27,7 +29,8 @@ function pickAssetUrl(assets: { name: string; browser_download_url: string }[], 
 
 /**
  * Fetches the latest GitHub release and maps assets to Windows/macOS/Linux download URLs.
- * Uses VITE_GITHUB_REPO (e.g. "owner/repo"). If unset, returns empty and does not fetch.
+ * Requires VITE_GITHUB_REPO (e.g. "owner/repo") and VITE_GITHUB_RELEASES_ENABLED=true.
+ * If either is unset, returns empty and does not fetch (avoids 404 when no release exists yet).
  * Env vars (VITE_DOWNLOAD_URL_*) are used as fallback by the consumer.
  */
 export function useReleaseDownloads(): {
@@ -36,12 +39,14 @@ export function useReleaseDownloads(): {
   error: string | null;
 } {
   const [releaseUrls, setReleaseUrls] = useState<ReleaseUrls>({});
-  const [loading, setLoading] = useState(!!GITHUB_REPO?.trim());
+  const [loading, setLoading] = useState(
+    !!GITHUB_REPO?.trim() && GITHUB_RELEASES_ENABLED
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const repo = typeof GITHUB_REPO === "string" ? GITHUB_REPO.trim() : "";
-    if (!repo) {
+    if (!repo || !GITHUB_RELEASES_ENABLED) {
       setLoading(false);
       return;
     }
