@@ -46,9 +46,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
+          - platform: 'macos-26'
             args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest'
+          - platform: 'macos-26'
             args: '--target x86_64-apple-darwin'
           - platform: 'windows-latest'
             args: '--bundles msi'
@@ -70,14 +70,14 @@ jobs:
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-26' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Install dependencies
         run: npm ci
 
       - name: Import Apple Developer Certificate
         id: apple-cert
-        if: matrix.platform == 'macos-latest'
+        if: matrix.platform == 'macos-26'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -95,7 +95,7 @@ jobs:
           echo "signing_identity=$IDENTITY" >> $GITHUB_OUTPUT
 
       - name: Increase notary upload timeout
-        if: matrix.platform == 'macos-latest'
+        if: matrix.platform == 'macos-26'
         run: |
           defaults write com.apple.gke.notary.tool nt-upload-connection-timeout 600
 
@@ -109,7 +109,7 @@ jobs:
           VITE_APP_URL: ${{ vars.VITE_APP_URL || secrets.VITE_APP_URL }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          CI: ${{ matrix.platform == 'macos-latest' && 'true' || 'false' }}
+          CI: ${{ matrix.platform == 'macos-26' && 'true' || 'false' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -126,7 +126,7 @@ jobs:
 
       # Re-package DMG from the stapled app: proper layout (app + Applications symlink) and re-upload
       - name: Rebuild DMG from stapled app and re-upload
-        if: matrix.platform == 'macos-latest'
+        if: matrix.platform == 'macos-26'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
