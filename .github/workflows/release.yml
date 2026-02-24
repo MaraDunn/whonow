@@ -179,11 +179,16 @@ jobs:
           STAGE="dmg-stage"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           ditto "$APP" "$STAGE/WhoNow.app"
+          # Explicitly set execute permission on all binaries so the bit survives
+          # any filesystem or copy operation that may strip it.
+          find "$STAGE/WhoNow.app" -type f \( -path "*/MacOS/*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
           echo "Verifying stapled ticket survived ditto copy..."
           xcrun stapler validate "$STAGE/WhoNow.app" || { echo "::error::Stapled ticket lost during ditto copy."; exit 1; }
           spctl -a -t execute -v -- "$STAGE/WhoNow.app" || { echo "::error::Gatekeeper would reject staged app (entitlements/bundle?)."; exit 1; }
           echo "Strict codesign verification on staged app..."
           codesign -d -vvv --strict "$STAGE/WhoNow.app" || { echo "::error::Stapled app failed strict codesign check (bundle structure?)."; exit 1; }
+          echo "CDHash of staged app:"
+          codesign -d --verbose=2 "$STAGE/WhoNow.app" 2>&1 | grep -E "CDHash|Identifier|TeamIdentifier"
           ln -s /Applications "$STAGE/Applications"
           INSTALL_SCRIPT="$STAGE/Install WhoNow.command"
           printf '%s\n' \
@@ -214,6 +219,8 @@ jobs:
           hdiutil create -size 250m -fs APFS -volname "WhoNow" -o "$TEMP_APFS" -ov
           hdiutil attach "$TEMP_APFS" -nobrowse
           ditto "$STAGE/WhoNow.app" "/Volumes/WhoNow/WhoNow.app"
+          # Re-apply execute permission after ditto into the APFS volume.
+          find "/Volumes/WhoNow/WhoNow.app" -type f \( -path "*/MacOS/*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
           cp -p "$STAGE/Install WhoNow.command" "/Volumes/WhoNow/Install WhoNow.command"
           # Sign install script so Gatekeeper allows it when user double-clicks
           codesign --force --sign "$IDENTITY" "/Volumes/WhoNow/Install WhoNow.command"
@@ -242,13 +249,23 @@ jobs:
           STAPLE_DMG_OUT=$(xcrun stapler staple "$DMG_NAME" 2>&1)
           echo "$STAPLE_DMG_OUT"
           echo "$STAPLE_DMG_OUT" | grep -q "The staple and validate action worked!" || { echo "::error::xcrun stapler staple did not confirm local embedding on DMG — output: $STAPLE_DMG_OUT"; exit 1; }
-          echo "Simulated Finder copy: cp -R from DMG and verify staple/spctl..."
+          echo "Simulated user install: cp -R from DMG, apply quarantine, verify staple and spctl..."
           hdiutil attach "$DMG_NAME" -readonly -nobrowse
-          rm -rf /tmp/Applications
-          mkdir -p /tmp/Applications
-          cp -R "/Volumes/WhoNow/WhoNow.app" "/tmp/Applications/WhoNow.app"
-          xcrun stapler validate "/tmp/Applications/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Stapled ticket lost after cp -R (simulated Finder copy). Users must use Install WhoNow.command."; exit 1; }
-          spctl -a -t execute -v -- "/tmp/Applications/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper would reject app after cp -R (simulated Finder copy). Users must use Install WhoNow.command."; exit 1; }
+          rm -rf /tmp/whonow_install_test
+          mkdir -p /tmp/whonow_install_test
+          cp -R "/Volumes/WhoNow/WhoNow.app" "/tmp/whonow_install_test/WhoNow.app"
+          # Re-apply execute permission in case cp -R dropped it.
+          find "/tmp/whonow_install_test/WhoNow.app" -type f \( -path "*/MacOS/*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
+          # Verify the staple ticket survived the copy (without quarantine).
+          xcrun stapler validate "/tmp/whonow_install_test/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Staple ticket lost after cp -R. Finder drag-and-drop will fail; users must use Install WhoNow.command."; exit 1; }
+          # Apply a quarantine attribute to simulate a browser-downloaded copy, then verify
+          # Gatekeeper accepts it. This is what actually happens on a user's machine and
+          # catches online-notarization-check failures that cp -R without quarantine misses.
+          QUARANTINE_TS=$(printf '%x' "$(date +%s)")
+          xattr -w com.apple.quarantine "0001;${QUARANTINE_TS};Safari;00000000-0000-0000-0000-000000000000" "/tmp/whonow_install_test/WhoNow.app"
+          echo "spctl check with quarantine attribute (simulates Gatekeeper on user machine)..."
+          spctl -a -t execute -vvv "/tmp/whonow_install_test/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper would reject quarantined app — online notarization check is failing. The app CDHash is not resolving on Apple's servers."; exit 1; }
+          rm -rf /tmp/whonow_install_test
           hdiutil detach /Volumes/WhoNow
           shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
           gh release upload "$GITHUB_REF_NAME" "$DMG_NAME" "$DMG_NAME.sha256" --clobber
