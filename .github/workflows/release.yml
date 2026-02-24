@@ -289,7 +289,9 @@ jobs:
           # Gatekeeper accepts it. This is what actually happens on a user's machine and
           # catches online-notarization-check failures that cp -R without quarantine misses.
           QUARANTINE_TS=$(printf '%x' "$(date +%s)")
-          xattr -w com.apple.quarantine "0001;${QUARANTINE_TS};Safari;00000000-0000-0000-0000-000000000000" "/tmp/whonow_install_test/WhoNow.app"
+          # Use 0181 (Chrome-style quarantine flags) not 0001 — real browser downloads set 0181
+          # which triggers stricter Gatekeeper behavior on macOS 26 than the minimal 0001 flag.
+          xattr -w com.apple.quarantine "0181;${QUARANTINE_TS};Chrome;00000000-0000-0000-0000-000000000000" "/tmp/whonow_install_test/WhoNow.app"
           echo "spctl check WITH local staple + quarantine (cp -R path, should pass)..."
           spctl -a -t execute -vvv "/tmp/whonow_install_test/WhoNow.app" || { hdiutil detach /Volumes/WhoNow 2>/dev/null; echo "::error::Gatekeeper rejects quarantined app even with local staple — notarization CDHash not resolving on Apple servers."; exit 1; }
           rm -rf /tmp/whonow_install_test
@@ -311,8 +313,8 @@ jobs:
           fi
           xcrun stapler validate "/tmp/whonow_no_staple_test/WhoNow.app" 2>&1; echo "stapler validate exit after xattr removal: $?"
           QUARANTINE_TS2=$(printf '%x' "$(date +%s)")
-          xattr -w com.apple.quarantine "0001;${QUARANTINE_TS2};Safari;00000000-0000-0000-0000-000000000000" "/tmp/whonow_no_staple_test/WhoNow.app"
-          echo "spctl check WITHOUT local staple + WITH quarantine (mirrors Finder drag-and-drop on user machine)..."
+          xattr -w com.apple.quarantine "0181;${QUARANTINE_TS2};Chrome;00000000-0000-0000-0000-000000000000" "/tmp/whonow_no_staple_test/WhoNow.app"
+          echo "spctl check WITHOUT local staple + WITH quarantine 0181 (mirrors real Chrome download on user machine)..."
           if spctl -a -t execute -vvv "/tmp/whonow_no_staple_test/WhoNow.app"; then
             echo "PASSED: Online notarization check alone is sufficient — Finder drag-and-drop will work for users."
           else
