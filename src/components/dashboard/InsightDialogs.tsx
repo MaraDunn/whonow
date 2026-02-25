@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { format, startOfMonth, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
-  CalendarDays, Users, TrendingUp, AlertCircle, Briefcase, Plus,
+  CalendarDays, Users, TrendingUp, AlertCircle, Briefcase, Plus, CheckCheck, XCircle,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -26,6 +26,7 @@ import {
   useContactedContacts,
   useStaleContacts,
   useClientRatioData,
+  useContactedRatioData,
   useExpandedChartData,
 } from "@/hooks/useInsightContacts";
 import { useBulkSetFollowUpDate, useSetFollowUpDate } from "@/hooks/useFollowUps";
@@ -487,6 +488,107 @@ export function ClientRatioDialog({
               <p className="text-sm text-muted-foreground">
                 {data.clientCount} of {data.totalCount} contact
                 {data.totalCount !== 1 ? "s" : ""} are clients
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Contacted Ratio Dialog ──────────────────────────────────────
+
+interface ContactedRatioDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+const CONTACTED_COLORS = { contacted: "#22c55e", uncontacted: "#f59e0b" };
+
+export function ContactedRatioDialog({
+  open,
+  onOpenChange,
+}: ContactedRatioDialogProps) {
+  const { data, isLoading } = useContactedRatioData();
+
+  const chartData = useMemo(() => {
+    if (!data) return [];
+    return [
+      { label: "Contacted", value: data.contactedClients, fill: CONTACTED_COLORS.contacted },
+      { label: "Uncontacted", value: data.uncontactedClients, fill: CONTACTED_COLORS.uncontacted },
+    ];
+  }, [data]);
+
+  const pct = data ? Math.round(data.ratio * 100) : 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CheckCheck className="h-4 w-4 text-primary" />
+            Contacted vs. Uncontacted
+          </DialogTitle>
+          <DialogDescription>
+            How many of your clients have ever been contacted
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <Skeleton className="h-40 w-full rounded-lg" />
+        ) : data ? (
+          <div className="space-y-4">
+            {/* Progress bar */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{data.contactedClients} contacted</span>
+                <span>{data.uncontactedClients} uncontacted</span>
+              </div>
+              <div className="h-3 w-full rounded-full bg-muted overflow-hidden flex">
+                <div
+                  className="h-full rounded-l-full transition-all duration-500"
+                  style={{
+                    width: `${pct}%`,
+                    backgroundColor: CONTACTED_COLORS.contacted,
+                  }}
+                />
+                <div
+                  className="h-full flex-1 rounded-r-full"
+                  style={{ backgroundColor: CONTACTED_COLORS.uncontacted }}
+                />
+              </div>
+            </div>
+
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 gap-3">
+              {chartData.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center gap-3 rounded-lg border p-3"
+                >
+                  <div
+                    className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${item.fill}20` }}
+                  >
+                    {item.label === "Contacted" ? (
+                      <CheckCheck className="h-4 w-4" style={{ color: item.fill }} />
+                    ) : (
+                      <XCircle className="h-4 w-4" style={{ color: item.fill }} />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-lg font-semibold leading-none">{item.value}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center pb-1">
+              <p className="text-3xl font-bold">{pct}%</p>
+              <p className="text-sm text-muted-foreground">
+                of {data.totalClients} client{data.totalClients !== 1 ? "s" : ""} contacted
               </p>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Users, TrendingUp, AlertCircle, Briefcase, Expand } from "lucide-react";
+import { Users, TrendingUp, AlertCircle, CheckCheck, Expand } from "lucide-react";
 import { useRelationshipInsights } from "@/hooks/useRelationshipInsights";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -7,12 +7,12 @@ import {
   AddedContactsDialog,
   ContactedContactsDialog,
   StaleContactsDialog,
-  ClientRatioDialog,
+  ContactedRatioDialog,
   ExpandedChartDialog,
 } from "@/components/dashboard/InsightDialogs";
 import type { MonthlyBucket } from "@/hooks/useRelationshipInsights";
 
-type ActiveDialog = "added" | "contacted" | "stale" | "ratio" | "chart" | null;
+type ActiveDialog = "added" | "contacted" | "stale" | "contacted-ratio" | "chart" | null;
 
 interface MetricTileProps {
   label: string;
@@ -174,8 +174,8 @@ export function RelationshipInsightsCard({
 
   if (!metrics) return null;
 
-  const clientPct =
-    metrics.totalActive > 0 ? Math.round(metrics.clientRatio * 100) : 0;
+  const totalClients = metrics.contactedCount + metrics.uncontactedCount;
+  const contactedPct = totalClients > 0 ? Math.round((metrics.contactedCount / totalClients) * 100) : 0;
 
   return (
     <div>
@@ -209,11 +209,11 @@ export function RelationshipInsightsCard({
           onClick={() => setActiveDialog("stale")}
         />
         <MetricTile
-          label="Client ratio"
-          value={`${clientPct}%`}
-          subtext={`${metrics.totalActive} total contacts`}
-          icon={<Briefcase className="h-3.5 w-3.5" />}
-          onClick={() => setActiveDialog("ratio")}
+          label="Contacted"
+          value={`${contactedPct}%`}
+          subtext={`${metrics.contactedCount} of ${totalClients} clients`}
+          icon={<CheckCheck className="h-3.5 w-3.5" />}
+          onClick={() => setActiveDialog("contacted-ratio")}
         />
       </div>
 
@@ -255,8 +255,8 @@ export function RelationshipInsightsCard({
           reminderInterval={reminderInterval}
         />
       )}
-      {activeDialog === "ratio" && (
-        <ClientRatioDialog
+      {activeDialog === "contacted-ratio" && (
+        <ContactedRatioDialog
           open
           onOpenChange={(o) => {
             if (!o) closeDialog();

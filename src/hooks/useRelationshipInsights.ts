@@ -20,6 +20,8 @@ export interface RelationshipMetrics {
   staleCount: number;
   clientRatio: number; // 0–1
   totalActive: number;
+  contactedCount: number;
+  uncontactedCount: number;
   monthlyGrowth: MonthlyBucket[];
   topContacted: TopContactedEntry[];
 }
@@ -37,7 +39,7 @@ export const useRelationshipInsights = (reminderInterval: number = 30) => {
       const staleThreshold = new Date(now.getTime() - reminderInterval * 86_400_000).toISOString();
 
       // Run all queries in parallel
-      const [addedRes, contactedRes, staleRes, clientsRes, totalRes, growthRes] =
+      const [addedRes, contactedRes, staleRes, clientsRes, totalRes, growthRes, clientsContactedRes] =
         await Promise.all([
           // Clients added this month
           supabase
@@ -99,10 +101,22 @@ export const useRelationshipInsights = (reminderInterval: number = 30) => {
               new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString()
             )
             .order("created_at", { ascending: true }),
+
+          // Clients with at least one contact (last_contacted_at is set)
+          supabase
+            .from("contacts")
+            .select("id", { count: "exact", head: true })
+            .eq("owner_id", user.id)
+            .is("deleted_at", null)
+            .not("tags", "cs", '{"my-profile"}')
+            .eq("is_client", true)
+            .not("last_contacted_at", "is", null),
         ]);
 
       const totalActive = totalRes.count ?? 0;
       const clientsTotal = clientsRes.count ?? 0;
+      const contactedCount = clientsContactedRes.count ?? 0;
+      const uncontactedCount = clientsTotal - contactedCount;
 
       // Build monthly growth buckets from raw rows
       const bucketMap: Record<string, number> = {};
@@ -130,6 +144,8 @@ export const useRelationshipInsights = (reminderInterval: number = 30) => {
         staleCount: staleRes.count ?? 0,
         clientRatio: totalActive > 0 ? clientsTotal / totalActive : 0,
         totalActive,
+        contactedCount,
+        uncontactedCount,
         monthlyGrowth,
         topContacted: [], // Derived client-side from loaded contacts; no extra query needed
       };

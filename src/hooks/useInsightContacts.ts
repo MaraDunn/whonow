@@ -117,6 +117,50 @@ export function useStaleContacts(reminderInterval: number) {
   });
 }
 
+export interface ContactedRatioData {
+  totalClients: number;
+  contactedClients: number;
+  uncontactedClients: number;
+  ratio: number; // contacted / total
+}
+
+export function useContactedRatioData() {
+  const { user } = useAuth();
+  return useQuery<ContactedRatioData>({
+    queryKey: ["insight-contacts", "contacted-ratio", user?.id],
+    queryFn: async () => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const [totalRes, contactedRes] = await Promise.all([
+        supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("owner_id", user.id)
+          .is("deleted_at", null)
+          .not("tags", "cs", '{"my-profile"}')
+          .eq("is_client", true),
+        supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("owner_id", user.id)
+          .is("deleted_at", null)
+          .not("tags", "cs", '{"my-profile"}')
+          .eq("is_client", true)
+          .not("last_contacted_at", "is", null),
+      ]);
+      const totalClients = totalRes.count ?? 0;
+      const contactedClients = contactedRes.count ?? 0;
+      return {
+        totalClients,
+        contactedClients,
+        uncontactedClients: totalClients - contactedClients,
+        ratio: totalClients > 0 ? contactedClients / totalClients : 0,
+      };
+    },
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+}
+
 export interface ClientRatioData {
   totalCount: number;
   clientCount: number;
