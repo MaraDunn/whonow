@@ -47,9 +47,9 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     period: "month",
     seats: 1,
     features: [
-      "Everything in Starter",
-      "Client management",
-      "Advanced search & filters",
+      "Client Dashboard — relationship analytics, stale contact alerts & follow-up queue",
+      "Expandable insights: contacts added, contacted, client ratio & growth charts",
+      "Advanced search & smart filters",
       "Contact import/export",
       "Priority email support",
     ],

@@ -39,7 +39,7 @@ export const WaitlistPricingSection = () => {
                   <CardTitle className="text-lg">{config.name}</CardTitle>
                   <CardDescription className="h-8">
                     {tierKey === "starter" && "Get started for free"}
-                    {tierKey === "pro" && "For individuals"}
+                    {tierKey === "pro" && "Manage clients like a pro"}
                     {tierKey === "team" && "For small teams"}
                     {tierKey === "business" && "For growing companies"}
                   </CardDescription>
