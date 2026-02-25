@@ -94,7 +94,7 @@ function GrowthChart({ data }: GrowthChartProps) {
   return (
     <div>
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-        Contact Growth (6 months)
+        Client Growth (6 months)
       </p>
       <svg
         viewBox={`0 0 ${width} ${height}`}
@@ -182,27 +182,27 @@ export function RelationshipInsightsCard({
       <div className="mb-3">
         <h3 className="text-sm font-semibold">Relationship Insights</h3>
         <p className="text-xs text-muted-foreground">
-          Overview of your network activity this month
+          Overview of your client activity this month
         </p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricTile
-          label="Added"
+          label="Clients added"
           value={metrics.addedThisMonth}
           subtext="this month"
           icon={<Users className="h-3.5 w-3.5" />}
           onClick={() => setActiveDialog("added")}
         />
         <MetricTile
-          label="Contacted"
+          label="Clients contacted"
           value={metrics.contactedThisMonth}
           subtext="this month"
           icon={<TrendingUp className="h-3.5 w-3.5" />}
           onClick={() => setActiveDialog("contacted")}
         />
         <MetricTile
-          label="Stale"
+          label="Stale clients"
           value={metrics.staleCount}
           subtext={`>${reminderInterval}d no contact`}
           icon={<AlertCircle className="h-3.5 w-3.5" />}
@@ -211,7 +211,7 @@ export function RelationshipInsightsCard({
         <MetricTile
           label="Client ratio"
           value={`${clientPct}%`}
-          subtext={`${metrics.totalActive} total`}
+          subtext={`${metrics.totalActive} total contacts`}
           icon={<Briefcase className="h-3.5 w-3.5" />}
           onClick={() => setActiveDialog("ratio")}
         />

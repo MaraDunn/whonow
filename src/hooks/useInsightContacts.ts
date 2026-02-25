@@ -52,6 +52,7 @@ export function useAddedContacts(from: Date, to: Date) {
         .eq("owner_id", user.id)
         .is("deleted_at", null)
         .not("tags", "cs", '{"my-profile"}')
+        .eq("is_client", true)
         .gte("created_at", from.toISOString())
         .lte("created_at", to.toISOString())
         .order("created_at", { ascending: false })
@@ -76,6 +77,7 @@ export function useContactedContacts(from: Date, to: Date) {
         .eq("owner_id", user.id)
         .is("deleted_at", null)
         .not("tags", "cs", '{"my-profile"}')
+        .eq("is_client", true)
         .gte("last_contacted_at", from.toISOString())
         .lte("last_contacted_at", to.toISOString())
         .order("last_contacted_at", { ascending: false })
@@ -103,6 +105,7 @@ export function useStaleContacts(reminderInterval: number) {
         .eq("owner_id", user.id)
         .is("deleted_at", null)
         .not("tags", "cs", '{"my-profile"}')
+        .eq("is_client", true)
         .or(`last_contacted_at.is.null,last_contacted_at.lte.${threshold}`)
         .order("last_contacted_at", { ascending: true, nullsFirst: true })
         .limit(500);
@@ -187,6 +190,7 @@ export function useExpandedChartData(months: number = 6) {
           .eq("owner_id", user.id)
           .is("deleted_at", null)
           .not("tags", "cs", '{"my-profile"}')
+          .eq("is_client", true)
           .gte("created_at", start.toISOString())
           .order("created_at", { ascending: true }),
         supabase

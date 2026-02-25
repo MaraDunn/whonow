@@ -167,10 +167,10 @@ export function AddedContactsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-4 w-4 text-primary" />
-            Contacts Added
+            Clients Added
           </DialogTitle>
           <DialogDescription>
-            {contacts?.length ?? 0} contact
+            {contacts?.length ?? 0} client
             {(contacts?.length ?? 0) !== 1 ? "s" : ""} added in this period
           </DialogDescription>
         </DialogHeader>
@@ -188,7 +188,7 @@ export function AddedContactsDialog({
           {isLoading ? (
             <LoadingSkeleton />
           ) : !contacts || contacts.length === 0 ? (
-            <EmptyState message="No contacts added in this period" />
+            <EmptyState message="No clients added in this period" />
           ) : (
             <div className="space-y-0.5">
               {contacts.map((c) => (
@@ -234,10 +234,10 @@ export function ContactedContactsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-primary" />
-            Contacts Contacted
+            Clients Contacted
           </DialogTitle>
           <DialogDescription>
-            {contacts?.length ?? 0} contact
+            {contacts?.length ?? 0} client
             {(contacts?.length ?? 0) !== 1 ? "s" : ""} contacted in this period
           </DialogDescription>
         </DialogHeader>
@@ -255,7 +255,7 @@ export function ContactedContactsDialog({
           {isLoading ? (
             <LoadingSkeleton />
           ) : !contacts || contacts.length === 0 ? (
-            <EmptyState message="No contacts reached in this period" />
+            <EmptyState message="No clients reached in this period" />
           ) : (
             <div className="space-y-0.5">
               {contacts.map((c) => (
@@ -319,10 +319,10 @@ export function StaleContactsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-destructive" />
-            Stale Contacts
+            Stale Clients
           </DialogTitle>
           <DialogDescription>
-            {contacts?.length ?? 0} contact
+            {contacts?.length ?? 0} client
             {(contacts?.length ?? 0) !== 1 ? "s" : ""} not reached in over{" "}
             {reminderInterval} days
           </DialogDescription>
@@ -345,7 +345,7 @@ export function StaleContactsDialog({
           {isLoading ? (
             <LoadingSkeleton />
           ) : !contacts || contacts.length === 0 ? (
-            <EmptyState message="No stale contacts — nice work!" />
+            <EmptyState message="No stale clients — nice work!" />
           ) : (
             <div className="space-y-0.5">
               {contacts.map((c) => (
