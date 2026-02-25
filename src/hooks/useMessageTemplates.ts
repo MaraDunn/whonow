@@ -1,4 +1,8 @@
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 export interface MessageTemplate {
   id: string;
@@ -8,70 +12,141 @@ export interface MessageTemplate {
   updatedAt: string;
 }
 
-const STORAGE_KEY = "whonow_message_templates";
+type DbTemplate = {
+  id: string;
+  owner_id: string;
+  name: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
 
-function load(): MessageTemplate[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as MessageTemplate[]) : [];
-  } catch {
-    return [];
-  }
+function mapDb(row: DbTemplate): MessageTemplate {
+  return {
+    id: row.id,
+    name: row.name,
+    body: row.body,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
-function save(templates: MessageTemplate[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
-  } catch {
-    // Silently ignore storage errors
-  }
-}
+const QUERY_KEY = (userId: string | undefined) => [
+  "message-templates",
+  userId,
+];
 
 export function useMessageTemplates() {
-  const [templates, setTemplates] = useState<MessageTemplate[]>(load);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // ── Fetch ──────────────────────────────────────────────────────
+  const { data: templates = [] } = useQuery<MessageTemplate[]>({
+    queryKey: QUERY_KEY(user?.id),
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("message_templates")
+        .select("*")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data as DbTemplate[]).map(mapDb);
+    },
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+
+  // ── Add ────────────────────────────────────────────────────────
+  const addMutation = useMutation({
+    mutationFn: async ({
+      name,
+      body,
+    }: {
+      name: string;
+      body: string;
+    }): Promise<MessageTemplate> => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const { data, error } = await supabase
+        .from("message_templates")
+        .insert({ owner_id: user.id, name: name.trim(), body })
+        .select()
+        .single();
+      if (error) throw error;
+      return mapDb(data as DbTemplate);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY(user?.id) });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to save template: " + error.message);
+    },
+  });
 
   const addTemplate = useCallback(
-    (name: string, body: string): MessageTemplate => {
-      const now = new Date().toISOString();
-      const newTemplate: MessageTemplate = {
-        id: crypto.randomUUID(),
-        name: name.trim(),
-        body,
-        createdAt: now,
-        updatedAt: now,
-      };
-      setTemplates((prev) => {
-        const next = [...prev, newTemplate];
-        save(next);
-        return next;
-      });
-      return newTemplate;
+    (name: string, body: string) => {
+      addMutation.mutate({ name, body });
     },
-    []
+    [addMutation]
   );
+
+  // ── Update ─────────────────────────────────────────────────────
+  const updateMutation = useMutation({
+    mutationFn: async ({
+      id,
+      changes,
+    }: {
+      id: string;
+      changes: Partial<Pick<MessageTemplate, "name" | "body">>;
+    }) => {
+      const { error } = await supabase
+        .from("message_templates")
+        .update({
+          ...(changes.name !== undefined && { name: changes.name.trim() }),
+          ...(changes.body !== undefined && { body: changes.body }),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY(user?.id) });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to update template: " + error.message);
+    },
+  });
 
   const updateTemplate = useCallback(
     (id: string, changes: Partial<Pick<MessageTemplate, "name" | "body">>) => {
-      setTemplates((prev) => {
-        const next = prev.map((t) =>
-          t.id === id
-            ? { ...t, ...changes, updatedAt: new Date().toISOString() }
-            : t
-        );
-        save(next);
-        return next;
-      });
+      updateMutation.mutate({ id, changes });
     },
-    []
+    [updateMutation]
   );
 
-  const deleteTemplate = useCallback((id: string) => {
-    setTemplates((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      save(next);
-      return next;
-    });
-  }, []);
+  // ── Delete ─────────────────────────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("message_templates")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY(user?.id) });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to delete template: " + error.message);
+    },
+  });
+
+  const deleteTemplate = useCallback(
+    (id: string) => {
+      deleteMutation.mutate(id);
+    },
+    [deleteMutation]
+  );
 
   return { templates, addTemplate, updateTemplate, deleteTemplate };
 }
