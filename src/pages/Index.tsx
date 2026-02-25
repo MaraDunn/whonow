@@ -6,6 +6,8 @@ import { ContactGrid } from "@/components/ContactGrid";
 import { Header } from "@/components/Header";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
+import { ClientDashboard } from "@/components/ClientDashboard";
+import type { ClientDashboardTab } from "@/components/ClientDashboard";
 import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { ContactSupportDialog } from "@/components/ContactSupportDialog";
@@ -18,7 +20,6 @@ import { OnboardingTutorial } from "@/components/OnboardingTutorial";
 import { onboardingSteps } from "@/config/onboardingSteps";
 import { SelectionToolbar } from "@/components/SelectionToolbar";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
@@ -119,7 +120,7 @@ const IndexContent = () => {
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [showDirectory, setShowDirectory] = useState(false);
-  const [showClientDirectory, setShowClientDirectory] = useState(false);
+  const [clientView, setClientView] = useState<ClientDashboardTab | null>(null);
   const [ownershipFilter, setOwnershipFilter] = useState<ContactOwnershipFilter>("all");
   const [clientSortOption, setClientSortOption] = useState<ClientSortOption>("oldest-contacted");
   const [selectedClientFolderId, setSelectedClientFolderId] = useState<string | null>(null);
@@ -272,9 +273,12 @@ const IndexContent = () => {
   const personalContactsCount = accuratePersonalCount > 0 ? accuratePersonalCount : fallbackPersonalCount;
   const sharedContactsCount = accurateSharedCount > 0 ? accurateSharedCount : fallbackSharedCount;
 
-  // Client directory: only clients, sorted based on selected sort option
+  // Client directory: only clients (optionally scoped to a client folder), sorted based on selected sort option
   const clientDirectoryContacts = useMemo(() => {
-    const clientsOnly = contacts.filter(c => c.isClient);
+    const clientsOnly = contacts.filter(c =>
+      c.isClient &&
+      (selectedClientFolderId === null || c.folderId === selectedClientFolderId)
+    );
     return [...clientsOnly].sort((a, b) => {
       switch (clientSortOption) {
         case "oldest-contacted":
@@ -299,7 +303,7 @@ const IndexContent = () => {
           return 0;
       }
     });
-  }, [contacts, clientSortOption]);
+  }, [contacts, clientSortOption, selectedClientFolderId]);
 
   // Count of clients for sidebar - use accurate count from database function
   // Only compute fallback if needed
@@ -325,29 +329,29 @@ const IndexContent = () => {
     understoodRoleLabel,
     isTruncated,
   } = useSmartSearch(
-    showDirectory ? filteredTeamContacts : (showClientDirectory ? clientDirectoryContacts : folderFilteredContacts), 
+    showDirectory ? filteredTeamContacts : (clientView !== null ? clientDirectoryContacts : folderFilteredContacts), 
     searchQuery,
-    { contactMarkedVersion }
+    { contactMarkedVersion, scopeToContacts: clientView !== null }
   );
 
   const handleSelectTrash = () => {
     setShowTrash(true);
     setShowDirectory(false);
-    setShowClientDirectory(false);
+    setClientView(null);
     setSelectedFolderId(null);
   };
 
   const handleSelectFolder = (folderId: string | null) => {
     setShowTrash(false);
     setShowDirectory(false);
-    setShowClientDirectory(false);
+    setClientView(null);
     setSelectedFolderId(folderId);
   };
 
   const handleSelectDirectory = () => {
     setShowDirectory(true);
     setShowTrash(false);
-    setShowClientDirectory(false);
+    setClientView(null);
     setSelectedFolderId(null);
     setSelectedTeamFolderId(null);
     // Refetch team contacts to ensure we have the latest data
@@ -355,7 +359,7 @@ const IndexContent = () => {
   };
 
   const handleSelectClientDirectory = () => {
-    setShowClientDirectory(true);
+    setClientView("directory");
     setShowDirectory(false);
     setShowTrash(false);
     setSelectedFolderId(null);
@@ -857,7 +861,7 @@ const IndexContent = () => {
   }, [queryClient]);
 
   return (
-        <div className="min-h-screen bg-background flex w-full overflow-x-hidden">
+        <div className="h-screen bg-background flex w-full overflow-hidden">
           {/* Folder Sidebar */}
           <FolderSidebar
             folders={folders}
@@ -880,7 +884,7 @@ const IndexContent = () => {
             onOwnershipFilterChange={setOwnershipFilter}
             personalContactsCount={personalContactsCount}
             sharedContactsCount={sharedContactsCount}
-            showClientDirectory={showClientDirectory}
+            showClientDirectory={clientView !== null}
             onSelectClientDirectory={handleSelectClientDirectory}
             clientDirectoryCount={clientCount}
             clientFolders={clientFolders}
@@ -896,7 +900,7 @@ const IndexContent = () => {
           />
 
           {/* Main Content */}
-          <div className="flex-1 min-w-0 overflow-x-hidden">
+          <div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto h-screen">
             <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 lg:py-12">
               <Header 
                 contactCount={totalCount} 
@@ -1032,55 +1036,38 @@ const IndexContent = () => {
                     onToggleSelectionMode={handleToggleSelectionMode}
                   />
                 </>
-              ) : showClientDirectory ? (
-                <>
-                  <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-xl sm:text-2xl font-display font-semibold">Client Directory</h2>
-                      <p className="text-muted-foreground mt-1 text-sm sm:text-base">
-                        {filteredContacts.length} client{filteredContacts.length !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    <Select value={clientSortOption} onValueChange={(v) => setClientSortOption(v as ClientSortOption)}>
-                      <SelectTrigger className="w-full sm:w-[220px] shrink-0">
-                        <SelectValue placeholder="Sort by..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="oldest-contacted">Longest since contacted</SelectItem>
-                        <SelectItem value="newest-contacted">Most recently contacted</SelectItem>
-                        <SelectItem value="oldest-added">Longest since added</SelectItem>
-                        <SelectItem value="newest-added">Most recently added</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <ContactGrid
-                    contacts={filteredContacts}
-                    searchQuery={searchQuery}
-                    action={action}
-                    onEditContact={handleEditContact}
-                    onViewContact={handleViewContact}
-                    isTrashView={false}
-                    onDeleteContact={deleteContact}
-                    onRestoreContact={restoreContact}
-                    onPermanentlyDelete={permanentlyDeleteContact}
-                    onEmptyTrash={emptyTrash}
-                    folders={folders}
-                    onUpdateFolder={handleUpdateFolder}
-                    showOwnershipBadge={!!company}
-                    onMarkContacted={updateLastContacted}
-                    onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
-                    selectedContactIds={selectedContactIds}
-                    onSelectContact={handleSelectContact}
-                    onSelectAll={handleSelectAll}
-                    onBulkDelete={handleBulkDelete}
-                    onBulkMoveToFolder={handleBulkMoveToFolder}
-                    onBulkToggleClient={handleBulkToggleClient}
-                    onBulkMarkContacted={handleBulkMarkContacted}
-                    hasClientAccess={hasClientAccess}
-                    selectionMode={selectionMode}
-                    onToggleSelectionMode={handleToggleSelectionMode}
-                  />
-                </>
+              ) : clientView !== null ? (
+                <ClientDashboard
+                  contacts={filteredContacts}
+                  allClientContacts={clientDirectoryContacts}
+                  searchQuery={searchQuery}
+                  action={action}
+                  clientSortOption={clientSortOption}
+                  onClientSortChange={(v) => setClientSortOption(v as ClientSortOption)}
+                  activeTab={clientView}
+                  onTabChange={setClientView}
+                  onEditContact={handleEditContact}
+                  onViewContact={handleViewContact}
+                  onDeleteContact={deleteContact}
+                  onRestoreContact={restoreContact}
+                  onPermanentlyDelete={permanentlyDeleteContact}
+                  onEmptyTrash={emptyTrash}
+                  folders={folders}
+                  onUpdateFolder={handleUpdateFolder}
+                  showOwnershipBadge={!!company}
+                  onMarkContacted={updateLastContacted}
+                  onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
+                  selectedContactIds={selectedContactIds}
+                  onSelectContact={handleSelectContact}
+                  onSelectAll={handleSelectAll}
+                  onBulkDelete={handleBulkDelete}
+                  onBulkMoveToFolder={handleBulkMoveToFolder}
+                  onBulkToggleClient={handleBulkToggleClient}
+                  onBulkMarkContacted={handleBulkMarkContacted}
+                  hasClientAccess={hasClientAccess}
+                  selectionMode={selectionMode}
+                  onToggleSelectionMode={handleToggleSelectionMode}
+                />
               ) : (
                 <ContactGrid
                   contacts={filteredContacts}

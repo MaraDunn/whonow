@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -418,7 +417,7 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
                       : `Select all (${contacts.length})`}
                   </label>
                 </div>
-                <ScrollArea className="max-h-52">
+                <div className="max-h-52 overflow-y-auto">
                   <div className="p-2 space-y-0.5">
                     {contacts.map((contact) => (
                       <label
@@ -451,7 +450,7 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
                       </p>
                     )}
                   </div>
-                </ScrollArea>
+                </div>
               </>
             )}
           </div>
@@ -477,7 +476,7 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
               </p>
             </div>
           ) : (
-            <ScrollArea className="max-h-[480px]">
+            <div className="max-h-[480px] overflow-y-auto">
               <div className="space-y-3 pr-2">
                 {previews.map(({ contact, message }) => (
                   <div key={contact.id} className="border rounded-lg p-3 space-y-2">
@@ -500,7 +499,7 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
                   </div>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </div>
       </div>
