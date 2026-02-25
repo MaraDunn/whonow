@@ -26,7 +26,27 @@ export const FeatureGate = ({
   fallback,
   showUpgradePrompt = true,
 }: FeatureGateProps) => {
-  const { canAccessFeature, createCheckout, tier } = useSubscription();
+  const { canAccessFeature, createCheckout, isLoading } = useSubscription();
+
+  const getMinimumTier = () => {
+    if (feature === "team_features") return "team";
+    if (feature === "advanced_analytics" || feature === "api_access" || feature === "custom_branding") return "business";
+    return "pro";
+  };
+
+  const minimumTier = getMinimumTier();
+  const tierConfig = TIER_CONFIGS[minimumTier];
+  const isContactSalesFeature = feature === "sso" || feature === "custom_integrations";
+
+  const [salesDialogOpen, setSalesDialogOpen] = useState(false);
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+
+  // Don't render the locked overlay while subscription data is still loading —
+  // this prevents a Rules of Hooks violation caused by changing hook call count
+  // when the tier resolves from the default "starter" to the user's actual tier.
+  if (isLoading) {
+    return null;
+  }
 
   if (canAccessFeature(feature)) {
     return <>{children}</>;
@@ -39,20 +59,6 @@ export const FeatureGate = ({
   if (!showUpgradePrompt) {
     return null;
   }
-
-  const isContactSalesFeature = feature === "sso" || feature === "custom_integrations";
-
-  // Determine minimum self-serve tier needed for this feature
-  const getMinimumTier = () => {
-    if (feature === "team_features") return "team";
-    if (feature === "advanced_analytics" || feature === "api_access") return "business";
-    return "pro";
-  };
-
-  const minimumTier = getMinimumTier();
-  const tierConfig = TIER_CONFIGS[minimumTier];
-  const [salesDialogOpen, setSalesDialogOpen] = useState(false);
-  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
 
   const handleContactSalesClick = () => {
     setUpgradeDialogOpen(false);
