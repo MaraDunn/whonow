@@ -757,13 +757,59 @@ export const useContacts = (options?: UseContactsListOptions) => {
       if (error) throw error;
       return id;
     },
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["contacts"] });
+      await queryClient.cancelQueries({ queryKey: ["team-directory-contacts"] });
+
+      const previousContacts = queryClient.getQueriesData({ queryKey: ["contacts"] });
+      const previousTeamContacts = queryClient.getQueriesData({ queryKey: ["team-directory-contacts"] });
+
+      const now = new Date().toISOString();
+
+      const updateContact = (c: Contact) =>
+        c?.id === id ? { ...c, lastContactedAt: now, followUpDate: null } : c;
+
+      const applyUpdate = (old: unknown) => {
+        if (!old) return old;
+        // Infinite query shape: { pages: ContactWithMeta[][], pageParams: unknown[] }
+        if (typeof old === "object" && "pages" in (old as object) && Array.isArray((old as { pages: unknown[] }).pages)) {
+          const paged = old as { pages: Contact[][]; pageParams: unknown[] };
+          return {
+            ...paged,
+            pages: paged.pages.map((page) =>
+              Array.isArray(page) ? page.map(updateContact) : page
+            ),
+          };
+        }
+        // Flat array shape
+        if (Array.isArray(old)) {
+          return old.map(updateContact);
+        }
+        return old;
+      };
+
+      queryClient.setQueriesData({ queryKey: ["contacts"] }, applyUpdate);
+      queryClient.setQueriesData({ queryKey: ["team-directory-contacts"] }, applyUpdate);
+
+      return { previousContacts, previousTeamContacts };
+    },
     onSuccess: (id) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
       setContactMarkedVersion((v) => v + 1);
       logActivity(id, "contacted", { date: new Date().toISOString() });
     },
-    onError: (error) => {
+    onError: (error, _id, context) => {
+      if (context?.previousContacts) {
+        context.previousContacts.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+      if (context?.previousTeamContacts) {
+        context.previousTeamContacts.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
       toast.error("Failed to update contact: " + error.message);
     },
   });
