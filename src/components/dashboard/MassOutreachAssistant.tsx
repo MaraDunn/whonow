@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Copy, Check, MessageSquarePlus, ChevronDown, ChevronUp, Users,
-  BookmarkPlus, Pencil, Trash2, Save,
+  BookmarkPlus, Pencil, Trash2, Save, Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -85,6 +85,31 @@ function CopyButton({ text }: CopyButtonProps) {
       ) : (
         <Copy className="h-3.5 w-3.5" />
       )}
+    </Button>
+  );
+}
+
+interface EmailButtonProps {
+  email: string;
+  subject?: string;
+  body: string;
+}
+
+function EmailButton({ email, subject = "", body }: EmailButtonProps) {
+  const handleEmail = () => {
+    const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailto, "_blank");
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7 shrink-0"
+      onClick={handleEmail}
+      title="Open in email client"
+    >
+      <Mail className="h-3.5 w-3.5" />
     </Button>
   );
 }
@@ -490,7 +515,10 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
                         </Avatar>
                         <p className="text-xs font-medium truncate">{contact.name}</p>
                       </div>
-                      <CopyButton text={message} />
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <EmailButton email={contact.email} body={message} />
+                        <CopyButton text={message} />
+                      </div>
                     </div>
                     <Separator />
                     <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
