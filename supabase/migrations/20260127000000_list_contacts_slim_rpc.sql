@@ -24,7 +24,11 @@ RETURNS TABLE(
   owner_id uuid,
   last_contacted_at timestamptz,
   is_client boolean,
-  company_id uuid
+  company_id uuid,
+  follow_up_date date,
+  reminder_interval_override integer,
+  preferred_contact_interval_days integer,
+  client_weight numeric
 )
 LANGUAGE sql
 STABLE
@@ -39,7 +43,9 @@ AS $$
   ),
   owned AS (
     SELECT c.id, c.name, c.email, c.phone, c.company, c.role, c.avatar, c.folder_id, c.tags,
-           c.created_at, c.is_shared, c.owner_id, c.last_contacted_at, c.is_client, c.company_id
+           c.created_at, c.is_shared, c.owner_id, c.last_contacted_at, c.is_client, c.company_id,
+           c.follow_up_date, c.reminder_interval_override,
+           c.preferred_contact_interval_days, c.client_weight
     FROM public.contacts c, lim
     WHERE c.deleted_at IS NULL
       AND c.owner_id = _user_id
@@ -53,7 +59,9 @@ AS $$
   ),
   shared AS (
     SELECT c.id, c.name, c.email, c.phone, c.company, c.role, c.avatar, c.folder_id, c.tags,
-           c.created_at, c.is_shared, c.owner_id, c.last_contacted_at, c.is_client, c.company_id
+           c.created_at, c.is_shared, c.owner_id, c.last_contacted_at, c.is_client, c.company_id,
+           c.follow_up_date, c.reminder_interval_override,
+           c.preferred_contact_interval_days, c.client_weight
     FROM public.contacts c, user_company uc, lim
     WHERE c.deleted_at IS NULL
       AND c.company_id = uc.company_id

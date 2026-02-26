@@ -24,8 +24,8 @@ import { Button } from "@/components/ui/button";
 import { useResponsiveView } from "@/hooks/use-mobile";
 
 const VIRTUALIZE_THRESHOLD = 500;
-// Match desktop card row height (28rem ≈ 448px) so virtualized rows don't overlap before measurement.
-const ROW_HEIGHT_ESTIMATE = 460;
+// Match desktop card row height (24rem ≈ 384px) so virtualized rows don't overlap before measurement.
+const ROW_HEIGHT_ESTIMATE = 400;
 // Compact (mobile/tablet) cards are single-row ~60–80px; use slightly larger for expanded state.
 const COMPACT_ROW_HEIGHT_ESTIMATE = 90;
 const DESKTOP_CARD_MIN_WIDTH_PX = 280; // Reduced to allow 3+ cards per row
@@ -181,7 +181,7 @@ export function ContactGrid({
   const gridClasses = useMemo(() => 
     isCompactMode
       ? "grid grid-cols-1 sm:grid-cols-2 gap-0 sm:gap-3 items-stretch"
-      : "grid w-full min-w-0 gap-4 sm:gap-5 lg:gap-6 items-stretch auto-rows-[28rem] grid-cols-[repeat(auto-fill,minmax(280px,1fr))]",
+      : "grid w-full min-w-0 gap-4 sm:gap-5 lg:gap-6 items-stretch auto-rows-[24rem] grid-cols-[repeat(auto-fill,minmax(280px,1fr))]",
     [isCompactMode]
   );
 
@@ -190,7 +190,7 @@ export function ContactGrid({
     () =>
       isCompactMode
         ? "min-h-0 overflow-hidden rounded-xl mb-4 last:mb-0 sm:mb-0"
-        : "min-h-[28rem] h-full overflow-hidden rounded-xl sm:rounded-2xl",
+        : "min-h-[24rem] h-full overflow-hidden rounded-xl sm:rounded-2xl",
     [isCompactMode]
   );
 

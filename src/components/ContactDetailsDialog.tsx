@@ -1,6 +1,11 @@
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, FileDown, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera, MessageSquare, Video, Sparkles, Zap } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, FileDown, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera, MessageSquare, Video, Sparkles, Zap, CalendarClock, Activity } from "lucide-react";
+import { RelationshipHealthBadge } from "@/components/RelationshipHealthBadge";
+import { computeHealthScore } from "@/utils/relationshipHealth";
+import { useSetFollowUpDate } from "@/hooks/useFollowUps";
+import { Calendar } from "@/components/ui/calendar";
+import { format, parseISO } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +44,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
+import { ContactActivityTimeline } from "@/components/ContactActivityTimeline";
 import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
 import { useState, useEffect, useRef } from "react";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
@@ -81,6 +87,60 @@ function CollapsibleSection({ title, open: isOpen, onOpenChange: setOpen, childr
         {children}
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function FollowUpDateRow({ contactId, followUpDate }: { contactId: string; followUpDate?: string }) {
+  const [open, setOpen] = useState(false);
+  const setFollowUpDate = useSetFollowUpDate();
+
+  const label = followUpDate
+    ? `Follow-up: ${format(parseISO(followUpDate), "MMM d, yyyy")}`
+    : "Set follow-up date";
+
+  const today = new Date().toISOString().split("T")[0];
+  const isOverdue = followUpDate && followUpDate < today;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className={cn(
+          "flex items-center gap-1.5 text-xs transition-colors hover:text-foreground",
+          followUpDate
+            ? isOverdue
+              ? "text-destructive font-medium"
+              : "text-muted-foreground"
+            : "text-muted-foreground hover:text-primary"
+        )}>
+          <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+          <span>{label}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={followUpDate ? parseISO(followUpDate) : undefined}
+          onSelect={(date) => {
+            setFollowUpDate.mutate({ id: contactId, date: date ? format(date, "yyyy-MM-dd") : null });
+            setOpen(false);
+          }}
+          initialFocus
+        />
+        {followUpDate && (
+          <div className="p-2 border-t">
+            <button
+              className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-1 transition-colors"
+              onClick={() => {
+                setFollowUpDate.mutate({ id: contactId, date: null });
+                setOpen(false);
+              }}
+            >
+              Clear follow-up
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -155,12 +215,16 @@ export function ContactDetailsDialog({
   const [detectedBusinessName, setDetectedBusinessName] = useState<string | undefined>(undefined);
   const [detectedBusinessType, setDetectedBusinessType] = useState<string | undefined>(undefined);
 
+  // Client settings
+  const [preferredContactIntervalDays, setPreferredContactIntervalDays] = useState<number>(30);
+
   // Accordion states
   const [contactOpen, setContactOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
   const [keywordsOpen, setKeywordsOpen] = useState(false);
   const [addressOpen, setAddressOpen] = useState(false);
   const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
 
   // Check Slack connection status when dialog opens (non-blocking)
   useEffect(() => {
@@ -215,6 +279,7 @@ export function ContactDetailsDialog({
     setBusinessType(contactData.businessType);
     setDetectedBusinessName(undefined);
     setDetectedBusinessType(undefined);
+    setPreferredContactIntervalDays(contactData.preferredContactIntervalDays ?? 30);
     setEditedContact(contactData);
   };
 
@@ -417,6 +482,9 @@ export function ContactDetailsDialog({
       longitude,
       businessName,
       businessType,
+      preferredContactIntervalDays: contact.isClient
+        ? Math.max(7, Math.min(180, Math.round(preferredContactIntervalDays)))
+        : undefined,
     };
 
     onSave(updatedContact);
@@ -839,6 +907,40 @@ export function ContactDetailsDialog({
                 </div>
               )}
 
+              {/* Client Settings - only shown when isClient */}
+              {contact?.isClient && (
+                <div className="p-3 sm:p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Activity className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span className="text-sm sm:text-xs font-semibold text-foreground">Client Health Settings</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-preferred-interval" className="text-sm sm:text-xs font-medium">
+                      Preferred Contact Interval (Days)
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="edit-preferred-interval"
+                        type="number"
+                        min={7}
+                        max={180}
+                        step={1}
+                        value={preferredContactIntervalDays}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          if (!isNaN(v)) setPreferredContactIntervalDays(Math.max(7, Math.min(180, v)));
+                        }}
+                        className="h-9 sm:h-8 w-24 text-base sm:text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground">days (7–180)</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      How often you aim to contact this client. Used to compute relationship health.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Address Accordion */}
               <CollapsibleSection title="Address" open={addressOpen} onOpenChange={setAddressOpen}>
                 {navigator.geolocation && (
@@ -1057,6 +1159,12 @@ export function ContactDetailsDialog({
                         Client
                       </span>
                     )}
+                    {contact.isClient && (() => {
+                      const h = computeHealthScore(contact, 0);
+                      return (
+                        <RelationshipHealthBadge score={h.score} status={h.status} />
+                      );
+                    })()}
                     {showOwnershipBadge && contact.isShared && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium">
                         <Users className="h-3 w-3" />
@@ -1081,6 +1189,9 @@ export function ContactDetailsDialog({
                       {lastContactedText || "Never contacted"}
                     </span>
                   </div>
+
+                  {/* Follow-up date */}
+                  <FollowUpDateRow contactId={contact.id} followUpDate={contact.followUpDate} />
                 </div>
               </div>
 
@@ -1292,6 +1403,11 @@ export function ContactDetailsDialog({
                 ) : (
                   <p className="text-xs text-muted-foreground">No address information available</p>
                 )}
+              </CollapsibleSection>
+
+              {/* Activity Timeline */}
+              <CollapsibleSection title="Activity" open={activityOpen} onOpenChange={setActivityOpen}>
+                <ContactActivityTimeline contactId={contact?.id} />
               </CollapsibleSection>
             </>
           )}

@@ -7,6 +7,24 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { normalizeEmail, normalizePhone, findDuplicateContacts } from "@/utils/duplicateDetection";
 import { devLog } from "@/lib/devLog";
+import type { ActivityType } from "@/hooks/useActivityLog";
+
+/** Fire-and-forget activity log insert. Never throws — errors are silently ignored so they don't block UI. */
+async function logActivity(
+  contactId: string,
+  activityType: ActivityType,
+  metadata?: Record<string, unknown>
+) {
+  try {
+    await supabase.from("activity_log").insert({
+      contact_id: contactId,
+      activity_type: activityType,
+      metadata: metadata ?? null,
+    });
+  } catch {
+    // Silently ignore — activity logging must never break primary mutations
+  }
+}
 
 /** First page size: smaller so first paint is fast. */
 const CONTACTS_INITIAL_PAGE_SIZE = 24;
@@ -44,6 +62,10 @@ type DbContact = {
   longitude: number | null;
   business_name: string | null;
   business_type: string | null;
+  follow_up_date: string | null;
+  reminder_interval_override: number | null;
+  preferred_contact_interval_days: number | null;
+  client_weight: number | null;
 };
 
 interface ContactWithMeta extends Contact {
@@ -51,6 +73,10 @@ interface ContactWithMeta extends Contact {
   ownerId?: string;
   lastContactedAt?: string;
   isClient?: boolean;
+  followUpDate?: string;
+  reminderIntervalOverride?: number;
+  preferredContactIntervalDays?: number;
+  clientWeight?: number;
 }
 
 const mapDbToContact = (db: DbContact): ContactWithMeta => ({
@@ -79,6 +105,10 @@ const mapDbToContact = (db: DbContact): ContactWithMeta => ({
   longitude: db.longitude || undefined,
   businessName: db.business_name || undefined,
   businessType: db.business_type || undefined,
+  followUpDate: db.follow_up_date || undefined,
+  reminderIntervalOverride: db.reminder_interval_override ?? undefined,
+  preferredContactIntervalDays: db.preferred_contact_interval_days ?? undefined,
+  clientWeight: db.client_weight ?? undefined,
 });
 
 const mapContactToDb = (
@@ -431,6 +461,8 @@ export const useContacts = (options?: UseContactsListOptions) => {
         longitude: contact.longitude || null,
         business_name: contact.businessName || null,
         business_type: contact.businessType || null,
+        preferred_contact_interval_days: contact.preferredContactIntervalDays ?? null,
+        client_weight: contact.clientWeight ?? null,
       };
       
       // Only update sharing status if provided
@@ -720,14 +752,16 @@ export const useContacts = (options?: UseContactsListOptions) => {
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from("contacts")
-        .update({ last_contacted_at: new Date().toISOString() })
+        .update({ last_contacted_at: new Date().toISOString(), follow_up_date: null })
         .eq("id", id);
       if (error) throw error;
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (id) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
       setContactMarkedVersion((v) => v + 1);
+      logActivity(id, "contacted", { date: new Date().toISOString() });
     },
     onError: (error) => {
       toast.error("Failed to update contact: " + error.message);
@@ -856,6 +890,7 @@ export const useContacts = (options?: UseContactsListOptions) => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       toast.success(variables.isClient ? "Marked as client" : "Removed from clients");
+      logActivity(variables.id, "client_toggled", { is_client: variables.isClient });
     },
     onError: (error, variables, context) => {
       // Rollback on error

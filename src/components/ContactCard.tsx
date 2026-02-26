@@ -1,13 +1,15 @@
-import React from "react";
+import React, { useState as useStateReact } from "react";
 import { Contact } from "@/types/contact";
 import { Folder } from "@/types/folder";
-import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, Share2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown, Check, FileDown, Video } from "lucide-react";
+import { Mail, Phone, Building2, Briefcase, MessageSquare, Trash2, Share2, RotateCcw, Folder as FolderIcon, User, Users, UserCircle, Clock, Star, ChevronDown, Check, FileDown, Video, CalendarClock } from "lucide-react";
 import { ActionType } from "@/hooks/useActionSearch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { LockedFeatureButton, dialogJustClosed } from "@/components/LockedFeatureButton";
+import { useSetFollowUpDate } from "@/hooks/useFollowUps";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
@@ -25,12 +27,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { RelationshipHealthBadge } from "@/components/RelationshipHealthBadge";
+import { computeHealthScore } from "@/utils/relationshipHealth";
 
-// Name block: fixed height for two lines + room for descenders so badges never overlap
-const NAME_BLOCK_H_DESKTOP = "3.25rem";
+// Name block: text-xl name + optional shared/personal badge beneath
+const NAME_BLOCK_H_DESKTOP = "3.5rem";
 const NAME_BLOCK_H_COMPACT = "2.25rem";
 // Card height: single source of truth; grid row and card use this so cards never overlap
-const CARD_H_DESKTOP = "28rem";
+const CARD_H_DESKTOP = "24rem";
 
 // Helper to format last contacted time
 function formatLastContacted(lastContactedAt?: string): string | null {
@@ -74,6 +78,61 @@ interface ContactCardProps {
   isSelected?: boolean;
   onSelect?: (selected: boolean) => void;
   selectionMode?: boolean;
+}
+
+function CardFollowUpButton({ contactId, followUpDate }: { contactId: string; followUpDate?: string }) {
+  const [open, setOpen] = useStateReact(false);
+  const setFollowUpDate = useSetFollowUpDate();
+  const today = new Date().toISOString().split("T")[0];
+  const isOverdue = followUpDate && followUpDate < today;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+          className={cn(
+            "flex-1 inline-flex items-center justify-center gap-1.5 text-xs h-8 px-2 min-w-0 rounded-full border font-medium transition-colors",
+            followUpDate
+              ? isOverdue
+                ? "border-destructive/50 text-destructive bg-destructive/5 hover:bg-destructive/10"
+                : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              : "border-border text-muted-foreground/50 hover:text-muted-foreground hover:border-border"
+          )}
+        >
+          <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">
+            {followUpDate ? format(parseISO(followUpDate), "MMM d") : "Follow-up"}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="end" onClick={(e) => e.stopPropagation()}>
+        <Calendar
+          mode="single"
+          selected={followUpDate ? parseISO(followUpDate) : undefined}
+          onSelect={(date) => {
+            setFollowUpDate.mutate({ id: contactId, date: date ? format(date, "yyyy-MM-dd") : null });
+            setOpen(false);
+          }}
+          initialFocus
+        />
+        {followUpDate && (
+          <div className="p-2 border-t">
+            <button
+              className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-1 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFollowUpDate.mutate({ id: contactId, date: null });
+                setOpen(false);
+              }}
+            >
+              Clear follow-up
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 const ContactCardComponent = function ContactCard({ 
@@ -139,6 +198,12 @@ const ContactCardComponent = function ContactCard({
     formatLastContacted(contact.lastContactedAt),
     [contact.lastContactedAt]
   );
+
+  // Lazily compute health score for client contacts only (O(1), no network calls)
+  const healthResult = React.useMemo(() => {
+    if (!contact.isClient) return null;
+    return computeHealthScore(contact, 0);
+  }, [contact]);
 
   const handleAction = React.useCallback((type: ActionType) => {
     if (!type) return;
@@ -370,6 +435,9 @@ const ContactCardComponent = function ContactCard({
               <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-amber-500/10 text-amber-600" title="Client">
                 <Star className="h-2.5 w-2.5 fill-current" />
               </span>
+            )}
+            {healthResult && (
+              <RelationshipHealthBadge score={healthResult.score} status={healthResult.status} variant="icon" />
             )}
             {showOwnershipBadge && (
               contact.isShared ? (
@@ -831,57 +899,23 @@ const ContactCardComponent = function ContactCard({
           </div>
         ) : null}
       </div>
-      <div className="flex items-start gap-4 shrink-0">
+      {/* ── Header row: avatar + name + action icons ── */}
+      <div className="flex items-start gap-3 shrink-0">
         <div className="relative flex-shrink-0">
-          <div className="w-14 h-14 rounded-xl overflow-hidden gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-lg group-hover:scale-105 transition-transform duration-300">
+          <div className="w-12 h-12 rounded-xl overflow-hidden gradient-hero flex items-center justify-center text-primary-foreground font-display font-semibold text-base group-hover:scale-105 transition-transform duration-300">
             {initials}
           </div>
           {!isTrashView && (
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-card" />
+            <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-card" />
           )}
         </div>
 
-        <div className="flex-1 min-w-0 flex flex-col overflow-visible">
-          {/* Name: fixed height, overflow clipped here only */}
-          <div className="w-full min-w-0 shrink-0 overflow-hidden" style={{ height: NAME_BLOCK_H_DESKTOP }}>
-            <h3 className="font-display font-semibold text-lg text-foreground line-clamp-2 break-words leading-snug group-hover:text-primary transition-colors" title={contact.name}>
-              {contact.name}
-            </h3>
-          </div>
-          
-          {/* Company - always reserve space, appears directly under name */}
-          <div className="flex items-center gap-1.5 min-w-0 mt-2 shrink-0 overflow-hidden" style={{ minHeight: '20px' }}>
-            <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            {contact.company ? (
-              <span className="text-sm text-foreground truncate">{contact.company}</span>
-            ) : (
-              <span className="text-sm text-muted-foreground/40 italic">No company</span>
-            )}
-          </div>
-          
-          {/* Role - always reserve space */}
-          <div className="flex items-center gap-1.5 min-w-0 mt-3 shrink-0 overflow-hidden" style={{ minHeight: '20px' }}>
-            <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            {contact.role ? (
-              <span className="text-sm text-foreground truncate">{contact.role}</span>
-            ) : (
-              <span className="text-sm text-muted-foreground/40 italic">No role</span>
-            )}
-          </div>
-          
-          {/* Timestamp / metadata - always reserve space */}
-          <div className="flex items-center gap-1.5 min-w-0 mt-2 shrink-0" style={{ minHeight: '20px' }}>
-            <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            {lastContactedText ? (
-              <span className="text-sm text-muted-foreground">{lastContactedText}</span>
-            ) : (
-              <span className="text-sm text-muted-foreground/40 italic">Never contacted</span>
-            )}
-          </div>
-          
-          {/* Shared/Personal badge - show if enabled */}
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center" style={{ height: NAME_BLOCK_H_DESKTOP }}>
+          <h3 className="font-display font-semibold text-xl text-foreground truncate group-hover:text-primary transition-colors leading-tight w-full" title={contact.name}>
+            {contact.name}
+          </h3>
           {showOwnershipBadge && (
-            <div className="mt-2 shrink-0">
+            <div className="mt-0.5">
               {contact.isShared ? (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent/50 text-accent-foreground text-xs font-medium" title="Shared contact">
                   <Users className="h-3 w-3 shrink-0" />
@@ -897,9 +931,9 @@ const ContactCardComponent = function ContactCard({
           )}
         </div>
 
-        {/* Share and Delete buttons — grouped close together */}
+        {/* Share and Delete buttons */}
         {!isTrashView && (onShareToSlack || onShareToTeams || onExportContact || onDelete) && (
-          <div className="flex items-center gap-0">
+          <div className="flex items-center gap-0 flex-shrink-0">
             {(onShareToSlack || onShareToTeams || onExportContact) && (
               <DropdownMenu>
                 <Tooltip>
@@ -908,10 +942,10 @@ const ContactCardComponent = function ContactCard({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground -mr-px"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Share2 className="h-4 w-4" />
+                        <Share2 className="h-3.5 w-3.5" />
                       </Button>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
@@ -945,13 +979,13 @@ const ContactCardComponent = function ContactCard({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                     onClick={(e) => {
                       e.stopPropagation();
                       onDelete();
                     }}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top">Delete</TooltipContent>
@@ -961,19 +995,57 @@ const ContactCardComponent = function ContactCard({
         )}
       </div>
 
-      {/* Contact details — always show all rows to maintain consistent layout */}
+      {/* ── 2-column metadata grid: Company | Role, Last contacted | Health/Shared ── */}
       {!isTrashView && (
-        <div className="mt-6 space-y-3 flex-1 min-h-0">
-          {/* Phone row - always present */}
-          <div className="flex items-center gap-2 min-w-0" style={{ minHeight: '24px' }}>
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 shrink-0">
+          {/* Col 1: Company */}
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {contact.company ? (
+              <span className="text-xs text-foreground truncate">{contact.company}</span>
+            ) : (
+              <span className="text-xs text-muted-foreground/40 italic">No company</span>
+            )}
+          </div>
+
+          {/* Col 2: Role */}
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {contact.role ? (
+              <span className="text-xs text-foreground truncate">{contact.role}</span>
+            ) : (
+              <span className="text-xs text-muted-foreground/40 italic">No role</span>
+            )}
+          </div>
+
+          {/* Col 1: Last contacted */}
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {lastContactedText ? (
+              <span className="text-xs text-muted-foreground truncate">{lastContactedText}</span>
+            ) : (
+              <span className="text-xs text-muted-foreground/40 italic">Never contacted</span>
+            )}
+          </div>
+
+          {/* Col 2: Health badge (clients only) */}
+          <div className="flex items-center min-w-0">
+            {healthResult && (
+              <RelationshipHealthBadge score={healthResult.score} status={healthResult.status} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Phone & Email: full-width single-column rows ── */}
+      {!isTrashView && (
+        <div className="mt-3 space-y-2 flex-1 min-h-0">
+          <div className="flex items-center gap-2 min-w-0">
             <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
             {contact.phone ? (
               <a
                 href={`tel:${contact.phone}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMarkContacted?.();
-                }}
+                onClick={(e) => { e.stopPropagation(); onMarkContacted?.(); }}
                 className="text-sm text-foreground hover:text-primary transition-colors truncate"
               >
                 {contact.phone}
@@ -982,17 +1054,12 @@ const ContactCardComponent = function ContactCard({
               <span className="text-sm text-muted-foreground/40 italic">No phone</span>
             )}
           </div>
-
-          {/* Email row - always present */}
-          <div className="flex items-center gap-2 min-w-0" style={{ minHeight: '24px' }}>
+          <div className="flex items-center gap-2 min-w-0">
             <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
             {contact.email ? (
               <a
                 href={`mailto:${contact.email}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMarkContacted?.();
-                }}
+                onClick={(e) => { e.stopPropagation(); onMarkContacted?.(); }}
                 className="text-sm text-foreground hover:text-primary transition-colors truncate"
               >
                 {contact.email}
@@ -1004,18 +1071,18 @@ const ContactCardComponent = function ContactCard({
         </div>
       )}
 
-      {/* Action buttons row - show for non-trash view */}
+      {/* ── Action buttons ── */}
       {!isTrashView && (onMarkContacted || onToggleClient) && (
-        <div className="mt-8 flex gap-2 shrink-0">
+        <div className="mt-4 flex gap-1.5 shrink-0">
           {onToggleClient && (
             hasClientAccess ? (
               <Button
                 variant={contact.isClient ? "default" : "outline"}
-                size="default"
+                size="sm"
                 className={cn(
-                  "flex-1 text-sm h-10 px-4 min-w-0 justify-center rounded-full font-medium",
-                  contact.isClient 
-                    ? "bg-amber-500 hover:bg-amber-600 text-white border-0" 
+                  "flex-1 text-xs h-8 px-2 min-w-0 justify-center rounded-full font-medium",
+                  contact.isClient
+                    ? "bg-amber-500 hover:bg-amber-600 text-white border-0"
                     : "border-border text-foreground"
                 )}
                 onClick={(e) => {
@@ -1023,17 +1090,17 @@ const ContactCardComponent = function ContactCard({
                   onToggleClient(!contact.isClient);
                 }}
               >
-                <Star className={cn("h-4 w-4 mr-2 flex-shrink-0", contact.isClient && "fill-current")} />
+                <Star className={cn("h-3.5 w-3.5 mr-1.5 flex-shrink-0", contact.isClient && "fill-current")} />
                 <span className="truncate">Client</span>
               </Button>
             ) : (
               <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                 <Button
                   variant="outline"
-                  size="default"
-                  className="w-full text-sm h-10 px-4 opacity-70 justify-center rounded-full border-border text-foreground"
+                  size="sm"
+                  className="w-full text-xs h-8 px-2 opacity-70 justify-center rounded-full border-border text-foreground"
                 >
-                  <Star className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <Star className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />
                   <span className="truncate">Client</span>
                 </Button>
               </LockedFeatureButton>
@@ -1043,28 +1110,31 @@ const ContactCardComponent = function ContactCard({
             hasClientAccess ? (
               <Button
                 variant="outline"
-                size="default"
-                className="flex-1 text-sm h-10 px-4 min-w-0 justify-center rounded-full border-border text-muted-foreground font-medium"
+                size="sm"
+                className="flex-1 text-xs h-8 px-2 min-w-0 justify-center rounded-full border-border text-muted-foreground font-medium"
                 onClick={(e) => {
                   e.stopPropagation();
                   onMarkContacted();
                 }}
               >
-                <Clock className="h-4 w-4 mr-2 flex-shrink-0 text-muted-foreground" />
+                <Clock className="h-3.5 w-3.5 mr-1.5 flex-shrink-0 text-muted-foreground" />
                 <span className="truncate">Contacted</span>
               </Button>
             ) : (
               <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                 <Button
                   variant="outline"
-                  size="default"
-                  className="w-full text-sm h-10 px-4 opacity-70 justify-center rounded-full border-border text-muted-foreground"
+                  size="sm"
+                  className="w-full text-xs h-8 px-2 opacity-70 justify-center rounded-full border-border text-muted-foreground"
                 >
-                  <Clock className="h-4 w-4 mr-2 flex-shrink-0 text-muted-foreground" />
+                  <Clock className="h-3.5 w-3.5 mr-1.5 flex-shrink-0 text-muted-foreground" />
                   <span className="truncate">Contacted</span>
                 </Button>
               </LockedFeatureButton>
             )
+          )}
+          {hasClientAccess && (
+            <CardFollowUpButton contactId={contact.id} followUpDate={contact.followUpDate} />
           )}
         </div>
       )}
