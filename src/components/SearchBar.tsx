@@ -6,11 +6,12 @@ import { devLog } from "@/lib/devLog";
 interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
+  onEnter?: () => void;
   placeholder?: string;
   isLoading?: boolean;
 }
 
-export function SearchBar({ value, onChange, placeholder = "Search contacts...", isLoading = false }: SearchBarProps) {
+export function SearchBar({ value, onChange, onEnter, placeholder = "Search contacts...", isLoading = false }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   const isComposingRef = useRef(false);
@@ -41,13 +42,16 @@ export function SearchBar({ value, onChange, placeholder = "Search contacts...",
         lastEmittedRef.current = "";
         onChange("");
       }
+      if (e.key === "Enter" && document.activeElement === inputRef.current) {
+        onEnter?.();
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onChange]);
+  }, [onChange, onEnter]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const raw = e.currentTarget.value;

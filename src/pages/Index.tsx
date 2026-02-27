@@ -933,6 +933,11 @@ const IndexContent = () => {
                   <SearchBar
                     value={searchQuery}
                     onChange={setSearchQuery}
+                    onEnter={() => {
+                      if (clientView === "overview" || clientView === "outreach") {
+                        setClientView("directory");
+                      }
+                    }}
                     placeholder="Try 'Who handles marketing?' or 'email sarah'..."
                     isLoading={searchLoading}
                   />
