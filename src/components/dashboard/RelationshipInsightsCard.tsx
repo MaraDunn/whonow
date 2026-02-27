@@ -1,18 +1,21 @@
 import { useState, useMemo } from "react";
-import { Users, TrendingUp, AlertCircle, CheckCheck, Expand } from "lucide-react";
+import { Users, TrendingUp, AlertCircle, Heart, Expand, Settings2 } from "lucide-react";
 import { useRelationshipInsights } from "@/hooks/useRelationshipInsights";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   AddedContactsDialog,
   ContactedContactsDialog,
   StaleContactsDialog,
-  ContactedRatioDialog,
+  HealthScoreDialog,
   ExpandedChartDialog,
 } from "@/components/dashboard/InsightDialogs";
 import type { MonthlyBucket } from "@/hooks/useRelationshipInsights";
 
-type ActiveDialog = "added" | "contacted" | "stale" | "contacted-ratio" | "chart" | null;
+type ActiveDialog = "added" | "contacted" | "stale" | "health-score" | "chart" | null;
 
 interface MetricTileProps {
   label: string;
@@ -155,9 +158,21 @@ export function RelationshipInsightsCard({
   reminderInterval = 30,
 }: RelationshipInsightsCardProps) {
   const { data: metrics, isLoading } = useRelationshipInsights(reminderInterval);
+  const { contactInterval, updateContactInterval } = useReminderSettings();
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
+  const [localContactInterval, setLocalContactInterval] = useState<string>("");
 
   const closeDialog = () => setActiveDialog(null);
+
+  const handleContactIntervalBlur = () => {
+    const parsed = parseInt(localContactInterval, 10);
+    if (!isNaN(parsed) && parsed > 0 && parsed !== contactInterval) {
+      updateContactInterval(parsed);
+    }
+    setLocalContactInterval("");
+  };
+
+  const displayContactInterval = localContactInterval !== "" ? localContactInterval : String(contactInterval);
 
   if (isLoading) {
     return (
@@ -174,16 +189,38 @@ export function RelationshipInsightsCard({
 
   if (!metrics) return null;
 
-  const totalClients = metrics.contactedCount + metrics.uncontactedCount;
-  const contactedPct = totalClients > 0 ? Math.round((metrics.contactedCount / totalClients) * 100) : 0;
+  const healthScore = metrics.avgHealthScore;
+  const healthLabel =
+    healthScore >= 70 ? "Healthy" : healthScore >= 40 ? "At Risk" : "Cold";
+  const healthColor =
+    healthScore >= 70 ? "text-green-500" : healthScore >= 40 ? "text-amber-500" : "text-muted-foreground";
 
   return (
     <div>
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold">Relationship Insights</h3>
-        <p className="text-xs text-muted-foreground">
-          Overview of your client activity this month
-        </p>
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <h3 className="text-sm font-semibold">Relationship Insights</h3>
+          <p className="text-xs text-muted-foreground">
+            Overview of your client activity this month
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+          <Label htmlFor="default-contact-interval" className="text-xs text-muted-foreground whitespace-nowrap">
+            Preferred contact interval
+          </Label>
+          <Input
+            id="default-contact-interval"
+            type="number"
+            min={1}
+            max={365}
+            value={displayContactInterval}
+            onChange={(e) => setLocalContactInterval(e.target.value)}
+            onBlur={handleContactIntervalBlur}
+            className="h-7 w-20 text-xs text-center"
+          />
+          <span className="text-xs text-muted-foreground">days</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -209,11 +246,11 @@ export function RelationshipInsightsCard({
           onClick={() => setActiveDialog("stale")}
         />
         <MetricTile
-          label="Contacted"
-          value={`${contactedPct}%`}
-          subtext={`${metrics.contactedCount} of ${totalClients} clients`}
-          icon={<CheckCheck className="h-3.5 w-3.5" />}
-          onClick={() => setActiveDialog("contacted-ratio")}
+          label="Health Score"
+          value={healthScore}
+          subtext={healthLabel}
+          icon={<Heart className={cn("h-3.5 w-3.5", healthColor)} />}
+          onClick={() => setActiveDialog("health-score")}
         />
       </div>
 
@@ -255,8 +292,8 @@ export function RelationshipInsightsCard({
           reminderInterval={reminderInterval}
         />
       )}
-      {activeDialog === "contacted-ratio" && (
-        <ContactedRatioDialog
+      {activeDialog === "health-score" && (
+        <HealthScoreDialog
           open
           onOpenChange={(o) => {
             if (!o) closeDialog();

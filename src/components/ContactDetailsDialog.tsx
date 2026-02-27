@@ -49,6 +49,7 @@ import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
 import { useState, useEffect, useRef } from "react";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
 import { generateAutoKeywords } from "@/utils/autoKeywords";
 import { lookupBusinessAtAddress } from "@/utils/businessLookup";
 import { toast } from "sonner";
@@ -181,6 +182,7 @@ export function ContactDetailsDialog({
   const [folderPopoverOpen, setFolderPopoverOpen] = useState(false);
   const slack = useSlackIntegration();
   const { uploadAvatar, uploading } = useAvatarUpload();
+  const { contactInterval: globalContactInterval } = useReminderSettings();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state for edit mode
@@ -216,7 +218,7 @@ export function ContactDetailsDialog({
   const [detectedBusinessType, setDetectedBusinessType] = useState<string | undefined>(undefined);
 
   // Client settings
-  const [preferredContactIntervalDays, setPreferredContactIntervalDays] = useState<number>(30);
+  const [preferredContactIntervalDays, setPreferredContactIntervalDays] = useState<string>("30");
 
   // Accordion states
   const [contactOpen, setContactOpen] = useState(false);
@@ -279,7 +281,7 @@ export function ContactDetailsDialog({
     setBusinessType(contactData.businessType);
     setDetectedBusinessName(undefined);
     setDetectedBusinessType(undefined);
-    setPreferredContactIntervalDays(contactData.preferredContactIntervalDays ?? 30);
+    setPreferredContactIntervalDays(String(contactData.preferredContactIntervalDays ?? globalContactInterval));
     setEditedContact(contactData);
   };
 
@@ -483,7 +485,7 @@ export function ContactDetailsDialog({
       businessName,
       businessType,
       preferredContactIntervalDays: contact.isClient
-        ? Math.max(7, Math.min(180, Math.round(preferredContactIntervalDays)))
+        ? Math.max(7, Math.min(180, Math.round(parseInt(preferredContactIntervalDays, 10) || globalContactInterval)))
         : undefined,
     };
 
@@ -926,16 +928,19 @@ export function ContactDetailsDialog({
                         max={180}
                         step={1}
                         value={preferredContactIntervalDays}
-                        onChange={(e) => {
-                          const v = parseInt(e.target.value, 10);
-                          if (!isNaN(v)) setPreferredContactIntervalDays(Math.max(7, Math.min(180, v)));
+                        onChange={(e) => setPreferredContactIntervalDays(e.target.value)}
+                        onBlur={() => {
+                          const v = parseInt(preferredContactIntervalDays, 10);
+                          setPreferredContactIntervalDays(
+                            String(isNaN(v) ? globalContactInterval : Math.max(7, Math.min(180, v)))
+                          );
                         }}
                         className="h-9 sm:h-8 w-24 text-base sm:text-sm"
                       />
                       <span className="text-xs text-muted-foreground">days (7–180)</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      How often you aim to contact this client. Used to compute relationship health.
+                      How often you aim to contact this client. Defaults to your global setting ({globalContactInterval} days). Used to compute relationship health.
                     </p>
                   </div>
                 </div>
@@ -1160,7 +1165,9 @@ export function ContactDetailsDialog({
                       </span>
                     )}
                     {contact.isClient && (() => {
-                      const h = computeHealthScore(contact, 0);
+                      const h = (contact.relationshipHealthScore !== undefined && contact.relationshipHealthStatus !== undefined)
+                        ? { score: contact.relationshipHealthScore, status: contact.relationshipHealthStatus }
+                        : computeHealthScore(contact, 0);
                       return (
                         <RelationshipHealthBadge score={h.score} status={h.status} />
                       );

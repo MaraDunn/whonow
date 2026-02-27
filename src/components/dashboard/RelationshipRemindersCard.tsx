@@ -59,7 +59,7 @@ export function RelationshipRemindersCard({ contacts }: RelationshipRemindersCar
             value={displayInterval}
             onChange={(e) => setLocalInterval(e.target.value)}
             onBlur={handleIntervalBlur}
-            className="h-7 w-14 text-xs text-center"
+            className="h-7 w-20 text-xs text-center"
           />
           <span className="text-xs text-muted-foreground">days</span>
         </div>
