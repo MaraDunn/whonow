@@ -66,6 +66,10 @@ interface FolderSidebarProps {
   clientFolders?: FolderType[];
   selectedClientFolderId?: string | null;
   onSelectClientFolder?: (folderId: string | null) => void;
+  // Organization Dashboard props
+  showOrgDirectory?: boolean;
+  onSelectOrgDirectory?: () => void;
+  orgDirectoryCount?: number;
   // Team Directory props
   teamFolders?: FolderType[];
   selectedTeamFolderId?: string | null;
@@ -104,6 +108,9 @@ export function FolderSidebar({
   clientFolders = [],
   selectedClientFolderId,
   onSelectClientFolder,
+  showOrgDirectory = false,
+  onSelectOrgDirectory,
+  orgDirectoryCount = 0,
   teamFolders = [],
   selectedTeamFolderId,
   onSelectTeamFolder,
@@ -515,9 +522,60 @@ export function FolderSidebar({
 
           <SidebarSeparator />
 
-          {/* Client Directory - show for all users but lock for Starter */}
+          {/* Client Dashboard - top-level entry, above Client Folders */}
           {onSelectClientDirectory && (
             <>
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      {hasClientAccess ? (
+                        <SidebarMenuButton
+                          onClick={withCloseMobile(() => {
+                            onSelectClientDirectory();
+                            onSelectClientFolder?.(null);
+                          })}
+                          isActive={showClientDirectory && selectedClientFolderId === null}
+                          tooltip={isCollapsed ? `Client Dashboard (${clientDirectoryCount})` : undefined}
+                          className="w-full min-w-0"
+                          data-onboarding-client-directory
+                        >
+                          <Briefcase className="h-4 w-4 shrink-0" />
+                          {!isCollapsed && (
+                            <>
+                              <span className="flex-1 text-left min-w-0 truncate">Client Dashboard</span>
+                              <span className="text-xs opacity-70 shrink-0">{clientDirectoryCount}</span>
+                            </>
+                          )}
+                        </SidebarMenuButton>
+                      ) : (
+                        <LockedFeatureButton feature="client_management" minimumTier="pro" hideLockIcon={isCollapsed}>
+                          <SidebarMenuButton
+                            tooltip={isCollapsed ? {
+                              children: (
+                                <div className="flex items-center gap-1.5">
+                                  <span>Client Dashboard</span>
+                                  <Lock className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              )
+                            } : undefined}
+                            className="w-full opacity-70 min-w-0"
+                            data-onboarding-client-directory
+                          >
+                            <Briefcase className="h-4 w-4 shrink-0" />
+                            {!isCollapsed && (
+                              <span className="flex-1 text-left min-w-0 truncate">Client Dashboard</span>
+                            )}
+                          </SidebarMenuButton>
+                        </LockedFeatureButton>
+                      )}
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+
+              {/* Client Folders - collapsible section below the dashboard entry */}
+              {hasClientAccess && (
               <SidebarGroup>
                 {!isCollapsed && (
                   <div className="flex items-center justify-between px-2">
@@ -535,74 +593,30 @@ export function FolderSidebar({
                         )}
                       </Button>
                       <SidebarGroupLabel className="p-0 cursor-pointer" onClick={toggleClientDirectory}>
-                        Client Directory
+                        Client Folders
                       </SidebarGroupLabel>
                     </div>
-                    {hasClientAccess && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6" 
-                              onClick={() => handleAddFolder("clients")}
-                            >
-                              <FolderPlus className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">
-                            <p>Add client folder</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleAddFolder("clients")}
+                          >
+                            <FolderPlus className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Add client folder</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 )}
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    <SidebarMenuItem>
-                      {hasClientAccess ? (
-                        <SidebarMenuButton
-                          onClick={withCloseMobile(() => {
-                            onSelectClientDirectory();
-                            onSelectClientFolder?.(null);
-                          })}
-                          isActive={showClientDirectory && selectedClientFolderId === null}
-                          tooltip={isCollapsed ? `Client Directory (${clientDirectoryCount})` : undefined}
-                          className="w-full min-w-0"
-                          data-onboarding-client-directory
-                        >
-                          <Briefcase className="h-4 w-4 shrink-0" />
-                          {!isCollapsed && (
-                            <>
-                              <span className="flex-1 text-left min-w-0 truncate">All Clients</span>
-                              <span className="text-xs opacity-70 shrink-0">{clientDirectoryCount}</span>
-                            </>
-                          )}
-                        </SidebarMenuButton>
-                      ) : (
-                        <LockedFeatureButton feature="client_management" minimumTier="pro" hideLockIcon={isCollapsed}>
-                          <SidebarMenuButton 
-                            tooltip={isCollapsed ? {
-                              children: (
-                                <div className="flex items-center gap-1.5">
-                                  <span>Client Directory</span>
-                                  <Lock className="h-3 w-3 text-muted-foreground" />
-                                </div>
-                              )
-                            } : undefined}
-                            className="w-full opacity-70 min-w-0"
-                            data-onboarding-client-directory
-                          >
-                            <Briefcase className="h-4 w-4 shrink-0" />
-                            {!isCollapsed && (
-                              <span className="flex-1 text-left min-w-0 truncate">Client Directory</span>
-                            )}
-                          </SidebarMenuButton>
-                        </LockedFeatureButton>
-                      )}
-                    </SidebarMenuItem>
 
                     {/* Personal Client Folders */}
                     {hasClientAccess && wasClientDirectoryExpanded && clientFolders.map((folder) => (
@@ -713,6 +727,36 @@ export function FolderSidebar({
                         ))}
                       </>
                     )}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+              )}
+              <SidebarSeparator />
+            </>
+          )}
+
+          {/* Organization Dashboard - only show when user has a company */}
+          {hasCompany && onSelectOrgDirectory && (
+            <>
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        onClick={withCloseMobile(onSelectOrgDirectory)}
+                        isActive={showOrgDirectory}
+                        tooltip={isCollapsed ? `Organization Dashboard (${orgDirectoryCount})` : undefined}
+                        className="w-full min-w-0"
+                      >
+                        <Building2 className="h-4 w-4 shrink-0" />
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1 text-left min-w-0 truncate">Organization Dashboard</span>
+                            <span className="text-xs opacity-70 shrink-0">{orgDirectoryCount}</span>
+                          </>
+                        )}
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>

@@ -8,6 +8,8 @@ import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { ContactDetailsDialog } from "@/components/ContactDetailsDialog";
 import { ClientDashboard } from "@/components/ClientDashboard";
 import type { ClientDashboardTab } from "@/components/ClientDashboard";
+import { OrganizationDashboard } from "@/components/OrganizationDashboard";
+import type { OrgDashboardTab } from "@/components/OrganizationDashboard";
 import { ProfileEditorDialog } from "@/components/ProfileEditorDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { ContactSupportDialog } from "@/components/ContactSupportDialog";
@@ -37,6 +39,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { SearchQueryFilters } from "@/types/searchQuery";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
+type OrgSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added" | "health-desc" | "health-asc";
 
 function pluralizeCount(word: string, count: number) {
   return count === 1 ? word : `${word}s`;
@@ -121,8 +124,10 @@ const IndexContent = () => {
   const [showTrash, setShowTrash] = useState(false);
   const [showDirectory, setShowDirectory] = useState(false);
   const [clientView, setClientView] = useState<ClientDashboardTab | null>(null);
+  const [orgView, setOrgView] = useState<OrgDashboardTab | null>(null);
   const [ownershipFilter, setOwnershipFilter] = useState<ContactOwnershipFilter>("all");
   const [clientSortOption, setClientSortOption] = useState<ClientSortOption>("oldest-contacted");
+  const [orgSortOption, setOrgSortOption] = useState<OrgSortOption>("oldest-contacted");
   const [selectedClientFolderId, setSelectedClientFolderId] = useState<string | null>(null);
   const [selectedTeamFolderId, setSelectedTeamFolderId] = useState<string | null>(null);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
@@ -305,6 +310,31 @@ const IndexContent = () => {
     });
   }, [contacts, clientSortOption, selectedClientFolderId]);
 
+  // Org dashboard: only shared contacts, sorted based on selected sort option
+  const orgDirectoryContacts = useMemo(() => {
+    const sharedOnly = contacts.filter(c => c.isShared === true);
+    return [...sharedOnly].sort((a, b) => {
+      switch (orgSortOption) {
+        case "oldest-contacted":
+          if (!a.lastContactedAt && !b.lastContactedAt) return 0;
+          if (!a.lastContactedAt) return -1;
+          if (!b.lastContactedAt) return 1;
+          return new Date(a.lastContactedAt).getTime() - new Date(b.lastContactedAt).getTime();
+        case "newest-contacted":
+          if (!a.lastContactedAt && !b.lastContactedAt) return 0;
+          if (!a.lastContactedAt) return 1;
+          if (!b.lastContactedAt) return -1;
+          return new Date(b.lastContactedAt).getTime() - new Date(a.lastContactedAt).getTime();
+        case "oldest-added":
+          return a.id.localeCompare(b.id);
+        case "newest-added":
+          return b.id.localeCompare(a.id);
+        default:
+          return 0;
+      }
+    });
+  }, [contacts, orgSortOption]);
+
   // Count of clients for sidebar - use accurate count from database function
   // Only compute fallback if needed
   const fallbackClientCount = useMemo(() => {
@@ -329,15 +359,16 @@ const IndexContent = () => {
     understoodRoleLabel,
     isTruncated,
   } = useSmartSearch(
-    showDirectory ? filteredTeamContacts : (clientView !== null ? clientDirectoryContacts : folderFilteredContacts), 
+    showDirectory ? filteredTeamContacts : (clientView !== null ? clientDirectoryContacts : (orgView !== null ? orgDirectoryContacts : folderFilteredContacts)), 
     searchQuery,
-    { contactMarkedVersion, scopeToContacts: clientView !== null }
+    { contactMarkedVersion, scopeToContacts: clientView !== null || orgView !== null }
   );
 
   const handleSelectTrash = () => {
     setShowTrash(true);
     setShowDirectory(false);
     setClientView(null);
+    setOrgView(null);
     setSelectedFolderId(null);
   };
 
@@ -345,6 +376,7 @@ const IndexContent = () => {
     setShowTrash(false);
     setShowDirectory(false);
     setClientView(null);
+    setOrgView(null);
     setSelectedFolderId(folderId);
   };
 
@@ -352,6 +384,7 @@ const IndexContent = () => {
     setShowDirectory(true);
     setShowTrash(false);
     setClientView(null);
+    setOrgView(null);
     setSelectedFolderId(null);
     setSelectedTeamFolderId(null);
     // Refetch team contacts to ensure we have the latest data
@@ -360,6 +393,15 @@ const IndexContent = () => {
 
   const handleSelectClientDirectory = () => {
     setClientView("directory");
+    setOrgView(null);
+    setShowDirectory(false);
+    setShowTrash(false);
+    setSelectedFolderId(null);
+  };
+
+  const handleSelectOrgDirectory = () => {
+    setOrgView("directory");
+    setClientView(null);
     setShowDirectory(false);
     setShowTrash(false);
     setSelectedFolderId(null);
@@ -891,6 +933,9 @@ const IndexContent = () => {
             organizationClientFolders={organizationClientFolders}
             selectedClientFolderId={selectedClientFolderId}
             onSelectClientFolder={setSelectedClientFolderId}
+            showOrgDirectory={orgView !== null}
+            onSelectOrgDirectory={company ? handleSelectOrgDirectory : undefined}
+            orgDirectoryCount={sharedContactsCount}
             teamFolders={teamFolders}
             organizationTeamFolders={organizationTeamFolders}
             selectedTeamFolderId={selectedTeamFolderId}
@@ -1051,6 +1096,38 @@ const IndexContent = () => {
                   onClientSortChange={(v) => setClientSortOption(v as ClientSortOption)}
                   activeTab={clientView}
                   onTabChange={setClientView}
+                  onEditContact={handleEditContact}
+                  onViewContact={handleViewContact}
+                  onDeleteContact={deleteContact}
+                  onRestoreContact={restoreContact}
+                  onPermanentlyDelete={permanentlyDeleteContact}
+                  onEmptyTrash={emptyTrash}
+                  folders={folders}
+                  onUpdateFolder={handleUpdateFolder}
+                  showOwnershipBadge={!!company}
+                  onMarkContacted={updateLastContacted}
+                  onToggleClient={(id, isClient) => toggleClientStatus({ id, isClient })}
+                  selectedContactIds={selectedContactIds}
+                  onSelectContact={handleSelectContact}
+                  onSelectAll={handleSelectAll}
+                  onBulkDelete={handleBulkDelete}
+                  onBulkMoveToFolder={handleBulkMoveToFolder}
+                  onBulkToggleClient={handleBulkToggleClient}
+                  onBulkMarkContacted={handleBulkMarkContacted}
+                  hasClientAccess={hasClientAccess}
+                  selectionMode={selectionMode}
+                  onToggleSelectionMode={handleToggleSelectionMode}
+                />
+              ) : orgView !== null ? (
+                <OrganizationDashboard
+                  contacts={filteredContacts}
+                  allSharedContacts={orgDirectoryContacts}
+                  searchQuery={searchQuery}
+                  action={action}
+                  orgSortOption={orgSortOption}
+                  onOrgSortChange={(v) => setOrgSortOption(v as OrgSortOption)}
+                  activeTab={orgView}
+                  onTabChange={setOrgView}
                   onEditContact={handleEditContact}
                   onViewContact={handleViewContact}
                   onDeleteContact={deleteContact}
