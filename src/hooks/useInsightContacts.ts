@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Contact } from "@/types/contact";
+import { computeHealthScore } from "@/utils/relationshipHealth";
 
 const INSIGHT_COLS =
   "id, name, email, phone, company, role, avatar, tags, is_client, created_at, last_contacted_at, follow_up_date, folder_id";
@@ -212,6 +213,104 @@ export interface MonthlyChartBucket {
   clientsAdded: number;
   contacted: number;
   followUpsSet: number;
+}
+
+export interface HealthScoreData {
+  avgScore: number;
+  healthyCount: number;
+  atRiskCount: number;
+  coldCount: number;
+  totalClients: number;
+  contacts: Array<Contact & { relationshipHealthScore: number; relationshipHealthStatus: "Healthy" | "At Risk" | "Cold" }>;
+}
+
+interface HealthClientRow {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  role: string | null;
+  avatar: string | null;
+  tags: string[] | null;
+  is_client: boolean | null;
+  created_at: string;
+  last_contacted_at: string | null;
+  follow_up_date: string | null;
+  folder_id: string | null;
+  preferred_contact_interval_days: number | null;
+  client_weight: number | null;
+}
+
+export function useHealthScoreData() {
+  const { user } = useAuth();
+  return useQuery<HealthScoreData>({
+    queryKey: ["insight-contacts", "health-score", "v2", user?.id],
+    queryFn: async () => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const now = new Date();
+      const ninetyDaysAgo = new Date(now.getTime() - 90 * 86_400_000).toISOString();
+
+      // Use the RPC to get preferred_contact_interval_days and client_weight
+      // (direct table select fails when those columns aren't in the PostgREST schema cache)
+      const [{ data, error }, { data: activityData, error: activityError }] = await Promise.all([
+        supabase
+          .rpc("list_contacts_slim", {
+            _user_id: user.id,
+            _client_only: true,
+            _limit: 1000,
+          }),
+        supabase
+          .from("activity_log")
+          .select("contact_id")
+          .eq("activity_type", "contacted")
+          .gte("created_at", ninetyDaysAgo),
+      ]);
+      if (error) throw error;
+      if (activityError) throw activityError;
+
+      // Build a map of contact_id → interaction count in last 90 days
+      const interactionCounts: Record<string, number> = {};
+      for (const row of activityData ?? []) {
+        interactionCounts[row.contact_id] = (interactionCounts[row.contact_id] ?? 0) + 1;
+      }
+
+      const contacts = (data as HealthClientRow[]).map((r) => {
+        const contact: Contact = {
+          id: r.id,
+          name: r.name,
+          email: r.email || "",
+          phone: r.phone || "",
+          company: r.company || "",
+          role: r.role || "",
+          avatar: r.avatar || undefined,
+          tags: r.tags || [],
+          isClient: true,
+          createdAt: r.created_at,
+          lastContactedAt: r.last_contacted_at || undefined,
+          followUpDate: r.follow_up_date || undefined,
+          folderId: r.folder_id || undefined,
+          preferredContactIntervalDays: r.preferred_contact_interval_days ?? undefined,
+          clientWeight: r.client_weight ?? undefined,
+        };
+        const { score, status } = computeHealthScore(contact, interactionCounts[r.id] ?? 0, now);
+        return { ...contact, relationshipHealthScore: score, relationshipHealthStatus: status } as Contact & { relationshipHealthScore: number; relationshipHealthStatus: "Healthy" | "At Risk" | "Cold" };
+      });
+
+      const totalClients = contacts.length;
+      const avgScore =
+        totalClients > 0
+          ? Math.round(contacts.reduce((sum, c) => sum + c.relationshipHealthScore, 0) / totalClients)
+          : 0;
+      const healthyCount = contacts.filter((c) => c.relationshipHealthStatus === "Healthy").length;
+      const atRiskCount = contacts.filter((c) => c.relationshipHealthStatus === "At Risk").length;
+      const coldCount = contacts.filter((c) => c.relationshipHealthStatus === "Cold").length;
+
+      return { avgScore, healthyCount, atRiskCount, coldCount, totalClients, contacts };
+    },
+    enabled: !!user,
+    staleTime: 60_000,
+  });
 }
 
 export function useExpandedChartData(months: number = 6) {

@@ -461,8 +461,8 @@ export const useContacts = (options?: UseContactsListOptions) => {
         longitude: contact.longitude || null,
         business_name: contact.businessName || null,
         business_type: contact.businessType || null,
-        preferred_contact_interval_days: contact.preferredContactIntervalDays ?? null,
-        client_weight: contact.clientWeight ?? null,
+        // preferred_contact_interval_days and client_weight are written via RPC
+        // below to avoid PostgREST schema cache issues with newly added columns.
       };
       
       // Only update sharing status if provided
@@ -479,6 +479,16 @@ export const useContacts = (options?: UseContactsListOptions) => {
         .single();
 
       if (error) throw error;
+
+      // Write the two new health columns via RPC which bypasses schema cache
+      if (contact.isClient) {
+        const { error: rpcError } = await supabase.rpc("update_client_health_fields", {
+          _contact_id: id,
+          _preferred_contact_interval_days: contact.preferredContactIntervalDays ?? 30,
+          _client_weight: contact.clientWeight ?? 1.0,
+        });
+        if (rpcError) throw rpcError;
+      }
       
       return mapDbToContact(data as DbContact);
     },

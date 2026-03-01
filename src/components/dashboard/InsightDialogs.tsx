@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { format, startOfMonth, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
-  CalendarDays, Users, TrendingUp, AlertCircle, Briefcase, Plus, CheckCheck, XCircle,
+  CalendarDays, Users, TrendingUp, AlertCircle, Briefcase, Plus, CheckCheck, XCircle, Heart,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -28,6 +28,7 @@ import {
   useClientRatioData,
   useContactedRatioData,
   useExpandedChartData,
+  useHealthScoreData,
 } from "@/hooks/useInsightContacts";
 import { useBulkSetFollowUpDate, useSetFollowUpDate } from "@/hooks/useFollowUps";
 import type { Contact } from "@/types/contact";
@@ -591,6 +592,126 @@ export function ContactedRatioDialog({
                 of {data.totalClients} client{data.totalClients !== 1 ? "s" : ""} contacted
               </p>
             </div>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Health Score Dialog ──────────────────────────────────────────
+
+const HEALTH_COLORS = {
+  Healthy: "#22c55e",
+  "At Risk": "#f59e0b",
+  Cold: "#6b7280",
+};
+
+interface HealthScoreDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function HealthScoreDialog({ open, onOpenChange }: HealthScoreDialogProps) {
+  const { data, isLoading, isError } = useHealthScoreData();
+
+  const scoreColor = !data
+    ? HEALTH_COLORS.Cold
+    : data.avgScore >= 70
+    ? HEALTH_COLORS.Healthy
+    : data.avgScore >= 40
+    ? HEALTH_COLORS["At Risk"]
+    : HEALTH_COLORS.Cold;
+
+  const statusLabel = !data
+    ? "Cold"
+    : data.avgScore >= 70
+    ? "Healthy"
+    : data.avgScore >= 40
+    ? "At Risk"
+    : "Cold";
+
+  const buckets = data
+    ? [
+        { label: "Healthy", count: data.healthyCount, color: HEALTH_COLORS.Healthy, description: "≥ 70 score" },
+        { label: "At Risk", count: data.atRiskCount, color: HEALTH_COLORS["At Risk"], description: "40–69 score" },
+        { label: "Cold", count: data.coldCount, color: HEALTH_COLORS.Cold, description: "< 40 score" },
+      ]
+    : [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Heart className="h-4 w-4 text-primary" />
+            Aggregate Health Score
+          </DialogTitle>
+          <DialogDescription>
+            Average relationship health across all your clients
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <Skeleton className="h-40 w-full rounded-lg" />
+        ) : isError ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            Could not load health data. Please try again.
+          </p>
+        ) : data ? (
+          <div className="space-y-5">
+            {/* Score ring */}
+            <div className="flex flex-col items-center gap-1 py-2">
+              <div
+                className="flex h-24 w-24 items-center justify-center rounded-full border-4"
+                style={{ borderColor: scoreColor }}
+              >
+                <div className="text-center">
+                  <p className="text-3xl font-bold leading-none" style={{ color: scoreColor }}>
+                    {data.avgScore}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">/ 100</p>
+                </div>
+              </div>
+              <span
+                className="mt-1 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                style={{ backgroundColor: `${scoreColor}20`, color: scoreColor }}
+              >
+                {statusLabel}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                Based on {data.totalClients} client{data.totalClients !== 1 ? "s" : ""}
+              </p>
+            </div>
+
+            {/* Distribution bars */}
+            <div className="space-y-2">
+              {buckets.map((b) => {
+                const pct = data.totalClients > 0 ? Math.round((b.count / data.totalClients) * 100) : 0;
+                return (
+                  <div key={b.label} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium" style={{ color: b.color }}>
+                        {b.label}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {b.count} client{b.count !== 1 ? "s" : ""} · {pct}%
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%`, backgroundColor: b.color }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-muted-foreground border-t pt-3">
+              Score is based on recency of last contact relative to each client's preferred interval.
+            </p>
           </div>
         ) : null}
       </DialogContent>

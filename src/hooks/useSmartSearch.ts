@@ -53,7 +53,7 @@ function mapSearchRowToContact(row: Record<string, unknown>): Contact {
   };
 }
 
-export type UseSmartSearchOptions = { totalCount?: number; contactMarkedVersion?: number };
+export type UseSmartSearchOptions = { totalCount?: number; contactMarkedVersion?: number; scopeToContacts?: boolean };
 
 /**
  * Universal smart search: Always uses server-side smart_search_contacts RPC.
@@ -66,6 +66,7 @@ export function useSmartSearch(
   options?: UseSmartSearchOptions
 ): SmartSearchResult {
   const contactMarkedVersion = options?.contactMarkedVersion ?? 0;
+  const scopeToContacts = options?.scopeToContacts ?? false;
   const { user } = useAuth();
   const [finalQuery, setFinalQuery] = useState<SearchQuery | null>(null);
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
@@ -189,6 +190,13 @@ export function useSmartSearch(
 
         let results = (data ?? []).map((row: Record<string, unknown>) => mapSearchRowToContact(row));
         devLog("[useSmartSearch] RPC returned", results.length, "results", rpcParams._last_contacted_from ? "(interaction-date filter)" : "");
+
+        // When scoped (e.g. Client Dashboard), restrict results to only contacts in the input array
+        if (scopeToContacts && contacts.length > 0) {
+          const allowedIds = new Set(contacts.map(c => c.id));
+          results = results.filter(r => allowedIds.has(r.id));
+          devLog("[useSmartSearch] After scope filter:", results.length, "results");
+        }
 
         // Diagnostic: if interaction-date search returns 0, check if any contacts have last_contacted_at
         if (

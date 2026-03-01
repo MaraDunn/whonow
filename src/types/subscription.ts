@@ -65,7 +65,9 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 25,
     features: [
       "Everything in Pro",
-      "Create an Organization",
+      "Organization Dashboard — centralized team management & insights",
+      "Active Employee Directory — live, searchable roster of your org",
+      "Create & manage an Organization",
       "Up to 25 team members",
       "Shared contact folders",
       "Role-based permissions",
@@ -81,10 +83,8 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     seats: 100,
     features: [
       "Everything in Team",
-      "Create an Organization",
       "Up to 100 team members",
       "Custom branding",
-      "API access",
       "Dedicated support",
     ],
   },
