@@ -199,9 +199,13 @@ const ContactCardComponent = function ContactCard({
     [contact.lastContactedAt]
   );
 
-  // Lazily compute health score for client contacts only (O(1), no network calls)
+  // Use pre-computed health score from parent when available (e.g. ClientDashboard passes
+  // scores that include the frequency component). Fall back to recency-only computation.
   const healthResult = React.useMemo(() => {
     if (!contact.isClient) return null;
+    if (contact.relationshipHealthScore !== undefined && contact.relationshipHealthStatus !== undefined) {
+      return { score: contact.relationshipHealthScore, status: contact.relationshipHealthStatus };
+    }
     return computeHealthScore(contact, 0);
   }, [contact]);
 
@@ -228,7 +232,13 @@ const ContactCardComponent = function ContactCard({
   };
 
   const handleCardClick = React.useCallback((e?: React.MouseEvent) => {
-    if (isTrashView) return;
+    // In compact/mobile trash view, allow expand/collapse so restore actions are accessible
+    if (isTrashView) {
+      if (compact && onToggleExpand) {
+        onToggleExpand();
+      }
+      return;
+    }
     
     // In selection mode, clicking anywhere on the card toggles selection (checkbox uses stopPropagation)
     if (selectionMode && onSelect) {
@@ -646,6 +656,40 @@ const ContactCardComponent = function ContactCard({
           </div>
         </div>
 
+        {/* Trash view actions */}
+        {isTrashView && (
+          <div className="mt-3 flex gap-2 border-t border-border pt-3">
+            {onRestore && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 text-xs h-8 px-3 min-w-0 justify-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRestore();
+                }}
+              >
+                <RotateCcw className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                <span className="whitespace-nowrap">Restore</span>
+              </Button>
+            )}
+            {onPermanentlyDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="flex-1 text-xs h-8 px-3 min-w-0 justify-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPermanentlyDelete();
+                }}
+              >
+                <Trash2 className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                <span className="whitespace-nowrap">Delete forever</span>
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Action buttons */}
         {!isTrashView && (
           <div className="mt-3 flex gap-2 border-t border-border pt-3">
@@ -684,24 +728,24 @@ const ContactCardComponent = function ContactCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 text-xs h-8 px-3 min-w-0 justify-center"
+                  className="flex-1 text-xs h-8 px-3 min-w-0 justify-center overflow-hidden"
                   onClick={(e) => {
                     e.stopPropagation();
                     onMarkContacted();
                   }}
                 >
                   <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                  <span className="whitespace-nowrap">Contacted</span>
+                  <span className="truncate">Contacted</span>
                 </Button>
               ) : (
                 <LockedFeatureButton feature="client_management" minimumTier="pro" className="flex-1 min-w-0">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full text-xs h-8 px-3 opacity-70 justify-center"
+                    className="w-full text-xs h-8 px-3 opacity-70 justify-center overflow-hidden"
                   >
                     <Clock className="h-3 w-3 mr-1.5 flex-shrink-0" />
-                    <span className="whitespace-nowrap">Contacted</span>
+                    <span className="truncate">Contacted</span>
                   </Button>
                 </LockedFeatureButton>
               )
