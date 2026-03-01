@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Check, Star, Zap } from "lucide-react";
+import { Check, Star, Zap, Minus, Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,10 +14,98 @@ interface PricingSectionProps {
   onGetStarted: () => void;
 }
 
+const PER_SEAT_TIERS: SubscriptionTier[] = ["business", "enterprise"];
+
+function SeatSelector({
+  seats,
+  onSeatsChange,
+}: {
+  seats: number;
+  onSeatsChange: (seats: number) => void;
+}) {
+  const [inputValue, setInputValue] = useState(String(seats));
+
+  const commit = (raw: string) => {
+    const parsed = parseInt(raw, 10);
+    const clamped = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    setInputValue(String(clamped));
+    onSeatsChange(clamped);
+  };
+
+  // Keep input in sync when parent changes value via +/- buttons
+  const handleDecrement = () => {
+    const next = Math.max(1, seats - 1);
+    setInputValue(String(next));
+    onSeatsChange(next);
+  };
+
+  const handleIncrement = () => {
+    const next = seats + 1;
+    setInputValue(String(next));
+    onSeatsChange(next);
+  };
+
+  return (
+    <div className="flex items-center gap-2 justify-center">
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={handleDecrement}
+          aria-label="Decrease seats"
+        >
+          <Minus className="w-3 h-3" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={handleIncrement}
+          aria-label="Increase seats"
+        >
+          <Plus className="w-3 h-3" />
+        </Button>
+      </div>
+      <div className="flex items-center gap-1">
+        <Input
+          type="number"
+          min={1}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit((e.target as HTMLInputElement).value);
+          }}
+          className="h-7 w-16 text-center text-sm px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          aria-label="Number of seats"
+        />
+        <span className="text-xs text-muted-foreground">
+          {seats === 1 ? "seat" : "seats"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function computePrice(tier: SubscriptionTier, seats: number): number {
+  const config = TIER_CONFIGS[tier];
+  if (!config.pricePerSeat) return config.price;
+  return config.price + Math.max(0, seats - 1) * config.pricePerSeat;
+}
+
 export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
   const { user } = useAuth();
   const { tier: currentTier, createCheckout, isLoading } = useSubscription();
   const [contactSalesOpen, setContactSalesOpen] = useState(false);
+  const [seatCounts, setSeatCounts] = useState<Record<string, number>>({
+    business: 1,
+    enterprise: 1,
+  });
+
+  const handleSeatChange = (tier: SubscriptionTier, seats: number) => {
+    setSeatCounts((prev) => ({ ...prev, [tier]: seats }));
+  };
 
   const handleSelectPlan = async (tier: SubscriptionTier) => {
     if (tier === "starter") {
@@ -29,10 +118,18 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
       return;
     }
 
-    await createCheckout(tier);
+    const seats = PER_SEAT_TIERS.includes(tier) ? (seatCounts[tier] ?? 1) : 1;
+    await createCheckout(tier, seats);
   };
 
-  const tiers: SubscriptionTier[] = ["starter", "pro", "team", "business"];
+  const tiers: SubscriptionTier[] = ["starter", "pro", "business", "enterprise"];
+
+  const tierDescriptions: Record<SubscriptionTier, string> = {
+    starter: "Get started for free",
+    pro: "Manage clients like a pro",
+    business: "For small teams",
+    enterprise: "For growing companies",
+  };
 
   return (
     <section id="pricing" className="py-24 sm:py-32 bg-background">
@@ -55,6 +152,9 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
             const config = TIER_CONFIGS[tierKey];
             const isCurrentPlan = user && currentTier === tierKey;
             const isHighlighted = config.highlighted;
+            const isPerSeat = PER_SEAT_TIERS.includes(tierKey);
+            const seats = seatCounts[tierKey] ?? 1;
+            const displayPrice = isPerSeat ? computePrice(tierKey, seats) : config.price;
 
             return (
               <Card
@@ -73,7 +173,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
                     </Badge>
                   </div>
                 )}
-                
+
                 {isCurrentPlan && (
                   <div className="absolute -top-3 right-4">
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
@@ -85,28 +185,32 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
                 <CardHeader className="pb-4">
                   <CardTitle className="text-lg">{config.name}</CardTitle>
                   <CardDescription className="h-8">
-                    {tierKey === "starter" && "Get started for free"}
-                    {tierKey === "pro" && "Manage clients like a pro"}
-                    {tierKey === "team" && "For small teams"}
-                    {tierKey === "business" && "For growing companies"}
+                    {tierDescriptions[tierKey]}
                   </CardDescription>
                 </CardHeader>
 
                 <CardContent className="flex-1">
-                  <div className="mb-6">
+                  <div className="mb-2">
                     <span className="text-3xl font-bold">
-                      {config.price === 0 ? "Free" : `$${config.price}`}
+                      {config.price === 0 ? "Free" : `$${displayPrice.toFixed(2)}`}
                     </span>
                     {config.price > 0 && (
                       <span className="text-muted-foreground text-sm">/{config.period}</span>
                     )}
                   </div>
 
-                  {config.seats > 1 && (
-                    <div className="mb-4 p-2 bg-accent/50 rounded-md text-center">
-                      <span className="text-sm font-medium text-accent-foreground">
-                        Up to {config.seats.toLocaleString()} seats
-                      </span>
+                  {isPerSeat && (
+                    <p className="text-xs text-muted-foreground mb-3">
+                      ${config.price.toFixed(2)} base + ${config.pricePerSeat}/additional seat
+                    </p>
+                  )}
+
+                  {isPerSeat && (
+                    <div className="mb-4 p-2 bg-accent/50 rounded-md">
+                      <SeatSelector
+                        seats={seats}
+                        onSeatsChange={(s) => handleSeatChange(tierKey, s)}
+                      />
                     </div>
                   )}
 
@@ -123,7 +227,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
                 <CardFooter className="pt-4">
                   <Button
                     onClick={() => handleSelectPlan(tierKey)}
-                    disabled={isLoading || isCurrentPlan}
+                    disabled={isLoading || !!isCurrentPlan}
                     className={cn(
                       "w-full",
                       isHighlighted && "gradient-hero text-primary-foreground"
@@ -141,10 +245,10 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
             );
           })}
 
-          {/* Contact Sales (replaces Enterprise + Global Enterprise self-serve tiers) */}
+          {/* Contact Sales card for larger organizations */}
           <Card className="relative flex flex-col transition-all duration-300 hover:shadow-card-hover border-dashed">
             <CardHeader className="pb-4">
-              <CardTitle className="text-lg">Enterprise</CardTitle>
+              <CardTitle className="text-lg">Custom</CardTitle>
               <CardDescription className="h-8">
                 For larger organizations
               </CardDescription>
@@ -162,7 +266,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
 
               <ul className="space-y-2">
                 {[
-                  "Everything in Business",
+                  "Everything in Enterprise",
                   "Custom seat limits",
                   "Tailored feature set",
                   "Volume pricing available",
@@ -189,7 +293,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-8">
-          All prices in USD. Cancel anytime. Need custom pricing?{" "}
+          All prices in USD + applicable taxes. Cancel anytime. Need custom pricing?{" "}
           <button
             type="button"
             onClick={() => setContactSalesOpen(true)}

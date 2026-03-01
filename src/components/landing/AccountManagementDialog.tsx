@@ -27,7 +27,11 @@ import {
   ChevronDown,
   ChevronUp,
   Navigation,
-  MapPin
+  MapPin,
+  Minus,
+  Plus,
+  ArrowRight,
+  XCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -396,8 +400,23 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
     }
   };
 
-  const handleUpgrade = (targetTier: SubscriptionTier) => {
-    createCheckout(targetTier);
+  const [planSeats, setPlanSeats] = useState(1);
+  const [planSeatInput, setPlanSeatInput] = useState("1");
+  const [isCancelConfirming, setIsCancelConfirming] = useState(false);
+
+  const handleSeatInputChange = (value: string) => {
+    setPlanSeatInput(value);
+  };
+
+  const commitSeatInput = (value: string) => {
+    const parsed = parseInt(value, 10);
+    const clamped = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    setPlanSeats(clamped);
+    setPlanSeatInput(String(clamped));
+  };
+
+  const handleUpgrade = (targetTier: SubscriptionTier, seats?: number) => {
+    createCheckout(targetTier, seats);
   };
 
   const getDeviceIcon = (userAgent: string | null) => {
@@ -476,7 +495,7 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
             {selectedSection === "subscription" && (
             <div className="space-y-6 p-4 sm:p-6">
               {/* Current Plan */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <Label className="text-base font-medium">Current Plan</Label>
                 <div className="p-4 bg-muted/50 rounded-lg border">
                   <div className="flex items-center justify-between mb-3">
@@ -490,13 +509,20 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                       </Badge>
                     )}
                   </div>
-                  
+
                   <div className="text-sm text-muted-foreground space-y-1">
                     {config.price === 0 ? (
                       <p>Free forever</p>
                     ) : (
                       <>
-                        <p className="font-medium text-foreground">${config.price}/{config.period}</p>
+                        <p className="font-medium text-foreground">
+                          ${config.price}/{config.period}
+                          {config.pricePerSeat && (
+                            <span className="font-normal text-muted-foreground">
+                              {" "}+ ${config.pricePerSeat}/additional seat
+                            </span>
+                          )}
+                        </p>
                         {subscriptionEnd && (
                           <p>Next billing date: {new Date(subscriptionEnd).toLocaleDateString()}</p>
                         )}
@@ -513,76 +539,243 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                       <div className="mt-1.5 h-2 bg-muted rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${(seatsUsed / seatsLimit) * 100}%` }}
+                          style={{ width: `${Math.min((seatsUsed / seatsLimit) * 100, 100)}%` }}
                         />
+                      </div>
+                    </div>
+                  )}
+
+                  <ul className="mt-3 pt-3 border-t space-y-1">
+                    {config.features.map((feature, index) => (
+                      <li key={index} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <CheckCircle className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Change Plan */}
+              <div className="space-y-3">
+                <Label className="text-base font-medium">
+                  {subscribed ? "Change Plan" : "Upgrade Your Plan"}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {subscribed
+                    ? "Switch to a different plan. You'll be taken to a new checkout to complete the change."
+                    : "Unlock more features and remove limits by upgrading."}
+                </p>
+
+                <div className="grid gap-3">
+                  {/* Pro */}
+                  {tier !== "pro" && (
+                    <div className="border rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm">Pro</p>
+                          <p className="text-xs text-muted-foreground">$4.99/month</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={tier === "starter" ? "default" : "outline"}
+                          className={tier === "starter" ? "gradient-hero text-primary-foreground" : ""}
+                          disabled={subscriptionLoading}
+                          onClick={() => handleUpgrade("pro")}
+                        >
+                          {tier === "starter" ? (
+                            <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
+                          ) : (
+                            <><ArrowRight className="w-3 h-3 mr-1" />Switch</>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Business / Team */}
+                  {tier !== "business" && (
+                    <div className="border rounded-lg p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-sm">Team</p>
+                          <p className="text-xs text-muted-foreground">$9.99/mo + $2/additional seat</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={tier === "starter" || tier === "pro" ? "default" : "outline"}
+                          className={tier === "starter" || tier === "pro" ? "gradient-hero text-primary-foreground" : ""}
+                          disabled={subscriptionLoading}
+                          onClick={() => handleUpgrade("business", planSeats)}
+                        >
+                          {tier === "enterprise" ? (
+                            <><ArrowRight className="w-3 h-3 mr-1" />Switch</>
+                          ) : (
+                            <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
+                          )}
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Seats:</span>
+                        <button
+                          type="button"
+                          className="h-6 w-6 rounded border flex items-center justify-center hover:bg-muted"
+                          onClick={() => { const n = Math.max(1, planSeats - 1); setPlanSeats(n); setPlanSeatInput(String(n)); }}
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={planSeatInput}
+                          onChange={(e) => handleSeatInputChange(e.target.value)}
+                          onBlur={(e) => commitSeatInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") commitSeatInput((e.target as HTMLInputElement).value); }}
+                          className="h-6 w-14 text-center text-xs px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <button
+                          type="button"
+                          className="h-6 w-6 rounded border flex items-center justify-center hover:bg-muted"
+                          onClick={() => { const n = planSeats + 1; setPlanSeats(n); setPlanSeatInput(String(n)); }}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs text-muted-foreground ml-1">
+                          = ${(9.99 + Math.max(0, planSeats - 1) * 2).toFixed(2)}/mo
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Enterprise */}
+                  {tier !== "enterprise" && (
+                    <div className="border rounded-lg p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-sm">Enterprise</p>
+                          <p className="text-xs text-muted-foreground">$19.99/mo + $1/additional seat</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={subscriptionLoading}
+                          onClick={() => handleUpgrade("enterprise", planSeats)}
+                        >
+                          {tier === "starter" || tier === "pro" || tier === "business" ? (
+                            <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
+                          ) : (
+                            <><ArrowRight className="w-3 h-3 mr-1" />Switch</>
+                          )}
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Seats:</span>
+                        <button
+                          type="button"
+                          className="h-6 w-6 rounded border flex items-center justify-center hover:bg-muted"
+                          onClick={() => { const n = Math.max(1, planSeats - 1); setPlanSeats(n); setPlanSeatInput(String(n)); }}
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={planSeatInput}
+                          onChange={(e) => handleSeatInputChange(e.target.value)}
+                          onBlur={(e) => commitSeatInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") commitSeatInput((e.target as HTMLInputElement).value); }}
+                          className="h-6 w-14 text-center text-xs px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <button
+                          type="button"
+                          className="h-6 w-6 rounded border flex items-center justify-center hover:bg-muted"
+                          onClick={() => { const n = planSeats + 1; setPlanSeats(n); setPlanSeatInput(String(n)); }}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs text-muted-foreground ml-1">
+                          = ${(19.99 + Math.max(0, planSeats - 1) * 1).toFixed(2)}/mo
+                        </span>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
 
-              <Separator />
-
-              {/* Manage Subscription */}
-              {subscribed ? (
-                <div className="space-y-4">
-                  <Label className="text-base font-medium">Manage Subscription</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Update your payment method, change your plan, or cancel your subscription.
-                  </p>
-                  <Button 
-                    onClick={openCustomerPortal} 
-                    variant="outline" 
-                    className="w-full"
-                  >
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    Open Billing Portal
-                    <ExternalLink className="w-4 h-4 ml-2" />
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Opens Stripe's secure billing portal where you can update payment methods, 
-                    view invoices, and manage your subscription.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <Label className="text-base font-medium">Upgrade Your Plan</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Unlock more features and remove limits by upgrading.
-                  </p>
-                  <div className="grid gap-3">
-                    <Button 
-                      onClick={() => handleUpgrade("pro")}
-                      className="w-full gradient-hero text-primary-foreground"
-                    >
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Upgrade to Pro - $6.99/mo
-                    </Button>
-                    <Button 
-                      onClick={() => handleUpgrade("team")}
+              {/* Payment Method */}
+              {subscribed && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <Label className="text-base font-medium">Payment Method</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Update your card or view past invoices in the Stripe billing portal.
+                    </p>
+                    <Button
                       variant="outline"
                       className="w-full"
+                      onClick={openCustomerPortal}
+                      disabled={subscriptionLoading}
                     >
-                      Upgrade to Team - $49.99/mo
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Update Payment Method / View Invoices
+                      <ExternalLink className="w-4 h-4 ml-auto" />
                     </Button>
                   </div>
-                </div>
+                </>
               )}
 
-              <Separator />
-
-              {/* Plan Features */}
-              <div className="space-y-3">
-                <Label className="text-base font-medium">Your Features</Label>
-                <ul className="space-y-2">
-                  {config.features.map((feature, index) => (
-                    <li key={index} className="flex items-center gap-2 text-sm">
-                      <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {/* Cancel Subscription */}
+              {subscribed && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <Label className="text-base font-medium text-destructive">Cancel Subscription</Label>
+                    {!isCancelConfirming ? (
+                      <Button
+                        variant="outline"
+                        className="w-full border-destructive/40 text-destructive hover:bg-destructive/5"
+                        onClick={() => setIsCancelConfirming(true)}
+                      >
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Cancel Subscription
+                      </Button>
+                    ) : (
+                      <div className="border border-destructive/30 rounded-lg p-4 space-y-3 bg-destructive/5">
+                        <p className="text-sm font-medium">Are you sure you want to cancel?</p>
+                        <p className="text-xs text-muted-foreground">
+                          Your plan will remain active until the end of the current billing period on{" "}
+                          {subscriptionEnd ? new Date(subscriptionEnd).toLocaleDateString() : "your next billing date"}.
+                          After that, you'll be downgraded to the free Starter plan.
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="flex-1"
+                            onClick={() => {
+                              openCustomerPortal();
+                              setIsCancelConfirming(false);
+                            }}
+                          >
+                            Yes, cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => setIsCancelConfirming(false)}
+                          >
+                            Keep my plan
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
             )}
 

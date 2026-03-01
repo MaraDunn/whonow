@@ -98,7 +98,7 @@ export const SubscriptionStatus = ({ variant = "badge" }: SubscriptionStatusProp
       {seatsLimit > 1 && (
         <div className="pt-2 border-t">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Team seats</span>
+            <span className="text-muted-foreground">Seats used</span>
             <span className="font-medium">{seatsUsed} / {seatsLimit}</span>
           </div>
           <div className="mt-1.5 h-2 bg-muted rounded-full overflow-hidden">

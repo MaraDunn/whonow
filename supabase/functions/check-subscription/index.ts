@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
-import { priceToTier, SEAT_LIMITS } from "../_shared/stripeConfig.ts";
+import { priceToTier, SEAT_LIMITS, isPerSeatTier } from "../_shared/stripeConfig.ts";
 
 // Secure logging - no PII
 const logStep = (step: string, details?: Record<string, string | number | boolean | undefined>) => {
@@ -111,7 +111,12 @@ serve(async (req) => {
 
     const priceId = subscription.items.data[0]?.price?.id as string | undefined;
     const tier = priceToTier(priceId);
-    const seatsLimit = SEAT_LIMITS[tier] || 1;
+    // For per-seat tiers, read quantity from the Stripe subscription item.
+    // For flat tiers, fall back to the hardcoded SEAT_LIMITS.
+    const stripeQuantity = subscription.items.data[0]?.quantity ?? 1;
+    const seatsLimit = isPerSeatTier(tier)
+      ? Math.max(1, stripeQuantity)
+      : (SEAT_LIMITS[tier] ?? 1);
     logStep("Determined subscription tier", { 
       tier, 
       seatsLimit, 

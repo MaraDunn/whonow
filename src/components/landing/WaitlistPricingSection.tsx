@@ -6,7 +6,7 @@ import { TIER_CONFIGS, SubscriptionTier } from "@/types/subscription";
 import { ContactSalesDialog } from "@/components/ContactSalesDialog";
 
 export const WaitlistPricingSection = () => {
-  const tiers: SubscriptionTier[] = ["starter", "pro", "team", "business"];
+  const tiers: SubscriptionTier[] = ["starter", "pro", "business", "enterprise"];
   const [contactSalesOpen, setContactSalesOpen] = useState(false);
 
   return (
@@ -40,13 +40,13 @@ export const WaitlistPricingSection = () => {
                   <CardDescription className="h-8">
                     {tierKey === "starter" && "Get started for free"}
                     {tierKey === "pro" && "Manage clients like a pro"}
-                    {tierKey === "team" && "For small teams"}
-                    {tierKey === "business" && "For growing companies"}
+                    {tierKey === "business" && "For small teams"}
+                    {tierKey === "enterprise" && "For growing companies"}
                   </CardDescription>
                 </CardHeader>
 
                 <CardContent className="flex-1">
-                  <div className="mb-6">
+                  <div className="mb-2">
                     <span className="text-3xl font-bold">
                       {config.price === 0 ? "Free" : `$${config.price}`}
                     </span>
@@ -55,12 +55,10 @@ export const WaitlistPricingSection = () => {
                     )}
                   </div>
 
-                  {config.seats > 1 && (
-                    <div className="mb-4 p-2 bg-accent/50 rounded-md text-center">
-                      <span className="text-sm font-medium text-accent-foreground">
-                        Up to {config.seats.toLocaleString()} seats
-                      </span>
-                    </div>
+                  {config.pricePerSeat && (
+                    <p className="text-xs text-muted-foreground mb-4">
+                      ${config.price.toFixed(2)} base + ${config.pricePerSeat}/additional seat
+                    </p>
                   )}
 
                   <ul className="space-y-2">
@@ -97,7 +95,7 @@ export const WaitlistPricingSection = () => {
 
               <ul className="space-y-2">
                 {[
-                  "Everything in Business",
+                  "Everything in Enterprise",
                   "Custom seat limits",
                   "Tailored feature set",
                   "Volume pricing available",

@@ -823,7 +823,7 @@ export function SettingsDialog({
                             if (canAccessFeature("organization_creation")) {
                               setShowCreateOrgDialog(true);
                             } else {
-                              createCheckout("team");
+                              createCheckout("business");
                             }
                           }}
                         >
@@ -1191,7 +1191,7 @@ export function SettingsDialog({
                             <Label className="text-sm text-muted-foreground mb-2 block">Current Plan</Label>
                             <div className="flex items-center gap-2">
                               <p className="font-semibold text-xl">{tierConfig.name}</p>
-                              <Badge variant={tier === "business" ? "default" : tier === "team" ? "secondary" : "outline"}>
+                              <Badge variant={tier === "enterprise" ? "default" : tier === "business" ? "secondary" : "outline"}>
                                 {tier}
                               </Badge>
                             </div>

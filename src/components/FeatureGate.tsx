@@ -29,8 +29,8 @@ export const FeatureGate = ({
   const { canAccessFeature, createCheckout, isLoading } = useSubscription();
 
   const getMinimumTier = () => {
-    if (feature === "team_features") return "team";
-    if (feature === "advanced_analytics" || feature === "api_access" || feature === "custom_branding") return "business";
+    if (feature === "team_features" || feature === "organization_creation" || feature === "integrations") return "business";
+    if (feature === "advanced_analytics" || feature === "api_access" || feature === "custom_branding") return "enterprise";
     return "pro";
   };
 

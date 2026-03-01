@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { priceToTier, SEAT_LIMITS } from "../_shared/stripeConfig.ts";
+import { priceToTier, SEAT_LIMITS, isPerSeatTier } from "../_shared/stripeConfig.ts";
 
 // No CORS headers needed - webhooks come from Stripe servers, not browsers
 // Stripe webhook is never blocked by waitlist mode so subscription updates apply for users with access.
@@ -83,7 +83,12 @@ serve(async (req) => {
       const customerId = subscription.customer as string;
       const priceId = subscription.items.data[0]?.price?.id as string | undefined;
       const tier = priceToTier(priceId);
-      const seatsLimit = SEAT_LIMITS[tier] || 1;
+      // For per-seat tiers, read quantity from the Stripe subscription item.
+      // For flat tiers, fall back to the hardcoded SEAT_LIMITS.
+      const stripeQuantity = subscription.items.data[0]?.quantity ?? 1;
+      const seatsLimit = isPerSeatTier(tier)
+        ? Math.max(1, stripeQuantity)
+        : (SEAT_LIMITS[tier] ?? 1);
       // Treat trialing as active so get_user_subscription_tier returns the tier (it filters on status = 'active')
       const status = (subscription.status === "active" || subscription.status === "trialing") ? "active" : subscription.status;
       const periodStart = subscription.current_period_start

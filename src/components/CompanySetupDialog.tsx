@@ -37,7 +37,7 @@ export function CompanySetupDialog({
     if (!companyName.trim()) return;
     if (!canCreateOrganization) {
       // Redirect to upgrade
-      await createCheckout("team");
+      await createCheckout("business");
       return;
     }
     setIsSubmitting(true);

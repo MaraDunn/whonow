@@ -3,7 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getStripeRedirectOrigin } from "../_shared/appUrl.ts";
 import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
-import { getTierPriceId } from "../_shared/stripeConfig.ts";
+import { getTierPriceId, isPerSeatTier } from "../_shared/stripeConfig.ts";
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -47,12 +47,17 @@ serve(async (req) => {
       throw new Error("Invalid request body");
     }
     
-    const { tier } = body;
+    const { tier, seats } = body;
     const priceId = tier ? getTierPriceId(String(tier)) : undefined;
     if (!tier || !priceId) {
       throw new Error("Invalid tier");
     }
-    logStep("Tier selected", { tier, priceId });
+
+    // For per-seat tiers, quantity is the number of seats (min 1). For flat tiers, always 1.
+    const quantity = isPerSeatTier(String(tier))
+      ? Math.max(1, Math.floor(Number(seats) || 1))
+      : 1;
+    logStep("Tier selected", { tier, priceId, quantity });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     
@@ -74,7 +79,7 @@ serve(async (req) => {
       line_items: [
         {
           price: priceId,
-          quantity: 1,
+          quantity,
         },
       ],
       mode: "subscription",
@@ -83,6 +88,7 @@ serve(async (req) => {
       metadata: {
         user_id: user.id,
         tier: tier,
+        seats: String(quantity),
       },
     });
 

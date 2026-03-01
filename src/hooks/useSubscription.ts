@@ -57,13 +57,19 @@ export const useSubscription = () => {
     // If not subscribed, always treat as starter.
     if (!subscribed) return "starter";
 
-    // Only allow self-serve tiers in the app UI.
-    if (rawTier === "starter" || rawTier === "pro" || rawTier === "team" || rawTier === "business") {
+    // Current self-serve tiers.
+    if (rawTier === "starter" || rawTier === "pro" || rawTier === "business" || rawTier === "enterprise") {
       return rawTier;
     }
 
-    // Legacy enterprise tiers (or unexpected values) are treated as business.
-    return "business";
+    // Legacy "team" tier maps to new "business".
+    if (rawTier === "team") return "business";
+
+    // Legacy "enterprise" / "global_enterprise" DB values map to new "enterprise".
+    if (rawTier === "global_enterprise") return "enterprise";
+
+    // Any other unexpected value falls back to enterprise (highest self-serve tier).
+    return "enterprise";
   };
 
   const describeFunctionsError = (err: unknown): string => {
@@ -197,10 +203,10 @@ export const useSubscription = () => {
                 .select("*")
                 .in("user_id", memberIds)
                 .eq("status", "active")
-                .order("tier", { ascending: false }); // Order by tier (business > team > pro > starter)
+                .order("tier", { ascending: false }); // Order by tier (enterprise > business > pro > starter)
               
               if (memberSubs && memberSubs.length > 0) {
-                // Find the highest tier subscription (prefer business > team > pro)
+                // Find the highest tier subscription (prefer enterprise > business > pro)
                 const bestSub = memberSubs.find(s => s.tier !== "starter") || memberSubs[0];
                 if (bestSub && bestSub.tier !== "starter") {
                   companySubscription = bestSub;
@@ -445,7 +451,7 @@ export const useSubscription = () => {
   );
 
   const createCheckout = useCallback(
-    async (tier: SubscriptionTier) => {
+    async (tier: SubscriptionTier, seats?: number) => {
       if (!session?.access_token) {
         toast.error("Please sign in to subscribe");
         return null;
@@ -458,7 +464,7 @@ export const useSubscription = () => {
           return null;
         }
         const { data, error } = await supabase.functions.invoke("create-checkout", {
-          body: { tier },
+          body: { tier, seats: seats ?? 1 },
           headers: {
             Authorization: `Bearer ${token}`,
           },

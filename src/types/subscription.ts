@@ -1,8 +1,8 @@
 export type SubscriptionTier =
   | "starter"
   | "pro"
-  | "team"
-  | "business";
+  | "business"
+  | "enterprise";
 
 export interface SubscriptionData {
   subscribed: boolean;
@@ -18,6 +18,7 @@ export interface TierConfig {
   priceId: string;
   productId: string;
   price: number;
+  pricePerSeat?: number;
   period: string;
   seats: number;
   features: string[];
@@ -41,9 +42,9 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
   },
   pro: {
     name: "Pro",
-    priceId: "price_1RifXqDXpGeDw1xnkNvKgEzI",
-    productId: "prod_SnOPR3XQ7NILtZ",
-    price: 6.99,
+    priceId: "price_1T6H9xFJbimPmnyOEpvjJlzG",
+    productId: "",
+    price: 4.99,
     period: "month",
     seats: 1,
     features: [
@@ -56,36 +57,35 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     highlighted: true,
     badge: "Most Popular",
   },
-  team: {
+  business: {
     name: "Team",
-    priceId: "price_1RifYIDXpGeDw1xn1rBKxeH7",
-    productId: "prod_SnOPIZxzHqO5j9",
-    price: 49.99,
+    priceId: "price_1T6HNFFJbimPmnyOYBYyiChf",
+    productId: "",
+    price: 9.99,
+    pricePerSeat: 2,
     period: "month",
-    seats: 25,
+    seats: 1,
     features: [
       "Everything in Pro",
       "Organization Dashboard — centralized team management & insights",
       "Active Employee Directory — live, searchable roster of your org",
       "Create & manage an Organization",
-      "Up to 25 team members",
-      "Shared contact folders",
-      "Role-based permissions",
-      "Slack & Teams (org-level)",
+      "$2 per additional seat",
     ],
   },
-  business: {
-    name: "Business",
-    priceId: "price_1RifYIDXpGeDw1xni9LJxRLQ",
-    productId: "prod_SnOPIZGzLgqiUM",
-    price: 119.99,
+  enterprise: {
+    name: "Enterprise",
+    priceId: "price_1T6HKWFJbimPmnyOW4wlqE8z",
+    productId: "",
+    price: 19.99,
+    pricePerSeat: 1,
     period: "month",
-    seats: 100,
+    seats: 1,
     features: [
-      "Everything in Team",
-      "Up to 100 team members",
+      "Everything in Business",
       "Custom branding",
       "Dedicated support",
+      "$1 per additional seat",
     ],
   },
 };
@@ -104,16 +104,16 @@ export type FeatureName =
   | "custom_integrations";
 
 export const FEATURE_ACCESS: Record<FeatureName, SubscriptionTier[]> = {
-  basic_contacts: ["starter", "pro", "team", "business"],
-  client_management: ["pro", "team", "business"],
-  advanced_search: ["pro", "team", "business"],
-  organization_creation: ["team", "business"],
-  team_features: ["team", "business"],
-  integrations: ["team", "business"],
-  advanced_analytics: ["business"],
-  api_access: ["business"],
-  custom_branding: ["business"],
-  // No self-serve enterprise tiers: direct large orgs to sales instead.
+  basic_contacts: ["starter", "pro", "business", "enterprise"],
+  client_management: ["pro", "business", "enterprise"],
+  advanced_search: ["pro", "business", "enterprise"],
+  organization_creation: ["business", "enterprise"],
+  team_features: ["business", "enterprise"],
+  integrations: ["business", "enterprise"],
+  advanced_analytics: ["enterprise"],
+  api_access: ["enterprise"],
+  custom_branding: ["enterprise"],
+  // No self-serve tiers: direct large orgs to sales instead.
   sso: [],
   custom_integrations: [],
 };
