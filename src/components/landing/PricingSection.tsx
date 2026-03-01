@@ -267,7 +267,6 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
               <ul className="space-y-2">
                 {[
                   "Everything in Enterprise",
-                  "Custom seat limits",
                   "Tailored feature set",
                   "Volume pricing available",
                 ].map((feature, index) => (
