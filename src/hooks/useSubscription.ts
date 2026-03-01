@@ -570,11 +570,56 @@ export const useSubscription = () => {
     }
   }, [session?.access_token, getValidAccessToken]);
 
+  const updateSubscription = useCallback(
+    async (tier: SubscriptionTier, seats?: number) => {
+      if (!session?.access_token) {
+        toast.error("Please sign in to manage your subscription");
+        return false;
+      }
+
+      try {
+        const token = await getValidAccessToken();
+        if (!token) {
+          toast.error("Session expired. Please sign in again.");
+          return false;
+        }
+
+        const { data, error } = await supabase.functions.invoke("update-subscription", {
+          body: { tier, seats: seats ?? 1 },
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (error) {
+          const errorMessage = describeFunctionsError(error);
+          toast.error(errorMessage || "Failed to update subscription");
+          return false;
+        }
+
+        if (data?.error) {
+          toast.error(data.error || "Failed to update subscription");
+          return false;
+        }
+
+        toast.success("Subscription updated successfully!");
+        // Refresh subscription state from DB
+        await checkSubscription();
+        return true;
+      } catch (err) {
+        console.error("Error updating subscription:", err);
+        const errorMessage = describeFunctionsError(err);
+        toast.error(errorMessage || "Failed to update subscription");
+        return false;
+      }
+    },
+    [session?.access_token, getValidAccessToken, checkSubscription]
+  );
+
   return {
     ...subscription,
     isLoading,
     canAccessFeature,
     createCheckout,
+    updateSubscription,
     openCustomerPortal,
     refreshSubscription: checkSubscription,
     showCreateOrganizationAfterUpgrade,

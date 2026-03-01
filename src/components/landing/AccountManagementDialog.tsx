@@ -109,6 +109,7 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
     seatsLimit,
     openCustomerPortal, 
     createCheckout,
+    updateSubscription,
     isLoading: subscriptionLoading 
   } = useSubscription();
 
@@ -403,6 +404,7 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
   const [planSeats, setPlanSeats] = useState(1);
   const [planSeatInput, setPlanSeatInput] = useState("1");
   const [isCancelConfirming, setIsCancelConfirming] = useState(false);
+  const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
 
   const handleSeatInputChange = (value: string) => {
     setPlanSeatInput(value);
@@ -415,8 +417,19 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
     setPlanSeatInput(String(clamped));
   };
 
-  const handleUpgrade = (targetTier: SubscriptionTier, seats?: number) => {
-    createCheckout(targetTier, seats);
+  const handleChangePlan = async (targetTier: SubscriptionTier, seats?: number) => {
+    setIsUpdatingPlan(true);
+    try {
+      if (subscribed) {
+        // Existing subscriber: update in place via Stripe Subscriptions API
+        await updateSubscription(targetTier, seats);
+      } else {
+        // New subscriber: start a Stripe Checkout session
+        await createCheckout(targetTier, seats);
+      }
+    } finally {
+      setIsUpdatingPlan(false);
+    }
   };
 
   const getDeviceIcon = (userAgent: string | null) => {
@@ -569,7 +582,7 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                     : "Unlock more features and remove limits by upgrading."}
                 </p>
 
-                <div className="grid gap-3">
+                  <div className="grid gap-3">
                   {/* Pro */}
                   {tier !== "pro" && (
                     <div className="border rounded-lg p-3 space-y-2">
@@ -582,10 +595,12 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                           size="sm"
                           variant={tier === "starter" ? "default" : "outline"}
                           className={tier === "starter" ? "gradient-hero text-primary-foreground" : ""}
-                          disabled={subscriptionLoading}
-                          onClick={() => handleUpgrade("pro")}
+                          disabled={subscriptionLoading || isUpdatingPlan}
+                          onClick={() => handleChangePlan("pro")}
                         >
-                          {tier === "starter" ? (
+                          {isUpdatingPlan ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : tier === "starter" ? (
                             <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
                           ) : (
                             <><ArrowRight className="w-3 h-3 mr-1" />Switch</>
@@ -607,10 +622,12 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                           size="sm"
                           variant={tier === "starter" || tier === "pro" ? "default" : "outline"}
                           className={tier === "starter" || tier === "pro" ? "gradient-hero text-primary-foreground" : ""}
-                          disabled={subscriptionLoading}
-                          onClick={() => handleUpgrade("business", planSeats)}
+                          disabled={subscriptionLoading || isUpdatingPlan}
+                          onClick={() => handleChangePlan("business", planSeats)}
                         >
-                          {tier === "enterprise" ? (
+                          {isUpdatingPlan ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : tier === "enterprise" ? (
                             <><ArrowRight className="w-3 h-3 mr-1" />Switch</>
                           ) : (
                             <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
@@ -660,10 +677,12 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={subscriptionLoading}
-                          onClick={() => handleUpgrade("enterprise", planSeats)}
+                          disabled={subscriptionLoading || isUpdatingPlan}
+                          onClick={() => handleChangePlan("enterprise", planSeats)}
                         >
-                          {tier === "starter" || tier === "pro" || tier === "business" ? (
+                          {isUpdatingPlan ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : tier === "starter" || tier === "pro" || tier === "business" ? (
                             <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
                           ) : (
                             <><ArrowRight className="w-3 h-3 mr-1" />Switch</>
