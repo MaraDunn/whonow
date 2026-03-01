@@ -197,15 +197,15 @@ export function RelationshipInsightsCard({
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
         <div>
           <h3 className="text-sm font-semibold">Relationship Insights</h3>
           <p className="text-xs text-muted-foreground">
             Overview of your client activity this month
           </p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Settings2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <Label htmlFor="default-contact-interval" className="text-xs text-muted-foreground whitespace-nowrap">
             Preferred contact interval
           </Label>
@@ -217,7 +217,7 @@ export function RelationshipInsightsCard({
             value={displayContactInterval}
             onChange={(e) => setLocalContactInterval(e.target.value)}
             onBlur={handleContactIntervalBlur}
-            className="h-7 w-20 text-xs text-center"
+            className="h-7 w-16 text-xs text-center"
           />
           <span className="text-xs text-muted-foreground">days</span>
         </div>
