@@ -20,10 +20,10 @@ export const CTASection = ({ onGetStarted }: CTASectionProps) => {
           
           <div className="relative bg-card rounded-3xl p-12 sm:p-16 shadow-card border border-border">
             <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
-              Ready to transform how your team connects?
+              Stop losing track of the people who matter.
             </h2>
             <p className="text-muted-foreground text-lg mb-8 max-w-xl mx-auto">
-              Join organizations that have revolutionized their internal communication with WhoNow.
+              WhoNow gives you instant recall, relationship health visibility, and proactive follow-up memory — all without the complexity of a CRM.
             </p>
             {user ? (
               <Button

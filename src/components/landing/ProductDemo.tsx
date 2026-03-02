@@ -427,10 +427,10 @@ export const ProductDemo = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
-            See it in action
+            Ask anything about your network
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Natural language search, client management, and a searchable company directory — all in one place.
+            Natural language search, relationship insights, and shared team visibility — all in one lightweight tool.
           </p>
         </div>
 
@@ -551,7 +551,7 @@ export const ProductDemo = () => {
                     {showClientView && (
                       <div className="border-l border-border pl-4 flex items-center gap-2">
                         <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-                        <span className="text-sm font-medium text-foreground">Client management</span>
+                        <span className="text-sm font-medium text-foreground">Relationship insights</span>
                       </div>
                     )}
                     {showDirectoryView && (
@@ -602,7 +602,7 @@ export const ProductDemo = () => {
                 {/* Client callout (client phase) */}
                 {showClientView && (
                   <p className="text-sm text-muted-foreground -mt-4 mb-6">
-                    Mark key contacts as clients to track relationships at a glance.
+                    Mark key contacts as clients to monitor relationship strength at a glance.
                   </p>
                 )}
 
@@ -616,7 +616,7 @@ export const ProductDemo = () => {
                         <span className="w-0.5 h-6 bg-primary animate-pulse ml-0.5" />
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">Find internal contacts by responsibility — who handles what.</p>
+                    <p className="text-xs text-muted-foreground mt-2">Search your team's shared network — find who handles what, instantly.</p>
                   </div>
                 )}
 

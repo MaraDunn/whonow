@@ -18,10 +18,10 @@ export const WaitlistPricingSection = () => {
             Pricing
           </Badge>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
-            Choose the plan that's right for you
+            Built for individuals. Scales with your team.
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Start free and scale as you grow. All plans include a 14-day money-back guarantee.
+            Start free and add more as your network grows. All plans include a 14-day money-back guarantee.
           </p>
         </div>
 
@@ -38,10 +38,10 @@ export const WaitlistPricingSection = () => {
                 <CardHeader className="pb-4">
                   <CardTitle className="text-lg">{config.name}</CardTitle>
                   <CardDescription className="h-8">
-                    {tierKey === "starter" && "Get started for free"}
-                    {tierKey === "pro" && "Manage clients like a pro"}
-                    {tierKey === "business" && "For small teams"}
-                    {tierKey === "enterprise" && "For growing companies"}
+                    {tierKey === "starter" && "Get organized."}
+                    {tierKey === "pro" && "See and strengthen your relationships."}
+                    {tierKey === "business" && "Make your team's network searchable."}
+                    {tierKey === "enterprise" && "Scale with control and branding."}
                   </CardDescription>
                 </CardHeader>
 

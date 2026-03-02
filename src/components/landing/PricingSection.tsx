@@ -125,10 +125,10 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
   const tiers: SubscriptionTier[] = ["starter", "pro", "business", "enterprise"];
 
   const tierDescriptions: Record<SubscriptionTier, string> = {
-    starter: "Get started for free",
-    pro: "Manage clients like a pro",
-    business: "For small teams",
-    enterprise: "For growing companies",
+    starter: "Get organized.",
+    pro: "See and strengthen your relationships.",
+    business: "Make your team's network searchable.",
+    enterprise: "Scale with control and branding.",
   };
 
   return (
@@ -140,10 +140,10 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
             Pricing
           </Badge>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
-            Choose the plan that's right for you
+            Built for individuals. Scales with your team.
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Start free and scale as you grow. All plans include a 14-day money-back guarantee.
+            Start free and add more as your network grows. All plans include a 14-day money-back guarantee.
           </p>
         </div>
 
@@ -250,7 +250,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
             <CardHeader className="pb-4">
               <CardTitle className="text-lg">Custom</CardTitle>
               <CardDescription className="h-8">
-                For larger organizations
+                Strengthen client relationships proactively
               </CardDescription>
             </CardHeader>
 
@@ -261,7 +261,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
               </div>
 
               <p className="text-sm text-muted-foreground mb-4">
-                Need more seats, custom features, or better pricing? Let's work together to create a solution that fits your organization.
+                Need volume pricing, a tailored feature set, or a dedicated implementation? Let's build something that fits your organization.
               </p>
 
               <ul className="space-y-2">

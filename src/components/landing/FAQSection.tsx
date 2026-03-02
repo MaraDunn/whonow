@@ -9,27 +9,27 @@ const faqs = [
   {
     question: "Is this a CRM?",
     answer:
-      "No, WhoNow is not a CRM. While we provide some functionality that overlaps with CRM systems, we're designed to be lightweight and focused on contact management and organization. WhoNow is meant to be used alongside your existing CRM, not in place of it. We help you quickly find and organize contacts without the bloat that comes with full-featured CRM platforms.",
+      "No. WhoNow does not track deals, pipelines, or revenue. It helps you instantly find, organize, and strengthen the people behind your work. Use it alongside your CRM — not in place of it.",
   },
   {
     question: "How does WhoNow integrate with my existing tools?",
     answer:
-      "WhoNow integrates with Slack and Microsoft Teams at the organization level: your org admin connects once, and all members can import workspace members as contacts and share contact cards from chat. You can also import contacts from CSV files and export your data when needed. We're designed to complement your existing workflow tools.",
+      "WhoNow integrates with Slack and Microsoft Teams at the organization level: your org admin connects once, and all members can import workspace contacts and share contact cards from chat. You can also import contacts from CSV files and export your data when needed. WhoNow is designed to complement the tools you already use, not replace them.",
   },
   {
-    question: "What makes WhoNow different from other contact management tools?",
+    question: "What makes WhoNow different from other contact tools?",
     answer:
-      "WhoNow focuses on natural language search, making it easy to find contacts using plain English questions like 'who do I know at TechCorp' or 'engineers in San Francisco'. We prioritize simplicity and speed over complex features, helping you quickly access the information you need without navigating through multiple menus or learning a complex interface.",
+      "WhoNow is built around three things most contact tools ignore: natural language search, relationship health scoring, and proactive follow-up memory. You can ask questions like \"who do I know at Stripe?\" or \"clients I haven't spoken to in 60 days\" and get instant, accurate results — no complex filtering or menu navigation required.",
   },
   {
     question: "Is my data secure?",
     answer:
-      "Yes, we use enterprise-grade security with encrypted data at rest and in transit. Your contact information is stored securely and only accessible to you and your organization members.",
+      "Yes. We use enterprise-grade security with encrypted data at rest and in transit. Your contact information is stored securely and only accessible to you and your organization members. The desktop app processes search on-device for maximum privacy.",
   },
   {
     question: "Can I use WhoNow with my team?",
     answer:
-      "Yes, WhoNow is designed for teams and organizations. You can share contacts, organize them in folders, and collaborate with your team members. The platform scales from small teams to large enterprises.",
+      "Yes. WhoNow is designed for both individuals and teams. You can share contacts, organize them in folders, and give your whole team visibility into your collective network — without duplicating effort or creating internal CRM overhead. It scales from solo professionals to large organizations.",
   },
 ];
 

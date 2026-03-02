@@ -1,20 +1,20 @@
-import { Shield, TrendingUp, Building } from "lucide-react";
+import { Shield, Cpu, Users } from "lucide-react";
 
 const trustIndicators = [
   {
     icon: Shield,
-    title: "Secure authentication",
-    description: "Enterprise-grade security with encrypted data at rest and in transit.",
+    title: "Privacy-first by design",
+    description: "Enterprise-grade encryption at rest and in transit. Your network data stays yours — no external data dependency.",
   },
   {
-    icon: TrendingUp,
-    title: "Scalable for teams",
-    description: "From startups to enterprises, WhoNow grows with your organization.",
+    icon: Cpu,
+    title: "On-device AI search",
+    description: "The desktop app runs natural language search locally — fast, deterministic, and private without any cloud round-trips.",
   },
   {
-    icon: Building,
-    title: "Designed for professionals",
-    description: "Built specifically for professional environments and workflows.",
+    icon: Users,
+    title: "Built for professionals and teams",
+    description: "Works for solo professionals managing their own network, and scales to full organizations sharing relationship visibility.",
   },
 ];
 
