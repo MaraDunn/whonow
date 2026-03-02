@@ -191,6 +191,7 @@ const IndexContent = () => {
     organizationClientFolders, 
     teamFolders, 
     organizationTeamFolders, 
+    allFolders,
     addFolder, 
     updateFolder, 
     deleteFolder 
@@ -550,7 +551,7 @@ const IndexContent = () => {
       return;
     }
     const folderName = folderId 
-      ? (folders.find(f => f.id === folderId)?.name || "folder")
+      ? (allFolders.find(f => f.id === folderId)?.name || "folder")
       : "No folder";
     console.log("[handleBulkMoveToFolder] Moving contacts:", ids.length, "contacts to folder:", folderId);
     bulkMoveToFolder({ ids, folderId, folderName }, {
@@ -1037,7 +1038,7 @@ const IndexContent = () => {
                     onBulkRestore={showTrash ? handleBulkRestore : undefined}
                     hasClientAccess={hasClientAccess}
                     hasCompany={!!company}
-                    folders={showDirectory ? teamFolders : folders}
+                    folders={showDirectory ? teamFolders : clientView !== null ? [...clientFolders, ...organizationClientFolders] : folders}
                     selectedContactIds={selectedContactIds}
                     onToggleSelectionMode={handleToggleSelectionMode}
                     isTrashView={showTrash}
@@ -1102,7 +1103,7 @@ const IndexContent = () => {
                   onRestoreContact={restoreContact}
                   onPermanentlyDelete={permanentlyDeleteContact}
                   onEmptyTrash={emptyTrash}
-                  folders={folders}
+                  folders={[...clientFolders, ...organizationClientFolders]}
                   onUpdateFolder={handleUpdateFolder}
                   showOwnershipBadge={!!company}
                   onMarkContacted={updateLastContacted}
@@ -1134,7 +1135,7 @@ const IndexContent = () => {
                   onRestoreContact={restoreContact}
                   onPermanentlyDelete={permanentlyDeleteContact}
                   onEmptyTrash={emptyTrash}
-                  folders={folders}
+                  folders={organizationFolders}
                   onUpdateFolder={handleUpdateFolder}
                   showOwnershipBadge={!!company}
                   onMarkContacted={updateLastContacted}

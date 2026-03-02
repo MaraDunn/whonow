@@ -62,12 +62,20 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
-    // Find their active subscription
-    const subscriptions = await stripe.subscriptions.list({
+    // Find their active or trialing subscription
+    let subscriptions = await stripe.subscriptions.list({
       customer: customerId,
       status: "active",
       limit: 1,
     });
+    if (subscriptions.data.length === 0) {
+      // Also check for subscriptions currently in a free trial
+      subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "trialing",
+        limit: 1,
+      });
+    }
     if (subscriptions.data.length === 0) {
       throw new Error("No active subscription found. Please subscribe first.");
     }

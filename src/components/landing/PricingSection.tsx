@@ -143,7 +143,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
             Built for individuals. Scales with your team.
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Start free and add more as your network grows. All plans include a 14-day money-back guarantee.
+            Start free and add more as your network grows. All paid plans include a 14-day free trial — no credit card charged until the trial ends.
           </p>
         </div>
 
@@ -238,7 +238,9 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
                       ? "Current Plan"
                       : tierKey === "starter"
                       ? "Start Free"
-                      : `Upgrade to ${config.name}`}
+                      : user
+                      ? `Upgrade to ${config.name}`
+                      : `Try ${config.name} Free`}
                   </Button>
                 </CardFooter>
               </Card>
@@ -292,7 +294,7 @@ export const PricingSection = ({ onGetStarted }: PricingSectionProps) => {
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-8">
-          All prices in USD + applicable taxes. Cancel anytime. Need custom pricing?{" "}
+          All prices in USD + applicable taxes. 14-day free trial for new subscribers. Cancel anytime. Need custom pricing?{" "}
           <button
             type="button"
             onClick={() => setContactSalesOpen(true)}

@@ -64,9 +64,20 @@ serve(async (req) => {
     // Check if customer already exists
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     let customerId: string | undefined;
+    let hasUsedTrial = false;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
       logStep("Existing customer found", { customerId });
+
+      // Check if this customer has ever had a subscription (trial or paid) to avoid giving
+      // a second free trial to returning customers.
+      const allSubs = await stripe.subscriptions.list({
+        customer: customerId,
+        limit: 1,
+        status: "all",
+      });
+      hasUsedTrial = allSubs.data.length > 0;
+      logStep("Trial eligibility check", { hasUsedTrial, subCount: allSubs.data.length });
     }
 
     // Redirect to canonical app (whonow.co) so Stripe always sends users to the deployed app
@@ -83,6 +94,8 @@ serve(async (req) => {
         },
       ],
       mode: "subscription",
+      // Grant a 14-day free trial to first-time subscribers only
+      ...(!hasUsedTrial && { subscription_data: { trial_period_days: 14 } }),
       success_url: `${redirectOrigin}/app?subscription=success`,
       cancel_url: `${redirectOrigin}/?subscription=cancelled`,
       metadata: {

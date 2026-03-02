@@ -313,6 +313,7 @@ interface MassOutreachAssistantProps {
 
 export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreachAssistantProps) {
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [contactListOpen, setContactListOpen] = useState(true);
 
@@ -358,7 +359,19 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
   };
 
   const handleInsertVariable = (variable: string) => {
-    setTemplate((prev) => prev + variable);
+    const el = textareaRef.current;
+    if (el) {
+      const start = el.selectionStart ?? template.length;
+      const end = el.selectionEnd ?? template.length;
+      const newValue = template.slice(0, start) + variable + template.slice(end);
+      setTemplate(newValue);
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(start + variable.length, start + variable.length);
+      });
+    } else {
+      setTemplate((prev) => prev + variable);
+    }
   };
 
   return (
@@ -395,6 +408,7 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
               onLoad={(body) => setTemplate(body)}
             />
             <Textarea
+              ref={textareaRef}
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
               className="min-h-[160px] font-mono text-sm resize-y"
