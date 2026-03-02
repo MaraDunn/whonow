@@ -60,7 +60,7 @@ export const ValueProps = () => {
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
               WhoNow does not manage deals or pipelines.<br className="hidden sm:block" />
-              It helps you remember and strengthen relationships with your network.
+              It helps you remember and strengthen relationships within your network.
             </p>
           </div>
 
