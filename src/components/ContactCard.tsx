@@ -29,6 +29,11 @@ import {
 import { toast } from "sonner";
 import { RelationshipHealthBadge } from "@/components/RelationshipHealthBadge";
 import { computeHealthScore } from "@/utils/relationshipHealth";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useContactDrag } from "@/contexts/ContactDragContext";
+
+/** Data type for drag payload so sidebar can validate drops (e.g. shared/client/smart). */
+export const CONTACT_DRAG_TYPE = "application/x-whonow-contact";
 
 // Name block: text-xl name + optional shared/personal badge beneath
 const NAME_BLOCK_H_DESKTOP = "3.5rem";
@@ -165,6 +170,27 @@ const ContactCardComponent = function ContactCard({
   selectionMode = false,
 }: ContactCardProps) {
   const [folderPopoverOpen, setFolderPopoverOpen] = React.useState(false);
+  const isMobile = useIsMobile();
+  const { setPayload } = useContactDrag();
+
+  const canDrag = !isMobile && !!onUpdateFolder && !isTrashView;
+  const handleDragStart = React.useCallback(
+    (e: React.DragEvent) => {
+      if (!canDrag) return;
+      const payload = {
+        contactId: contact.id,
+        isShared: !!contact.isShared,
+        isClient: !!contact.isClient,
+      };
+      e.dataTransfer.setData(CONTACT_DRAG_TYPE, JSON.stringify(payload));
+      e.dataTransfer.effectAllowed = "move";
+      setPayload(payload);
+    },
+    [canDrag, contact.id, contact.isShared, contact.isClient, setPayload]
+  );
+  const handleDragEnd = React.useCallback(() => {
+    setPayload(null);
+  }, [setPayload]);
 
   // Memoize folder map for quick lookup
   const folderMap = React.useMemo(() => 
@@ -283,6 +309,9 @@ const ContactCardComponent = function ContactCard({
     return (
       <div
         onClick={(e) => handleCardClick(e)}
+        draggable={canDrag}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
         className={cn(
           "group relative px-2 py-1.5 rounded-xl border-2 transition-colors cursor-pointer animate-slide-up outline-none",
           selectionMode 
@@ -475,11 +504,14 @@ const ContactCardComponent = function ContactCard({
   if (compact && isExpanded) {
     return (
       <div
+        draggable={canDrag}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
         className={cn(
           "group relative p-4 rounded-xl border-2 transition-all duration-300 animate-scale-in outline-none",
-          selectionMode 
-            ? isSelected 
-              ? "border-primary bg-primary/5 shadow-md" 
+          selectionMode
+            ? isSelected
+              ? "border-primary bg-primary/5 shadow-md"
               : "border-border bg-card shadow-sm"
             : "border-primary/30 bg-card shadow-md"
         )}
@@ -833,6 +865,9 @@ const ContactCardComponent = function ContactCard({
   return (
     <div
       data-onboarding-contact-card={index === 0 ? "" : undefined}
+      draggable={canDrag}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       onClick={isTrashView ? undefined : (e) => handleCardClick(e)}
       className={cn(
         "group relative p-5 rounded-xl sm:rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col overflow-hidden box-border outline-none",

@@ -37,6 +37,9 @@ import { Contact, ContactOwnershipFilter } from "@/types/contact";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { SearchQueryFilters } from "@/types/searchQuery";
+import { applySearchFiltersToContacts } from "@/utils/applySearchFilters";
+import { useSmartFolderContacts } from "@/hooks/useSmartFolderContacts";
+import { ContactDragProvider } from "@/contexts/ContactDragContext";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 type OrgSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added" | "health-desc" | "health-asc";
@@ -183,6 +186,10 @@ const IndexContent = () => {
     totalCount,
     bulkDeleteContacts,
     bulkMoveToFolder,
+    hasMoreContacts,
+    loadMoreContacts,
+    isLoadingMoreContacts,
+    getContactById,
   } = useContacts();
   const { 
     folders, 
@@ -243,26 +250,61 @@ const IndexContent = () => {
     }
   }, [company, showCreateOrganizationAfterUpgrade, dismissCreateOrgPrompt]);
 
-  // Filter contacts by folder and ownership
+  // Selected folder (for smart folder filter)
+  const selectedFolder = useMemo(
+    () => (selectedFolderId ? allFolders.find((f) => f.id === selectedFolderId) : null),
+    [selectedFolderId, allFolders]
+  );
+
+  const isViewingSmartFolder =
+    selectedFolder &&
+    (selectedFolder.isSmartFolder ||
+      (selectedFolder.filterCriteria &&
+        typeof selectedFolder.filterCriteria === "object" &&
+        Object.keys(selectedFolder.filterCriteria).length > 0));
+
+  // Smart folder as bookmarked search: run the same server-side search as the search bar.
+  const savedQuery = selectedFolder?.savedSearchQuery?.trim() || null;
+  const { contacts: smartFolderContacts, isLoading: smartFolderContactsLoading } =
+    useSmartFolderContacts(savedQuery);
+
+  // Base list when viewing a smart folder with saved query = server-side results; otherwise use client-filtered list.
+  const smartFolderBaseContacts =
+    selectedFolderId !== null && selectedFolder && savedQuery ? smartFolderContacts : [];
+
+  // Filter contacts by folder and ownership (used when NOT using bookmarked search)
   const folderFilteredContacts = useMemo(() => {
     if (showTrash) return trashedContacts;
-    
+
     let filtered = contacts;
-    
+
     // Apply ownership filter for company users
     if (company && ownershipFilter !== "all") {
-      filtered = filtered.filter(c => 
+      filtered = filtered.filter((c) =>
         ownershipFilter === "shared" ? c.isShared : !c.isShared
       );
     }
-    
-    // Apply folder filter
-    if (selectedFolderId !== null) {
-      filtered = filtered.filter(c => c.folderId === selectedFolderId);
+
+    // Apply folder filter: regular folder by folderId, smart folder by saved search criteria
+    // Treat as smart folder if isSmartFolder flag is set OR filterCriteria is present (fallback for older rows)
+    if (selectedFolderId !== null && selectedFolder) {
+      const hasFilterCriteria =
+        selectedFolder.filterCriteria &&
+        typeof selectedFolder.filterCriteria === "object" &&
+        Object.keys(selectedFolder.filterCriteria).length > 0;
+      const isSmartFolder = selectedFolder.isSmartFolder || hasFilterCriteria;
+
+      if (isSmartFolder && hasFilterCriteria) {
+        const matchesFilter = applySearchFiltersToContacts(filtered, selectedFolder.filterCriteria);
+        // Smart folders show only search matches; do not merge assigned contacts
+        filtered = matchesFilter;
+      } else {
+        filtered = filtered.filter((c) => c.folderId === selectedFolderId);
+      }
     }
-    
+
     return filtered;
-  }, [contacts, trashedContacts, selectedFolderId, showTrash, ownershipFilter, company]);
+  }, [contacts, trashedContacts, selectedFolderId, selectedFolder, showTrash, ownershipFilter, company]);
 
   // Use accurate counts from database functions (fallback to array length if not available)
   // Only compute fallback if needed (when accurate count is 0 or unavailable)
@@ -352,6 +394,18 @@ const IndexContent = () => {
     return teamContacts;
   }, [teamContacts, selectedTeamFolderId]);
 
+  // Base list for search: smart folder with saved query = server-side bookmarked search results; else folder/client/org/team list.
+  const baseListForSearch =
+    savedQuery && selectedFolderId !== null
+      ? smartFolderBaseContacts
+      : showDirectory
+        ? filteredTeamContacts
+        : clientView !== null
+          ? clientDirectoryContacts
+          : orgView !== null
+            ? orgDirectoryContacts
+            : folderFilteredContacts;
+
   const {
     contacts: filteredContacts,
     action,
@@ -359,11 +413,10 @@ const IndexContent = () => {
     understoodFilters,
     understoodRoleLabel,
     isTruncated,
-  } = useSmartSearch(
-    showDirectory ? filteredTeamContacts : (clientView !== null ? clientDirectoryContacts : (orgView !== null ? orgDirectoryContacts : folderFilteredContacts)), 
-    searchQuery,
-    { contactMarkedVersion, scopeToContacts: clientView !== null || orgView !== null }
-  );
+  } = useSmartSearch(baseListForSearch, searchQuery, {
+    contactMarkedVersion,
+    scopeToContacts: clientView !== null || orgView !== null || (!!savedQuery && selectedFolderId !== null),
+  });
 
   const handleSelectTrash = () => {
     setShowTrash(true);
@@ -663,18 +716,59 @@ const IndexContent = () => {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleToggleSelectionMode]);
 
-  // Calculate contact count per folder - memoized to avoid recalculating on every render
-  // This is used by FolderSidebar and only needs to update when contacts change
+  // Base list with only ownership filter (for smart folder counts)
+  const ownershipFilteredContacts = useMemo(() => {
+    if (!company || ownershipFilter === "all") return contacts;
+    return contacts.filter((c) =>
+      ownershipFilter === "shared" ? c.isShared : !c.isShared
+    );
+  }, [contacts, company, ownershipFilter]);
+
+  // Calculate contact count per folder - regular from folderId; smart folders never use assignment count
   const contactCountByFolder = useMemo(() => {
+    const smartFolderIds = new Set(
+      allFolders
+        .filter(
+          (f) =>
+            f.directoryType === "contacts" &&
+            (f.isSmartFolder ||
+              !!f.savedSearchQuery?.trim() ||
+              (f.filterCriteria && typeof f.filterCriteria === "object" && Object.keys(f.filterCriteria).length > 0))
+        )
+        .map((f) => f.id)
+    );
     const counts: Record<string, number> = {};
-    // Only iterate through contacts once
     for (const c of contacts) {
-      if (c.folderId) {
+      if (c.folderId && !smartFolderIds.has(c.folderId)) {
         counts[c.folderId] = (counts[c.folderId] || 0) + 1;
       }
     }
+    for (const folder of allFolders) {
+      if (folder.directoryType !== "contacts") continue;
+      const hasSavedQuery = !!folder.savedSearchQuery?.trim();
+      const hasFilterCriteria =
+        folder.filterCriteria &&
+        typeof folder.filterCriteria === "object" &&
+        Object.keys(folder.filterCriteria).length > 0;
+      const isSmartFolder = folder.isSmartFolder || hasFilterCriteria || hasSavedQuery;
+      if (isSmartFolder && hasSavedQuery) {
+        counts[folder.id] = folder.id === selectedFolderId ? smartFolderContacts.length : 0;
+      } else if (isSmartFolder && hasFilterCriteria && !hasSavedQuery) {
+        const matchesFilter = applySearchFiltersToContacts(
+          ownershipFilteredContacts,
+          folder.filterCriteria
+        );
+        counts[folder.id] = matchesFilter.length;
+      }
+    }
     return counts;
-  }, [contacts]);
+  }, [contacts, allFolders, ownershipFilteredContacts, selectedFolderId, smartFolderContacts.length]);
+
+  // Contact folders that accept moving contacts (exclude smart folders)
+  const contactFoldersForMove = useMemo(
+    () => [...folders, ...organizationFolders].filter((f) => !f.isSmartFolder),
+    [folders, organizationFolders]
+  );
 
   // Memoize update folder handlers to avoid creating new functions on every render
   // Create a contact lookup map for O(1) access instead of O(n) find()
@@ -690,13 +784,29 @@ const IndexContent = () => {
     }
   }, [contactMap, updateContact]);
 
-  // For team directory - need to check both filteredContacts and filteredTeamContacts
+  // For team directory - need to check both filteredContacts and filteredTeamContacts; fall back to contactMap for sidebar drops
   const handleUpdateTeamFolder = useCallback((contactId: string, folderId: string | null) => {
-    const contact = (searchQuery ? filteredContacts : filteredTeamContacts).find(c => c.id === contactId);
+    const contact =
+      (searchQuery ? filteredContacts : filteredTeamContacts).find((c) => c.id === contactId) ??
+      contactMap.get(contactId);
     if (contact) {
       updateContact({ ...contact, folderId: folderId || undefined });
     }
-  }, [searchQuery, filteredContacts, filteredTeamContacts, updateContact]);
+  }, [searchQuery, filteredContacts, filteredTeamContacts, contactMap, updateContact]);
+
+  // Single handler for sidebar drag-and-drop: route to contact or team updater based on target folder
+  const handleMoveContactToFolder = useCallback((contactId: string, folderId: string | null) => {
+    if (!folderId) {
+      handleUpdateFolder(contactId, null);
+      return;
+    }
+    const isTeamFolder = [...teamFolders, ...organizationTeamFolders].some((f) => f.id === folderId);
+    if (isTeamFolder) {
+      handleUpdateTeamFolder(contactId, folderId);
+    } else {
+      handleUpdateFolder(contactId, folderId);
+    }
+  }, [handleUpdateFolder, handleUpdateTeamFolder, teamFolders, organizationTeamFolders]);
 
   const handleSaveContact = (contactData: Omit<Contact, "id">) => {
     if (editingContact) {
@@ -721,8 +831,10 @@ const IndexContent = () => {
     setDialogOpen(true);
   };
 
-  const handleViewContact = (contact: Contact) => {
-    setViewingContact(contact);
+  const handleViewContact = async (contact: Contact) => {
+    // Fetch full contact from DB so we always have address and other fields (lists like smart search may omit them)
+    const full = await getContactById(contact.id);
+    setViewingContact(full ?? contact);
     setDetailsDialogOpen(true);
   };
 
@@ -904,6 +1016,7 @@ const IndexContent = () => {
   }, [queryClient]);
 
   return (
+        <ContactDragProvider>
         <div className="h-screen bg-background flex w-full overflow-hidden">
           {/* Folder Sidebar */}
           <FolderSidebar
@@ -914,6 +1027,7 @@ const IndexContent = () => {
             onAddFolder={addFolder}
             onUpdateFolder={updateFolder}
             onDeleteFolder={deleteFolder}
+            onMoveContactToFolder={handleMoveContactToFolder}
             contactCountByFolder={contactCountByFolder}
             totalContacts={totalCount}
             trashCount={trashCount}
@@ -1038,7 +1152,7 @@ const IndexContent = () => {
                     onBulkRestore={showTrash ? handleBulkRestore : undefined}
                     hasClientAccess={hasClientAccess}
                     hasCompany={!!company}
-                    folders={showDirectory ? teamFolders : clientView !== null ? [...clientFolders, ...organizationClientFolders] : folders}
+                    folders={showDirectory ? teamFolders : clientView !== null ? [...clientFolders, ...organizationClientFolders] : contactFoldersForMove}
                     selectedContactIds={selectedContactIds}
                     onToggleSelectionMode={handleToggleSelectionMode}
                     isTrashView={showTrash}
@@ -1164,7 +1278,6 @@ const IndexContent = () => {
                   onRestoreContact={restoreContact}
                   onPermanentlyDelete={permanentlyDeleteContact}
                   onEmptyTrash={emptyTrash}
-                  folders={folders}
                   onUpdateFolder={handleUpdateFolder}
                   showOwnershipBadge={!!company}
                   onMarkContacted={updateLastContacted}
@@ -1180,6 +1293,10 @@ const IndexContent = () => {
                   selectionMode={selectionMode}
                   onToggleSelectionMode={handleToggleSelectionMode}
                   showSampleContact={needsOnboarding && !needsCompanySetup}
+                  hasMore={hasMoreContacts}
+                  onLoadMore={loadMoreContacts}
+                  isLoadingMore={isLoadingMoreContacts}
+                  folders={contactFoldersForMove}
                 />
               )}
 
@@ -1196,7 +1313,7 @@ const IndexContent = () => {
                 onSave={handleSaveContact}
                 contact={editingContact}
                 presetKeywords={keywords}
-                folders={folders}
+                folders={contactFoldersForMove}
                 defaultFolderId={selectedFolderId}
                 hasCompany={!!company}
               />
@@ -1215,8 +1332,8 @@ const IndexContent = () => {
                   }
                 }}
                 contact={viewingContact}
-                folder={viewingContact?.folderId ? folders.find(f => f.id === viewingContact.folderId) : undefined}
-                folders={folders}
+                folder={viewingContact?.folderId ? contactFoldersForMove.find(f => f.id === viewingContact.folderId) : undefined}
+                folders={contactFoldersForMove}
                 presetKeywords={keywords}
                 showOwnershipBadge={!!company}
                 hasCompany={!!company}
@@ -1284,6 +1401,7 @@ const IndexContent = () => {
             </div>
           </div>
         </div>
+        </ContactDragProvider>
   );
 };
 

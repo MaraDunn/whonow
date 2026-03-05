@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, ChevronDown, UserCircle, Briefcase, Menu, Lock } from "lucide-react";
+import { FolderPlus, MoreHorizontal, Pencil, Trash, Trash2, Users, Building2, ChevronLeft, ChevronRight, ChevronDown, UserCircle, Briefcase, Menu, Lock, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FolderFormDialog } from "@/components/FolderFormDialog";
+import { SmartFolderFormDialog } from "@/components/SmartFolderFormDialog";
 import { DroppableFolder } from "@/components/DroppableFolder";
 import { DroppableAllContacts } from "@/components/DroppableAllContacts";
 import { Folder as FolderType, DirectoryType } from "@/types/folder";
@@ -45,6 +46,8 @@ interface FolderSidebarProps {
   onAddFolder: (folder: Omit<FolderType, "id" | "createdAt">) => void;
   onUpdateFolder: (folder: FolderType) => void;
   onDeleteFolder: (id: string) => void;
+  /** When provided, sidebar folders accept drag-and-drop to move contacts. Not used on mobile. */
+  onMoveContactToFolder?: (contactId: string, folderId: string | null) => void;
   contactCountByFolder: Record<string, number>;
   totalContacts: number;
   trashCount?: number;
@@ -89,6 +92,7 @@ export function FolderSidebar({
   onAddFolder,
   onUpdateFolder,
   onDeleteFolder,
+  onMoveContactToFolder,
   contactCountByFolder,
   totalContacts,
   trashCount = 0,
@@ -121,6 +125,7 @@ export function FolderSidebar({
   isSuperAdmin = false,
 }: FolderSidebarProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [smartDialogOpen, setSmartDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
   const [activeDirectoryType, setActiveDirectoryType] = useState<DirectoryType>("contacts");
   const { state, toggleSidebar, setOpenMobile, isMobile } = useSidebar();
@@ -233,13 +238,23 @@ export function FolderSidebar({
   const handleEditFolder = (folder: FolderType) => {
     setEditingFolder(folder);
     setActiveDirectoryType(folder.directoryType);
-    setDialogOpen(true);
+    if (folder.isSmartFolder) {
+      setSmartDialogOpen(true);
+    } else {
+      setDialogOpen(true);
+    }
   };
 
   const handleAddFolder = (directoryType: DirectoryType = "contacts") => {
     setEditingFolder(null);
     setActiveDirectoryType(directoryType);
     setDialogOpen(true);
+  };
+
+  const handleAddSmartFolder = (directoryType: DirectoryType = "contacts") => {
+    setEditingFolder(null);
+    setActiveDirectoryType(directoryType);
+    setSmartDialogOpen(true);
   };
 
   // Get existing folder names for the active directory type for validation
@@ -321,23 +336,36 @@ export function FolderSidebar({
                         Contact Directory
                       </SidebarGroupLabel>
                 </div>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-6 w-6" 
-                        onClick={() => handleAddFolder("contacts")}
-                      >
-                        <FolderPlus className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>Add folder</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <DropdownMenu>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6" 
+                          >
+                            <FolderPlus className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Add folder</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <DropdownMenuContent align="start" side="right">
+                    <DropdownMenuItem onClick={() => handleAddFolder("contacts")}>
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      Folder
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleAddSmartFolder("contacts")}>
+                      <Filter className="h-4 w-4 mr-2" />
+                      Smart folder
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
             <SidebarGroupContent>
@@ -356,6 +384,7 @@ export function FolderSidebar({
                     showTrash={showTrash}
                     collapsed={isCollapsed}
                     tooltip={isCollapsed ? `All Contacts (${totalContacts})` : undefined}
+                    onDropContact={onMoveContactToFolder}
                   />
                 </SidebarMenuItem>
 
@@ -435,6 +464,8 @@ export function FolderSidebar({
                       onClick={withCloseMobile(() => onSelectFolder(folder.id))}
                       collapsed={isCollapsed}
                       tooltip={isCollapsed ? folder.name : undefined}
+                      isSmartFolder={folder.isSmartFolder}
+                      onDropContact={onMoveContactToFolder}
                     />
                     {!isCollapsed && canManageFolder(folder) && (
                       <DropdownMenu>
@@ -450,7 +481,7 @@ export function FolderSidebar({
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleEditFolder(folder)}>
                             <Pencil className="h-4 w-4 mr-2" />
-                            Rename
+                            {folder.isSmartFolder ? "Edit" : "Rename"}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
@@ -485,6 +516,8 @@ export function FolderSidebar({
                           onClick={withCloseMobile(() => onSelectFolder(folder.id))}
                           collapsed={isCollapsed}
                           tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
+                          isSmartFolder={folder.isSmartFolder}
+                          onDropContact={onMoveContactToFolder}
                         />
                         {!isCollapsed && canManageFolder(folder) && (
                           <DropdownMenu>
@@ -500,7 +533,7 @@ export function FolderSidebar({
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => handleEditFolder(folder)}>
                                 <Pencil className="h-4 w-4 mr-2" />
-                                Rename
+                                {folder.isSmartFolder ? "Edit" : "Rename"}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
@@ -621,23 +654,18 @@ export function FolderSidebar({
                     {/* Personal Client Folders */}
                     {hasClientAccess && wasClientDirectoryExpanded && clientFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
-                        <SidebarMenuButton
+                        <DroppableFolder
+                          folder={folder}
+                          isSelected={showClientDirectory && selectedClientFolderId === folder.id}
+                          contactCount={contactCountByFolder[folder.id] || 0}
                           onClick={withCloseMobile(() => {
                             onSelectClientDirectory();
                             onSelectClientFolder?.(folder.id);
                           })}
-                          isActive={showClientDirectory && selectedClientFolderId === folder.id}
+                          collapsed={isCollapsed}
                           tooltip={isCollapsed ? folder.name : undefined}
-                          className={isCollapsed ? "w-full" : "w-full pl-6"}
-                        >
-                          <div
-                            className={isCollapsed ? "h-4 w-4 rounded-sm shrink-0" : "h-3 w-3 rounded-sm shrink-0"}
-                            style={{ backgroundColor: folder.color || "#6B7280" }}
-                          />
-                          {!isCollapsed && (
-                            <span className="flex-1 text-left truncate">{folder.name}</span>
-                          )}
-                        </SidebarMenuButton>
+                          onDropContact={onMoveContactToFolder}
+                        />
                         {!isCollapsed && canManageFolder(folder) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -680,23 +708,18 @@ export function FolderSidebar({
                         )}
                         {organizationClientFolders.map((folder) => (
                           <SidebarMenuItem key={folder.id} className="group relative">
-                            <SidebarMenuButton
+                            <DroppableFolder
+                              folder={folder}
+                              isSelected={showClientDirectory && selectedClientFolderId === folder.id}
+                              contactCount={contactCountByFolder[folder.id] || 0}
                               onClick={withCloseMobile(() => {
                                 onSelectClientDirectory();
                                 onSelectClientFolder?.(folder.id);
                               })}
-                              isActive={showClientDirectory && selectedClientFolderId === folder.id}
+                              collapsed={isCollapsed}
                               tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
-                              className={isCollapsed ? "w-full" : "w-full pl-6"}
-                            >
-                              <div
-                                className={isCollapsed ? "h-4 w-4 rounded-sm shrink-0" : "h-3 w-3 rounded-sm shrink-0"}
-                                style={{ backgroundColor: folder.color || "#6B7280" }}
-                              />
-                              {!isCollapsed && (
-                                <span className="flex-1 text-left truncate">{folder.name}</span>
-                              )}
-                            </SidebarMenuButton>
+                              onDropContact={onMoveContactToFolder}
+                            />
                             {!isCollapsed && canManageFolder(folder) && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -833,23 +856,18 @@ export function FolderSidebar({
                     {/* Personal Team Folders */}
                     {wasTeamDirectoryExpanded && teamFolders.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
-                        <SidebarMenuButton
+                        <DroppableFolder
+                          folder={folder}
+                          isSelected={showDirectory && selectedTeamFolderId === folder.id}
+                          contactCount={contactCountByFolder[folder.id] || 0}
                           onClick={withCloseMobile(() => {
                             onSelectDirectory();
                             onSelectTeamFolder?.(folder.id);
                           })}
-                          isActive={showDirectory && selectedTeamFolderId === folder.id}
+                          collapsed={isCollapsed}
                           tooltip={isCollapsed ? folder.name : undefined}
-                          className={isCollapsed ? "w-full" : "w-full pl-6"}
-                        >
-                          <div
-                            className={isCollapsed ? "h-4 w-4 rounded-sm shrink-0" : "h-3 w-3 rounded-sm shrink-0"}
-                            style={{ backgroundColor: folder.color || "#6B7280" }}
-                          />
-                          {!isCollapsed && (
-                            <span className="flex-1 text-left truncate">{folder.name}</span>
-                          )}
-                        </SidebarMenuButton>
+                          onDropContact={onMoveContactToFolder}
+                        />
                         {!isCollapsed && canManageFolder(folder) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -892,23 +910,18 @@ export function FolderSidebar({
                         )}
                         {organizationTeamFolders.map((folder) => (
                           <SidebarMenuItem key={folder.id} className="group relative">
-                            <SidebarMenuButton
+                            <DroppableFolder
+                              folder={folder}
+                              isSelected={showDirectory && selectedTeamFolderId === folder.id}
+                              contactCount={contactCountByFolder[folder.id] || 0}
                               onClick={withCloseMobile(() => {
                                 onSelectDirectory();
                                 onSelectTeamFolder?.(folder.id);
                               })}
-                              isActive={showDirectory && selectedTeamFolderId === folder.id}
+                              collapsed={isCollapsed}
                               tooltip={isCollapsed ? `${folder.name} (Organization)` : undefined}
-                              className={isCollapsed ? "w-full" : "w-full pl-6"}
-                            >
-                              <div
-                                className={isCollapsed ? "h-4 w-4 rounded-sm shrink-0" : "h-3 w-3 rounded-sm shrink-0"}
-                                style={{ backgroundColor: folder.color || "#6B7280" }}
-                              />
-                              {!isCollapsed && (
-                                <span className="flex-1 text-left truncate">{folder.name}</span>
-                              )}
-                            </SidebarMenuButton>
+                              onDropContact={onMoveContactToFolder}
+                            />
                             {!isCollapsed && canManageFolder(folder) && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -983,6 +996,17 @@ export function FolderSidebar({
           existingNames={getExistingNamesForDirectory(activeDirectoryType)}
           isAdmin={isAdmin}
           hasCompany={hasCompany}
+        />
+        <SmartFolderFormDialog
+          open={smartDialogOpen}
+          onOpenChange={(open) => {
+            setSmartDialogOpen(open);
+            if (!open) setEditingFolder(null);
+          }}
+          onSave={handleSaveFolder}
+          folder={editingFolder?.isSmartFolder ? editingFolder : null}
+          directoryType={activeDirectoryType}
+          existingNames={getExistingNamesForDirectory("contacts")}
         />
       </Sidebar>
 
