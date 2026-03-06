@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { IS_WAITLIST_MODE_EFFECTIVE, getAuthRedirectOrigin, isDesktopOrNativeApp } from "@/utils/launchMode";
+import { getAuthRedirectOrigin, isDesktopOrNativeApp } from "@/utils/launchMode";
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -50,15 +50,6 @@ export const useAuth = () => {
   }, []);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
-    // Block sign-ups in waitlist mode (unless in dev mode)
-    if (IS_WAITLIST_MODE_EFFECTIVE) {
-      return {
-        error: {
-          message: "Sign-ups are currently disabled. Join our waitlist instead.",
-        } as any,
-      };
-    }
-
     // Must be allowlisted in Supabase Dashboard: Authentication → URL Configuration → Redirect URLs.
     // In desktop app, use web URL (VITE_APP_URL) so the email link opens in browser to a real page.
     const redirectUrl = `${getAuthRedirectOrigin()}/auth`;
@@ -84,15 +75,6 @@ export const useAuth = () => {
   };
 
   const signIn = async (email: string, password: string) => {
-    // Block sign-ins in waitlist mode (unless in dev mode)
-    if (IS_WAITLIST_MODE_EFFECTIVE) {
-      return {
-        error: {
-          message: "Sign-ins are currently disabled. Join our waitlist instead.",
-        } as any,
-      };
-    }
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,

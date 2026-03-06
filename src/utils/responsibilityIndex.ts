@@ -119,6 +119,26 @@ export function matchResponsibility(
   phrase: string,
   index: Map<string, Set<string>>
 ): { responsibilityId: string; matchedAlias: string } | null {
+  const detailed = matchResponsibilityDetailed(phrase, index);
+  if (!detailed) return null;
+  return {
+    responsibilityId: detailed.responsibilityId,
+    matchedAlias: detailed.matchedAlias,
+  };
+}
+
+export interface ResponsibilityMatchDetailed {
+  responsibilityId: string;
+  matchedAlias: string;
+  source: "exact" | "indexed";
+  candidateCount: number;
+  confidenceBand: "high" | "medium";
+}
+
+export function matchResponsibilityDetailed(
+  phrase: string,
+  index: Map<string, Set<string>>
+): ResponsibilityMatchDetailed | null {
   const normalized = normalizeResponsibilityPhrase(phrase);
   const tokens = tokenize(normalized);
   
@@ -132,6 +152,9 @@ export function matchResponsibility(
       return {
         responsibilityId: RESPONSIBILITY_ALIASES[normalizedNgram],
         matchedAlias: normalizedNgram,
+        source: "exact",
+        candidateCount: 1,
+        confidenceBand: "high",
       };
     }
   }
@@ -143,36 +166,74 @@ export function matchResponsibility(
     return null;
   }
   
-  // Disambiguation: longest match + highest priority
-  let bestMatch: { responsibilityId: string; matchedAlias: string; priority: number } | null = null;
+  // Disambiguation: choose the best alias for the actual query, then highest-scoring responsibility.
+  // This avoids picking a candidate just because it has a very long alias unrelated to the phrase.
+  let bestMatch: { responsibilityId: string; matchedAlias: string; priority: number; score: number } | null = null;
+  const queryTokenSet = new Set(tokens);
   
   for (const candidateId of candidates) {
     const responsibility = RESPONSIBILITIES[candidateId];
     if (!responsibility) continue;
     
-    // Find the longest matching alias
-    let longestAlias = "";
+    // Find the best alias for this candidate against the current phrase.
+    let bestAlias = "";
+    let bestAliasScore = -1;
+
     for (const [alias, id] of Object.entries(RESPONSIBILITY_ALIASES)) {
-      if (id === candidateId && alias.length > longestAlias.length) {
-        longestAlias = alias;
+      if (id !== candidateId) continue;
+
+      const normalizedAlias = normalizeResponsibilityPhrase(alias);
+      const aliasTokens = tokenize(normalizedAlias);
+      if (aliasTokens.length === 0) continue;
+
+      let overlap = 0;
+      for (const token of aliasTokens) {
+        if (queryTokenSet.has(token)) overlap++;
+      }
+      if (overlap === 0) continue;
+
+      const phraseContainsAlias = normalized.includes(normalizedAlias) ? 1 : 0;
+      const aliasContainsPhrase = normalizedAlias.includes(normalized) ? 1 : 0;
+      const coverage = overlap / Math.max(queryTokenSet.size, 1);
+      const precision = overlap / aliasTokens.length;
+      const score =
+        phraseContainsAlias * 100 +
+        aliasContainsPhrase * 50 +
+        coverage * 20 +
+        precision * 10 +
+        aliasTokens.length * 0.1;
+
+      if (score > bestAliasScore) {
+        bestAliasScore = score;
+        bestAlias = normalizedAlias;
       }
     }
     
-    if (!bestMatch || 
-        longestAlias.length > bestMatch.matchedAlias.length ||
-        (longestAlias.length === bestMatch.matchedAlias.length && 
-         responsibility.priority > bestMatch.priority)) {
+    // If no overlapping alias was found, fall back to normalized phrase scoring.
+    const candidateScore = (bestAliasScore >= 0 ? bestAliasScore : 0) + responsibility.priority / 100;
+
+    if (
+      !bestMatch ||
+      candidateScore > bestMatch.score ||
+      (candidateScore === bestMatch.score && responsibility.priority > bestMatch.priority)
+    ) {
       bestMatch = {
         responsibilityId: candidateId,
-        matchedAlias: longestAlias || normalized,
+        matchedAlias: bestAlias || normalized,
         priority: responsibility.priority,
+        score: candidateScore,
       };
     }
   }
   
-  return bestMatch ? {
-    responsibilityId: bestMatch.responsibilityId,
-    matchedAlias: bestMatch.matchedAlias,
-  } : null;
+  return bestMatch
+    ? {
+        responsibilityId: bestMatch.responsibilityId,
+        matchedAlias: bestMatch.matchedAlias,
+        source: "indexed",
+        candidateCount: candidates.size,
+        confidenceBand: candidates.size <= 3 ? "high" : "medium",
+      }
+    : null;
 }
 

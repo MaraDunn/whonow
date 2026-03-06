@@ -2,13 +2,13 @@ import React, { Suspense, lazy } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandingTheme } from "@/components/BrandingTheme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { IS_WAITLIST_MODE_EFFECTIVE, isDesktopOrNativeApp } from "@/utils/launchMode";
+import { isDesktopOrNativeApp } from "@/utils/launchMode";
 import { pushErrorLog } from "@/utils/errorLogBuffer";
 import { devLog } from "@/lib/devLog";
 
@@ -20,7 +20,6 @@ const RouteFallback = () => (
 
 const Index = lazy(() => import("./pages/Index"));
 const Landing = lazy(() => import("./pages/Landing"));
-const Waitlist = lazy(() => import("./pages/Waitlist"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -77,32 +76,6 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// In waitlist mode, always render the Auth page at /auth so the email verification and
-// password-reset links (which redirect to /auth with token in hash) work. Otherwise
-// we'd redirect to / and the token would never be processed.
-const AuthRouteInWaitlistMode = () => (
-  <Suspense fallback={<RouteFallback />}>
-    <Auth />
-  </Suspense>
-);
-
-// Waitlist mode route guard - redirects non-public routes to home
-// Respects development mode (bypasses restrictions in dev)
-const WaitlistRouteGuard = ({ children }: { children: React.ReactNode }) => {
-  const location = useLocation();
-  
-  if (IS_WAITLIST_MODE_EFFECTIVE) {
-    // Public routes allowed in waitlist mode (include shared-contact links so Slack links still open)
-    const publicRoutes = ["/", "/waitlist", "/privacy", "/terms", "/import-contact", "/export-shared-contact", "/auth"];
-    const isPublicRoute = publicRoutes.includes(location.pathname);
-    if (!isPublicRoute) {
-      return <Navigate to="/" replace />;
-    }
-  }
-  
-  return <>{children}</>;
-};
-
 // Component to handle desktop/native app root redirect
 const DesktopAppRootRedirect = () => {
   const [isNative, setIsNative] = React.useState(false);
@@ -125,7 +98,7 @@ const DesktopAppRootRedirect = () => {
   }, []);
   
   // In desktop/native apps, redirect root path to /app
-  if (isNative && !IS_WAITLIST_MODE_EFFECTIVE) {
+  if (isNative) {
     devLog('[DesktopAppRootRedirect] Redirecting to /app');
     return <Navigate to="/app" replace />;
   }
@@ -143,54 +116,36 @@ const AppRoutes = () => {
   return (
     <>
       <BrandingTheme />
-      <WaitlistRouteGuard>
-        <Routes>
-          {IS_WAITLIST_MODE_EFFECTIVE ? (
-            <>
-              <Route path="/" element={<Suspense fallback={<RouteFallback />}><Waitlist /></Suspense>} />
-              <Route path="/waitlist" element={<Suspense fallback={<RouteFallback />}><Waitlist /></Suspense>} />
-              <Route path="/privacy" element={<Suspense fallback={<RouteFallback />}><Privacy /></Suspense>} />
-              <Route path="/terms" element={<Suspense fallback={<RouteFallback />}><Terms /></Suspense>} />
-              <Route path="/import-contact" element={<Suspense fallback={<RouteFallback />}><ImportContactPage /></Suspense>} />
-              <Route path="/export-shared-contact" element={<Suspense fallback={<RouteFallback />}><ExportSharedContactPage /></Suspense>} />
-              {/* Block all other routes in waitlist mode; allow /auth when it's an email verification or password-reset callback */}
-              <Route path="/app" element={<Navigate to="/" replace />} />
-              <Route path="/auth" element={<AuthRouteInWaitlistMode />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </>
-          ) : (
-            <>
-              <Route path="/" element={<DesktopAppRootRedirect />} />
-              <Route
-                path="/app"
-                element={
-                  <ProtectedRoute>
-                    <Suspense fallback={<RouteFallback />}>
-                      <Index />
-                    </Suspense>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/help/faq"
-                element={
-                  <ProtectedRoute>
-                    <Suspense fallback={<RouteFallback />}>
-                      <HelpFAQPage />
-                    </Suspense>
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/privacy" element={<Suspense fallback={<RouteFallback />}><Privacy /></Suspense>} />
-              <Route path="/terms" element={<Suspense fallback={<RouteFallback />}><Terms /></Suspense>} />
-              <Route path="/auth" element={<Suspense fallback={<RouteFallback />}><Auth /></Suspense>} />
-              <Route path="/import-contact" element={<Suspense fallback={<RouteFallback />}><ImportContactPage /></Suspense>} />
-              <Route path="/export-shared-contact" element={<Suspense fallback={<RouteFallback />}><ExportSharedContactPage /></Suspense>} />
-              <Route path="*" element={<Suspense fallback={<RouteFallback />}><NotFound /></Suspense>} />
-            </>
-          )}
-        </Routes>
-      </WaitlistRouteGuard>
+      <Routes>
+        <Route path="/" element={<DesktopAppRootRedirect />} />
+        <Route path="/waitlist" element={<Navigate to="/" replace />} />
+        <Route
+          path="/app"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<RouteFallback />}>
+                <Index />
+              </Suspense>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/help/faq"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<RouteFallback />}>
+                <HelpFAQPage />
+              </Suspense>
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/privacy" element={<Suspense fallback={<RouteFallback />}><Privacy /></Suspense>} />
+        <Route path="/terms" element={<Suspense fallback={<RouteFallback />}><Terms /></Suspense>} />
+        <Route path="/auth" element={<Suspense fallback={<RouteFallback />}><Auth /></Suspense>} />
+        <Route path="/import-contact" element={<Suspense fallback={<RouteFallback />}><ImportContactPage /></Suspense>} />
+        <Route path="/export-shared-contact" element={<Suspense fallback={<RouteFallback />}><ExportSharedContactPage /></Suspense>} />
+        <Route path="*" element={<Suspense fallback={<RouteFallback />}><NotFound /></Suspense>} />
+      </Routes>
     </>
   );
 };

@@ -31,4 +31,10 @@ export interface SearchQuery {
   semantic_hint?: string;  // For ranking/interpretation only, never for filtering
   confidence: number;      // 0.0-1.0
   explanation: string;     // Human-readable reasoning
+  diagnostics?: {
+    match_source?: "exact" | "indexed" | "pattern" | "fallback" | "none";
+    confidence_band?: "high" | "medium" | "low";
+    candidate_count?: number;
+    used_fallback?: boolean;
+  };
 }

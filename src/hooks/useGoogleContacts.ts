@@ -26,8 +26,10 @@ type PeopleConnectionsResponse = {
   connections?: GooglePerson[];
 };
 
-// You need to set your Google OAuth Client ID here
-const GOOGLE_CLIENT_ID = "340045414488-au8kh5fhtls67u767io9ka1is77k46ie.apps.googleusercontent.com";
+// Prefer VITE_GOOGLE_CLIENT_ID from env; fallback for backwards compatibility.
+const GOOGLE_CLIENT_ID =
+  import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+  "340045414488-au8kh5fhtls67u767io9ka1is77k46ie.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/contacts.readonly";
 
 export const useGoogleContacts = () => {

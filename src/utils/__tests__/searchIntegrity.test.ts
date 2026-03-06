@@ -48,6 +48,26 @@ const mockContacts: Contact[] = [
     description: 'Leading marketing initiatives',
     createdAt: new Date('2024-02-01'),
   },
+  {
+    id: '4',
+    name: 'Priya Patel',
+    email: 'priya@legalgroup.com',
+    company: 'Legal Group',
+    role: 'Legal Counsel',
+    tags: ['legal', 'contracts', 'compliance'],
+    description: 'Handles contract drafting and legal reviews',
+    createdAt: new Date('2024-02-03'),
+  },
+  {
+    id: '5',
+    name: 'Sam Rivera',
+    email: 'sam@studio.co',
+    company: 'Studio Co',
+    role: 'Content Writer',
+    tags: ['content', 'writing', 'editorial'],
+    description: 'Writes long-form and short-form content',
+    createdAt: new Date('2024-02-05'),
+  },
 ] as Contact[];
 
 describe('Search Integrity Tests', () => {
@@ -95,6 +115,57 @@ describe('Search Integrity Tests', () => {
       expect(daysDiff).toBe(14); // two weeks
       // Should NOT have location (Los Angeles false positive fix)
       expect(query.filters.location).toBeUndefined();
+    });
+
+    it('should resolve bare phrase "contract writing" to legal job_title', () => {
+      const query = parseSearchQueryToSchema('contract writing');
+      expect(query.filters.job_title).toBe('legal');
+    });
+
+    it('should resolve bare phrase "legal counsel" to legal job_title', () => {
+      const query = parseSearchQueryToSchema('legal counsel');
+      expect(query.filters.job_title).toBe('legal');
+    });
+
+    it('should resolve bare phrase "marketing person" to marketing job_title', () => {
+      const query = parseSearchQueryToSchema('marketing person');
+      expect(query.filters.job_title).toBe('marketing');
+    });
+
+    it('should resolve bare phrase "hr person" to hr job_title', () => {
+      const query = parseSearchQueryToSchema('hr person');
+      expect(query.filters.job_title).toBe('hr');
+    });
+
+    it('should resolve "I need help with a contract" to legal job_title', () => {
+      const query = parseSearchQueryToSchema('I need help with a contract');
+      expect(query.filters.job_title).toBe('legal');
+      expect(query.filters.company).toBeUndefined();
+    });
+
+    it('should return legal contacts for "I need help with a contract"', async () => {
+      const query = parseSearchQueryToSchema('I need help with a contract');
+      const results = await executeSearchQuery(mockContacts, query);
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.some(c => c.role?.includes('Legal'))).toBe(true);
+    });
+
+    it('should return legal contacts for "contract writing"', async () => {
+      const query = parseSearchQueryToSchema('contract writing');
+      const results = await executeSearchQuery(mockContacts, query);
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.some(c => c.role?.includes('Legal'))).toBe(true);
+      expect(results.every(c => !c.role?.includes('Product Manager'))).toBe(true);
+    });
+
+    it('should return content contacts for "content writing"', async () => {
+      const query = parseSearchQueryToSchema('content writing');
+      const results = await executeSearchQuery(mockContacts, query);
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.some(c => c.role?.includes('Content Writer'))).toBe(true);
     });
   });
   

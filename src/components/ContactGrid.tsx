@@ -167,10 +167,17 @@ export function ContactGrid({
   }, [contacts.length, searchQuery, isTrashView]);
 
   // Memoize folder map for quick lookup - only recreate when folders change
-  const folderMap = useMemo(() => 
+  const folderMap = useMemo(() =>
     new Map(folders.map(f => [f.id, f])),
     [folders]
   );
+
+  // Resolve folder for card display: never show a smart folder on the contact card
+  const getFolderForCard = useCallback((folderId: string | undefined) => {
+    if (!folderId) return undefined;
+    const f = folderMap.get(folderId);
+    return f && !f.isSmartFolder ? f : undefined;
+  }, [folderMap]);
 
   const handleToggleExpand = useCallback((contactId: string) => {
     setExpandedContactId(prev => prev === contactId ? null : contactId);
@@ -415,7 +422,7 @@ export function ContactGrid({
                         onShareToTeams={onShareToTeams ? () => onShareToTeams(contact) : undefined}
                         onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
                         onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
-                        folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
+                        folder={getFolderForCard(contact.folderId)}
                         folders={folders}
                         onUpdateFolder={onUpdateFolder}
                         showOwnershipBadge={showOwnershipBadge}
@@ -457,7 +464,7 @@ export function ContactGrid({
               onShareToTeams={onShareToTeams ? () => onShareToTeams(contact) : undefined}
               onRestore={onRestoreContact ? () => onRestoreContact(contact.id) : undefined}
               onPermanentlyDelete={onPermanentlyDelete ? () => onPermanentlyDelete(contact.id) : undefined}
-              folder={contact.folderId ? folderMap.get(contact.folderId) : undefined}
+              folder={getFolderForCard(contact.folderId)}
               folders={folders}
               onUpdateFolder={onUpdateFolder}
               showOwnershipBadge={showOwnershipBadge}

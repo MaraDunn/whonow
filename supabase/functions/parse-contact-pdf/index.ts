@@ -1,8 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import {
-  checkLaunchMode,
-  waitlistModeBlockedResponse,
   getCorsHeaders,
   handleCorsPreflightRequest,
   checkRateLimit,
@@ -1704,12 +1702,6 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(origin);
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
-
-  // Check launch mode - block in waitlist mode
-  const { blocked } = checkLaunchMode();
-  if (blocked) {
-    return waitlistModeBlockedResponse(origin);
-  }
 
   try {
     // Get authorization header

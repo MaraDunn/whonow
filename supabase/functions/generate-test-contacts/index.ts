@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { checkLaunchMode, waitlistModeBlockedResponse, getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
 
 const firstNames = [
   'James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer', 'Michael', 'Linda', 'William', 'Elizabeth',
@@ -131,12 +131,6 @@ Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(origin);
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
-
-  // Check launch mode - block in waitlist mode
-  const { blocked } = checkLaunchMode();
-  if (blocked) {
-    return waitlistModeBlockedResponse(origin);
-  }
 
   // Require JWT so only authenticated users can create test data
   const authHeader = req.headers.get("Authorization");

@@ -3,8 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import {
   getCorsHeaders,
   handleCorsPreflightRequest,
-  checkLaunchMode,
-  waitlistModeBlockedResponse,
   sanitizeString,
   isValidEmail,
   isValidPhone,
@@ -73,11 +71,6 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(origin);
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
-
-  const { blocked } = checkLaunchMode();
-  if (blocked) {
-    return waitlistModeBlockedResponse(origin);
-  }
 
   console.log("[bulk-insert-contacts] Request received", {
     method: req.method,

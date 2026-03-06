@@ -1,60 +1,8 @@
 /**
- * Launch mode utility for controlling application behavior
- * 
- * Environment variable: VITE_APP_LAUNCH_MODE
- * Values: "waitlist" | "live"
- * Default: "live"
- * 
- * Development mode: Set VITE_DEV_MODE=true to bypass waitlist restrictions locally
- * Or automatically detected when running on localhost
+ * Utilities for desktop/native detection and auth redirect origin.
  */
-
-export const LAUNCH_MODE = import.meta.env.VITE_APP_LAUNCH_MODE || "live";
-export const IS_WAITLIST_MODE = LAUNCH_MODE === "waitlist";
-export const IS_LIVE_MODE = LAUNCH_MODE === "live";
-
-/**
- * Detect if running in development mode
- * Development mode bypasses waitlist restrictions for local testing
- */
-export const isDevelopmentMode = (): boolean => {
-  if (typeof window === "undefined") return false;
-  
-  // Check explicit dev mode flag
-  if (import.meta.env.VITE_DEV_MODE === "true") {
-    return true;
-  }
-  
-  // Auto-detect localhost/127.0.0.1 for development
-  const hostname = window.location.hostname;
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0") {
-    return true;
-  }
-  
-  // Check if running in Vite dev mode (import.meta.env.DEV is set by Vite)
-  if (import.meta.env.DEV) {
-    return true;
-  }
-  
-  return false;
-};
-
-/**
- * Effective waitlist mode - respects development mode bypass
- * In dev mode, waitlist restrictions are bypassed even if LAUNCH_MODE is "waitlist"
- */
-export const IS_WAITLIST_MODE_EFFECTIVE = IS_WAITLIST_MODE && !isDevelopmentMode();
 
 import { devLog } from "@/lib/devLog";
-
-// Debug: Log launch mode (remove after verification)
-if (typeof window !== "undefined" && import.meta.env.DEV) {
-  devLog("[LaunchMode] VITE_APP_LAUNCH_MODE:", import.meta.env.VITE_APP_LAUNCH_MODE);
-  devLog("[LaunchMode] LAUNCH_MODE:", LAUNCH_MODE);
-  devLog("[LaunchMode] IS_WAITLIST_MODE:", IS_WAITLIST_MODE);
-  devLog("[LaunchMode] isDevelopmentMode:", isDevelopmentMode());
-  devLog("[LaunchMode] IS_WAITLIST_MODE_EFFECTIVE:", IS_WAITLIST_MODE_EFFECTIVE);
-}
 
 /**
  * Detect if the app is running in a desktop/native environment

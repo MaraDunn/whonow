@@ -6,10 +6,12 @@
 import { 
   buildResponsibilityIndex, 
   matchResponsibility, 
+  matchResponsibilityDetailed,
   normalizeResponsibilityPhrase 
 } from "./responsibilityIndex";
 import { parseTimeAmount, TIME_OF_DAY, TIME_PATTERNS } from "./searchQueryParserTime";
 import { RESPONSIBILITIES } from "@/data/responsibilities";
+import { ROLE_DOMAIN_PACKS } from "@/data/roleDomainPacks";
 import { SearchQuery, SearchIntent, RelationshipType, DateRange } from "@/types/searchQuery";
 import { devLog } from "@/lib/devLog";
 
@@ -27,6 +29,9 @@ export interface TimeRange {
 export interface ResponsibilityMatch {
   responsibilityId: string;
   matchedAlias: string;
+  matchSource?: "exact" | "indexed";
+  confidenceBand?: "high" | "medium" | "low";
+  candidateCount?: number;
   filters: {
     departments?: string[];
     roles?: string[];
@@ -66,6 +71,10 @@ export interface ParsedQuery {
   interactionTimeRange?: TimeRange; // Time range for last interaction
   needsFollowUp?: boolean; // "need to follow up", "haven't talked to"
   responsibility?: ResponsibilityMatch | null; // Matched responsibility
+  matchSource?: "exact" | "indexed" | "pattern" | "fallback" | "none";
+  confidenceBand?: "high" | "medium" | "low";
+  candidateCount?: number;
+  usedFallback?: boolean;
   interpretation?: string; // Human-readable interpretation of the query
   comparativeFilters?: {
     timeRange?: { operator: "more than" | "less than" | "older than" | "newer than"; days: number };
@@ -143,6 +152,14 @@ const SYNONYM_MAP: Record<string, string[]> = {
   "fpa": ["finance", "financial planning"],
   "fp&a": ["finance", "financial planning"],
   "legal": ["law", "attorney", "lawyer", "counsel"],
+  "contract": ["contracts", "agreement", "legal", "contract drafting"],
+  "contracts": ["contract", "agreements", "legal", "contract drafting"],
+  "agreement": ["agreements", "contract", "legal"],
+  "agreements": ["agreement", "contracts", "legal"],
+  "writing": ["content", "copywriting", "writer", "content writing"],
+  "content writing": ["writing", "copywriting", "content"],
+  "copywriting": ["writing", "content writing", "content"],
+  "paralegal": ["legal", "contracts"],
   "operations": ["ops", "operational", "business operations"],
   "ops": ["operations"],
   "support": ["customer support", "customer service", "help desk", "tech support"],
@@ -216,6 +233,22 @@ const QUESTION_STARTERS = new Set([
   "list all", "give me", "help me find"
 ]);
 
+// Guardrails for bare-phrase responsibility matching to reduce false positives.
+const BARE_RESPONSIBILITY_BLOCKED_STARTERS = new Set([
+  "who", "what", "where", "when", "why", "how",
+  "find", "show", "get", "search", "look",
+  "need", "want", "can", "could", "please",
+  "i", "we", "you", "they", "he", "she",
+]);
+
+// Suffixes commonly found in role/job descriptors.
+const ROLE_LIKE_SUFFIXES = [
+  "er", "or", "ist", "ian", "ant", "man", "woman", "tech", "chef", "nurse",
+  "driver", "trainer", "agent", "broker", "coach", "groomer", "breeder",
+  "plumber", "electrician", "mechanic", "carpenter", "therapist", "cleaner",
+  "tutor", "photographer", "videographer", "landscaper", "edic",
+];
+
 // Controlled vocabulary for roles/departments (expanded with synonyms)
 const ROLE_VOCABULARY = new Set([
   // Departments
@@ -233,7 +266,11 @@ const ROLE_VOCABULARY = new Set([
   "analyst", "consultant", "specialist", "spec", "coordinator", "coord", "assistant", "asst",
   "founder", "partner", "president", "head", "chief", "officer", "exec",
   "developer", "dev", "engineer", "programmer", "coder", "designer", "designers", "architect",
-  "account exec", "ae", "sales rep", "accountant", "lawyer", "attorney", "counsel"
+  "account exec", "ae", "sales rep", "accountant", "lawyer", "attorney", "counsel",
+  "writer", "copywriter", "content writer", "paralegal", "legal counsel", "general counsel",
+  "contract", "contracts", "contract manager", "contracts manager", "agreement", "agreements",
+  // Domain packs for non-corporate / field roles
+  ...ROLE_DOMAIN_PACKS,
 ]);
 
 // Company suffixes to identify company names (expanded with variations)
@@ -317,7 +354,9 @@ const MONTH_NAMES = [
 
 // Prepositions that indicate entity relationships
 const ENTITY_PREPOSITIONS = {
-  company: new Set(["at", "from", "with", "@"]),
+  // Keep company extraction prepositions narrow to avoid false positives
+  // like "I need help with a contract" -> company "contract".
+  company: new Set(["at", "from", "@"]),
   role: new Set(["as", "works"]),
   department: new Set(["in", "handles", "does"]),
   location: new Set(["in", "at", "from", "near"]),
@@ -997,7 +1036,31 @@ function cleanResponsibilityPhrase(raw: string): string | null {
  * plus request phrasings: "I need a logo", "find me a designer", "who do I contact for legal?", etc.
  * Returns the matched responsibility or null if no match found
  */
-function extractResponsibility(query: string): { match: ResponsibilityMatch | null; phrase: string | null } {
+interface ExtractResponsibilityResult {
+  match: ResponsibilityMatch | null;
+  phrase: string | null;
+  matchSource: "exact" | "indexed" | "pattern" | "fallback" | "none";
+  confidenceBand: "high" | "medium" | "low";
+  candidateCount: number;
+  usedFallback: boolean;
+}
+
+function toResponsibilityMatch(phrase: string): ResponsibilityMatch | null {
+  const detailed = matchResponsibilityDetailed(phrase, RESPONSIBILITY_INDEX);
+  if (!detailed) return null;
+  const responsibility = RESPONSIBILITIES[detailed.responsibilityId];
+  if (!responsibility) return null;
+  return {
+    responsibilityId: detailed.responsibilityId,
+    matchedAlias: detailed.matchedAlias,
+    matchSource: detailed.source,
+    confidenceBand: detailed.confidenceBand,
+    candidateCount: detailed.candidateCount,
+    filters: responsibility.filters,
+  };
+}
+
+function extractResponsibility(query: string): ExtractResponsibilityResult {
   const normalized = normalizeQuery(query);
 
   // Block 1: Existing "who..." patterns (unchanged behavior)
@@ -1016,21 +1079,25 @@ function extractResponsibility(query: string): { match: ResponsibilityMatch | nu
     const match = normalized.match(pattern);
     if (match && match[phraseIndex]) {
       const responsibilityPhrase = match[phraseIndex].trim();
-      const matchResult = matchResponsibility(responsibilityPhrase, RESPONSIBILITY_INDEX);
-      if (matchResult) {
-        const responsibility = RESPONSIBILITIES[matchResult.responsibilityId];
-        if (responsibility) {
-          return {
-            match: {
-              responsibilityId: matchResult.responsibilityId,
-              matchedAlias: matchResult.matchedAlias,
-              filters: responsibility.filters,
-            },
-            phrase: responsibilityPhrase,
-          };
-        }
+      const responsibilityMatch = toResponsibilityMatch(responsibilityPhrase);
+      if (responsibilityMatch) {
+        return {
+          match: responsibilityMatch,
+          phrase: responsibilityPhrase,
+          matchSource: responsibilityMatch.matchSource ?? "exact",
+          confidenceBand: responsibilityMatch.confidenceBand ?? "high",
+          candidateCount: responsibilityMatch.candidateCount ?? 1,
+          usedFallback: false,
+        };
       }
-      return { match: null, phrase: responsibilityPhrase };
+      return {
+        match: null,
+        phrase: responsibilityPhrase,
+        matchSource: "fallback",
+        confidenceBand: "low",
+        candidateCount: 0,
+        usedFallback: true,
+      };
     }
   }
 
@@ -1069,26 +1136,86 @@ function extractResponsibility(query: string): { match: ResponsibilityMatch | nu
     if (!match || !match[phraseIndex]) continue;
     const cleaned = cleanResponsibilityPhrase(match[phraseIndex]);
     if (!cleaned) continue;
-    const matchResult = matchResponsibility(cleaned, RESPONSIBILITY_INDEX);
-    if (matchResult) {
-      const responsibility = RESPONSIBILITIES[matchResult.responsibilityId];
-      if (responsibility) {
-        return {
-          match: {
-            responsibilityId: matchResult.responsibilityId,
-            matchedAlias: matchResult.matchedAlias,
-            filters: responsibility.filters,
-          },
-          phrase: cleaned,
-        };
-      }
+    const responsibilityMatch = toResponsibilityMatch(cleaned);
+    if (responsibilityMatch) {
+      return {
+        match: responsibilityMatch,
+        phrase: cleaned,
+        matchSource: responsibilityMatch.matchSource ?? "exact",
+        confidenceBand: responsibilityMatch.confidenceBand ?? "high",
+        candidateCount: responsibilityMatch.candidateCount ?? 1,
+        usedFallback: false,
+      };
     }
     // Phrase matched pattern but no predefined responsibility (e.g. "I need a driver" → "driver").
     // Return phrase so caller can use it as job_title for role/company/tag ILIKE matching.
-    return { match: null, phrase: cleaned };
+    return {
+      match: null,
+      phrase: cleaned,
+      matchSource: "pattern",
+      confidenceBand: "medium",
+      candidateCount: 0,
+      usedFallback: true,
+    };
   }
 
-  return { match: null, phrase: null };
+  // Block 3: Bare-phrase lookup (e.g. "contract writing", "legal counsel")
+  // Only run for short noun-like phrases to avoid over-matching names/companies.
+  const barePhrase = cleanResponsibilityPhrase(normalized);
+  if (barePhrase) {
+    const bareWords = barePhrase.split(/\s+/).filter(Boolean);
+    const firstWord = bareWords[0]?.toLowerCase() ?? "";
+    const looksLikeCompany = bareWords.some((w) => COMPANY_SUFFIXES.has(w.toLowerCase()));
+    const looksLikeEmailOrNumeric = /[@\d]/.test(barePhrase);
+
+    if (
+      bareWords.length >= 1 &&
+      bareWords.length <= 5 &&
+      !BARE_RESPONSIBILITY_BLOCKED_STARTERS.has(firstWord) &&
+      !looksLikeCompany &&
+      !looksLikeEmailOrNumeric
+    ) {
+      const responsibilityMatch = toResponsibilityMatch(barePhrase);
+      if (responsibilityMatch) {
+        return {
+          match: responsibilityMatch,
+          phrase: barePhrase,
+          matchSource: responsibilityMatch.matchSource ?? "exact",
+          confidenceBand: responsibilityMatch.confidenceBand ?? "high",
+          candidateCount: responsibilityMatch.candidateCount ?? 1,
+          usedFallback: false,
+        };
+      }
+
+      // If no canonical responsibility matched, still treat role-like bare phrases
+      // as a structured fallback job_title signal instead of semantic-only search.
+      const lastWord = bareWords[bareWords.length - 1]?.toLowerCase() ?? "";
+      const roleLikeSingleWord =
+        bareWords.length === 1 &&
+        ROLE_LIKE_SUFFIXES.some((suffix) => lastWord.endsWith(suffix));
+      const roleLikeMultiWord = bareWords.length >= 2 && bareWords.length <= 5;
+
+      if (roleLikeSingleWord || roleLikeMultiWord) {
+        return {
+          match: null,
+          phrase: barePhrase,
+          matchSource: "fallback",
+          confidenceBand: "low",
+          candidateCount: 0,
+          usedFallback: true,
+        };
+      }
+    }
+  }
+
+  return {
+    match: null,
+    phrase: null,
+    matchSource: "none",
+    confidenceBand: "low",
+    candidateCount: 0,
+    usedFallback: false,
+  };
 }
 
 /**
@@ -1148,8 +1275,12 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
         const companyName = companyWords.join(" ").trim();
         // Remove any trailing punctuation that might have been included
         const cleanedName = companyName.replace(/[?!.,;:]+$/, "").trim();
+        const companyCore = cleanedName.replace(/^(?:the|a|an)\s+/i, "").trim().toLowerCase();
+        const looksLikeResponsibility =
+          companyCore.length > 0 &&
+          (ROLE_VOCABULARY.has(companyCore) || !!matchResponsibility(companyCore, RESPONSIBILITY_INDEX));
         // Only add if not already added (avoid duplicates) and if it's not empty
-        if (cleanedName && !entities.companies.includes(cleanedName)) {
+        if (cleanedName && !looksLikeResponsibility && !entities.companies.includes(cleanedName)) {
           entities.companies.push(cleanedName);
         }
       }
@@ -1165,7 +1296,14 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
         companyWords.unshift(words[j]);
       }
       if (companyWords.length >= 1) {
-        entities.companies.push(companyWords.join(" "));
+        const candidate = companyWords.join(" ").trim();
+        const candidateCore = candidate.replace(/^(?:the|a|an)\s+/i, "").trim().toLowerCase();
+        const looksLikeRoleOrResponsibility =
+          candidateCore.length > 0 &&
+          (ROLE_VOCABULARY.has(candidateCore) || !!matchResponsibility(candidateCore, RESPONSIBILITY_INDEX));
+        if (!looksLikeRoleOrResponsibility) {
+          entities.companies.push(candidate);
+        }
       }
     }
   }
@@ -2250,7 +2388,11 @@ export function parseSearchQuery(query: string): ParsedQuery {
       }
       if (companyWords.length > 0) {
         const companyName = companyWords.join(" ").replace(/[?!.,;:]+$/, "").trim();
-        if (companyName && !entities.companies.includes(companyName)) {
+        const companyCore = companyName.replace(/^(?:the|a|an)\s+/i, "").trim().toLowerCase();
+        const looksLikeResponsibility =
+          companyCore.length > 0 &&
+          (ROLE_VOCABULARY.has(companyCore) || !!matchResponsibility(companyCore, RESPONSIBILITY_INDEX));
+        if (companyName && !looksLikeResponsibility && !entities.companies.includes(companyName)) {
           entities.companies.push(companyName);
         }
       }
@@ -2552,6 +2694,10 @@ export function parseSearchQuery(query: string): ParsedQuery {
     interactionTimeRange,
     needsFollowUp,
     responsibility: responsibility || null,
+    matchSource: responsibilityResult.matchSource,
+    confidenceBand: responsibilityResult.confidenceBand,
+    candidateCount: responsibilityResult.candidateCount,
+    usedFallback: responsibilityResult.usedFallback,
     comparativeFilters,
   };
   
@@ -2605,8 +2751,22 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     const dept = parsed.responsibility.filters.departments?.[0];
     const role = parsed.responsibility.filters.roles?.[0];
     filters.job_title = dept || role || parsed.entities.roles[0];
-  } else if (parsed.entities.roles.length > 0) {
-    filters.job_title = parsed.entities.roles[0]; // Take first role
+  } else if (parsed.entities.roles.length > 0 || parsed.entities.departments.length > 0) {
+    // Prefer department over first role: e.g. "legal counsel" → entities.departments=["legal"], entities.roles=["law","attorney",...]
+    // Using "legal" matches "Legal Counsel" via ILIKE; using "law" (first synonym) would not
+    filters.job_title = parsed.entities.departments?.[0] ?? parsed.entities.roles?.[0];
+  }
+
+  // Normalize job_title: strip trailing 's' so plural forms match singular roles
+  // e.g. "designers" → "designer" matches "Graphic Designer" via ILIKE '%designer%'
+  const NON_SINGULAR_ROLE_TERMS = new Set(["sales", "operations", "business"]);
+  if (
+    filters.job_title &&
+    /[a-z]s$/i.test(filters.job_title) &&
+    filters.job_title.length > 3 &&
+    !NON_SINGULAR_ROLE_TERMS.has(filters.job_title.toLowerCase())
+  ) {
+    filters.job_title = filters.job_title.replace(/s$/i, '');
   }
 
   // Map name
@@ -2698,6 +2858,12 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     semantic_hint,
     confidence: finalConfidence,
     explanation,
+    diagnostics: {
+      match_source: parsed.matchSource ?? "none",
+      confidence_band: parsed.confidenceBand ?? "low",
+      candidate_count: parsed.candidateCount ?? 0,
+      used_fallback: parsed.usedFallback ?? false,
+    },
   };
 }
 

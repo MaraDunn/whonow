@@ -16,6 +16,9 @@ type DbFolder = {
   company_id: string | null;
   directory_type: string;
   is_organization_folder: boolean | null;
+  is_smart_folder: boolean | null;
+  filter_criteria: Record<string, unknown> | null;
+  saved_search_query: string | null;
 };
 
 const mapDbToFolder = (db: DbFolder): Folder => ({
@@ -27,6 +30,9 @@ const mapDbToFolder = (db: DbFolder): Folder => ({
   isOrganizationFolder: db.is_organization_folder || false,
   ownerId: db.owner_id,
   companyId: db.company_id,
+  isSmartFolder: db.is_smart_folder || false,
+  filterCriteria: db.filter_criteria as Folder["filterCriteria"] ?? null,
+  savedSearchQuery: db.saved_search_query ?? null,
 });
 
 const mapFolderToDb = (
@@ -40,6 +46,9 @@ const mapFolderToDb = (
   company_id: companyId || null,
   directory_type: folder.directoryType || "contacts",
   is_organization_folder: folder.isOrganizationFolder || false,
+  is_smart_folder: folder.isSmartFolder || false,
+  filter_criteria: folder.filterCriteria ?? null,
+  saved_search_query: folder.savedSearchQuery ?? null,
 });
 
 export const useFolders = () => {

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse, sanitizeString, secureLog, getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
+import { sanitizeString, secureLog, getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
 import { createOAuthState, parseOAuthState } from "../_shared/oauthState.ts";
 
 /** True when the request is from a test/dev origin (localhost or INTEGRATION_TEST_ORIGINS). */
@@ -44,15 +44,6 @@ serve(async (req) => {
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
 
-  // Check launch mode - block in waitlist mode unless: skip flag is set, or test origin, or OAuth callback
-  const skipWaitlistForIntegrations = Deno.env.get("INTEGRATION_SKIP_WAITLIST") === "true";
-  const { blocked } = checkLaunchMode();
-  if (!skipWaitlistForIntegrations && blocked) {
-    const origin = req.headers.get("origin");
-    const isOAuthCallback = req.method === "GET" && new URL(req.url).searchParams.has("code");
-    if (!isTestOrigin(origin) && !isOAuthCallback) return waitlistModeBlockedResponse(origin);
-  }
-
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -90,11 +81,10 @@ serve(async (req) => {
         });
       }
 
-      // In production, OAUTH_STATE_SECRET must be set to prevent OAuth state tampering (binding attacks)
+      // OAUTH_STATE_SECRET must be set to prevent OAuth state tampering (binding attacks)
       const stateSecret = Deno.env.get("OAUTH_STATE_SECRET");
-      const launchMode = Deno.env.get("APP_LAUNCH_MODE") || "live";
-      if (launchMode !== "waitlist" && (!stateSecret || stateSecret.length < 16)) {
-        console.error("Slack OAuth: OAUTH_STATE_SECRET must be set in production (APP_LAUNCH_MODE is not waitlist)");
+      if (!stateSecret || stateSecret.length < 16) {
+        console.error("Slack OAuth: OAUTH_STATE_SECRET must be set (min 16 chars)");
         return new Response(null, {
           status: 302,
           headers: { Location: `${appUrl}/?integration=slack&status=error&message=oauth_misconfigured` },

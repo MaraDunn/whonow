@@ -38,7 +38,6 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { SearchQueryFilters } from "@/types/searchQuery";
 import { applySearchFiltersToContacts } from "@/utils/applySearchFilters";
-import { useSmartFolderContacts } from "@/hooks/useSmartFolderContacts";
 import { ContactDragProvider } from "@/contexts/ContactDragContext";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
@@ -263,14 +262,10 @@ const IndexContent = () => {
         typeof selectedFolder.filterCriteria === "object" &&
         Object.keys(selectedFolder.filterCriteria).length > 0));
 
-  // Smart folder as bookmarked search: run the same server-side search as the search bar.
+  // Smart folder as bookmarked search: reuse the same useSmartSearch code path as the search bar.
   const savedQuery = selectedFolder?.savedSearchQuery?.trim() || null;
-  const { contacts: smartFolderContacts, isLoading: smartFolderContactsLoading } =
-    useSmartFolderContacts(savedQuery);
+  const isSmartFolderWithQuery = !!savedQuery && selectedFolderId !== null;
 
-  // Base list when viewing a smart folder with saved query = server-side results; otherwise use client-filtered list.
-  const smartFolderBaseContacts =
-    selectedFolderId !== null && selectedFolder && savedQuery ? smartFolderContacts : [];
 
   // Filter contacts by folder and ownership (used when NOT using bookmarked search)
   const folderFilteredContacts = useMemo(() => {
@@ -394,17 +389,22 @@ const IndexContent = () => {
     return teamContacts;
   }, [teamContacts, selectedTeamFolderId]);
 
-  // Base list for search: smart folder with saved query = server-side bookmarked search results; else folder/client/org/team list.
+  // Base list for search: folder/client/org/team list (smart folders with saved query use the server search directly).
   const baseListForSearch =
-    savedQuery && selectedFolderId !== null
-      ? smartFolderBaseContacts
-      : showDirectory
-        ? filteredTeamContacts
-        : clientView !== null
-          ? clientDirectoryContacts
-          : orgView !== null
-            ? orgDirectoryContacts
-            : folderFilteredContacts;
+    showDirectory
+      ? filteredTeamContacts
+      : clientView !== null
+        ? clientDirectoryContacts
+        : orgView !== null
+          ? orgDirectoryContacts
+          : folderFilteredContacts;
+
+  // Smart folders reuse the exact same RPC code path as the search bar.
+  // When a smart folder is active, the saved query runs automatically.
+  // If the user types in the search bar, combine both queries so results stay within the smart folder scope.
+  const effectiveSearchQuery = isSmartFolderWithQuery
+    ? (searchQuery ? `${savedQuery} ${searchQuery}` : savedQuery!)
+    : searchQuery;
 
   const {
     contacts: filteredContacts,
@@ -413,9 +413,10 @@ const IndexContent = () => {
     understoodFilters,
     understoodRoleLabel,
     isTruncated,
-  } = useSmartSearch(baseListForSearch, searchQuery, {
+  } = useSmartSearch(baseListForSearch, effectiveSearchQuery, {
     contactMarkedVersion,
-    scopeToContacts: clientView !== null || orgView !== null || (!!savedQuery && selectedFolderId !== null),
+    scopeToContacts: clientView !== null || orgView !== null,
+    maxResults: isSmartFolderWithQuery ? 500 : undefined,
   });
 
   const handleSelectTrash = () => {
@@ -724,8 +725,9 @@ const IndexContent = () => {
     );
   }, [contacts, company, ownershipFilter]);
 
-  // Calculate contact count per folder - regular from folderId; smart folders never use assignment count
+  // Calculate contact count per folder - regular from folderId; smart folders show count from active search results
   const contactCountByFolder = useMemo(() => {
+    const folderDirectoryType = new Map(allFolders.map((f) => [f.id, f.directoryType]));
     const smartFolderIds = new Set(
       allFolders
         .filter(
@@ -739,8 +741,15 @@ const IndexContent = () => {
     );
     const counts: Record<string, number> = {};
     for (const c of contacts) {
-      if (c.folderId && !smartFolderIds.has(c.folderId)) {
-        counts[c.folderId] = (counts[c.folderId] || 0) + 1;
+      if (!c.folderId || smartFolderIds.has(c.folderId)) continue;
+      const dirType = folderDirectoryType.get(c.folderId);
+      if (dirType === "clients" && !c.isClient) continue;
+      counts[c.folderId] = (counts[c.folderId] || 0) + 1;
+    }
+    // Team folders count from teamContacts (separate data source)
+    for (const tc of teamContacts) {
+      if (tc.folderId && folderDirectoryType.get(tc.folderId) === "team") {
+        counts[tc.folderId] = (counts[tc.folderId] || 0) + 1;
       }
     }
     for (const folder of allFolders) {
@@ -750,10 +759,10 @@ const IndexContent = () => {
         folder.filterCriteria &&
         typeof folder.filterCriteria === "object" &&
         Object.keys(folder.filterCriteria).length > 0;
-      const isSmartFolder = folder.isSmartFolder || hasFilterCriteria || hasSavedQuery;
-      if (isSmartFolder && hasSavedQuery) {
-        counts[folder.id] = folder.id === selectedFolderId ? smartFolderContacts.length : 0;
-      } else if (isSmartFolder && hasFilterCriteria && !hasSavedQuery) {
+      const isSmart = folder.isSmartFolder || hasFilterCriteria || hasSavedQuery;
+      if (isSmart && hasSavedQuery) {
+        counts[folder.id] = folder.id === selectedFolderId ? filteredContacts.length : 0;
+      } else if (isSmart && hasFilterCriteria && !hasSavedQuery) {
         const matchesFilter = applySearchFiltersToContacts(
           ownershipFilteredContacts,
           folder.filterCriteria
@@ -762,7 +771,7 @@ const IndexContent = () => {
       }
     }
     return counts;
-  }, [contacts, allFolders, ownershipFilteredContacts, selectedFolderId, smartFolderContacts.length]);
+  }, [contacts, teamContacts, allFolders, ownershipFilteredContacts, selectedFolderId, filteredContacts.length]);
 
   // Contact folders that accept moving contacts (exclude smart folders)
   const contactFoldersForMove = useMemo(

@@ -153,7 +153,7 @@ export const DroppableFolder = React.forwardRef<HTMLButtonElement, DroppableFold
         onClick={onClick}
         isActive={isSelected}
         tooltip={tooltip}
-        className={cn("w-full min-w-0 gap-3 px-3 py-2", dragStateClass)}
+        className={cn("w-full min-w-0 gap-3 pl-3 pr-8 py-2", dragStateClass)}
         {...dropProps}
       >
         <Icon

@@ -53,7 +53,7 @@ function mapSearchRowToContact(row: Record<string, unknown>): Contact {
   };
 }
 
-export type UseSmartSearchOptions = { totalCount?: number; contactMarkedVersion?: number; scopeToContacts?: boolean };
+export type UseSmartSearchOptions = { totalCount?: number; contactMarkedVersion?: number; scopeToContacts?: boolean; maxResults?: number };
 
 /**
  * Universal smart search: Always uses server-side smart_search_contacts RPC.
@@ -67,6 +67,7 @@ export function useSmartSearch(
 ): SmartSearchResult {
   const contactMarkedVersion = options?.contactMarkedVersion ?? 0;
   const scopeToContacts = options?.scopeToContacts ?? false;
+  const maxResults = options?.maxResults ?? MAX_RESULTS;
   const { user } = useAuth();
   const [finalQuery, setFinalQuery] = useState<SearchQuery | null>(null);
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
@@ -82,8 +83,6 @@ export function useSmartSearch(
     }
 
     if (!hasActiveQuery) {
-      // When query is cleared, reset search state but don't manage contacts
-      // The effectiveContacts computed value will return the contacts prop directly
       setSearchResults([]);
       setIsSearching(false);
       setFinalQuery(null);
@@ -112,7 +111,7 @@ export function useSmartSearch(
         // Build params object, only including non-null values (except _user_id and _limit which are required)
         const searchParams: Record<string, any> = {
           _user_id: user.id,
-          _limit: MAX_RESULTS,
+          _limit: maxResults,
         };
         
         // Only add optional parameters if they have values
@@ -171,11 +170,7 @@ export function useSmartSearch(
           _limit: searchParams._limit ?? MAX_RESULTS,
         };
 
-        devLog("[useSmartSearch] RPC params:", JSON.stringify({
-          ...rpcParams,
-          _last_contacted_from: rpcParams._last_contacted_from,
-          _last_contacted_to: rpcParams._last_contacted_to,
-        }));
+        devLog("[useSmartSearch] RPC params:", JSON.stringify(rpcParams));
 
         const { data, error } = await supabase.rpc("smart_search_contacts", rpcParams);
 
@@ -189,7 +184,7 @@ export function useSmartSearch(
         }
 
         let results = (data ?? []).map((row: Record<string, unknown>) => mapSearchRowToContact(row));
-        devLog("[useSmartSearch] RPC returned", results.length, "results", rpcParams._last_contacted_from ? "(interaction-date filter)" : "");
+        devLog("[useSmartSearch] RPC returned", results.length, "results (limit:", rpcParams._limit, ")");
 
         // When scoped (e.g. Client Dashboard), restrict results to only contacts in the input array
         if (scopeToContacts && contacts.length > 0) {
@@ -253,7 +248,7 @@ export function useSmartSearch(
     return () => {
       controller.abort();
     };
-  }, [query, user?.id, hasActiveQuery, contactMarkedVersion]);
+  }, [query, user?.id, hasActiveQuery, contactMarkedVersion, maxResults]);
 
   // Update search results when contacts change (for optimistic updates)
   useEffect(() => {
@@ -320,7 +315,7 @@ export function useSmartSearch(
     interpretation: finalQuery?.explanation || null,
     understoodFilters: finalQuery?.filters ?? null,
     understoodRoleLabel: legacyParsed?.responsibility?.filters?.roles?.[0] ?? finalQuery?.filters?.job_title ?? null,
-    isTruncated: hasActiveQuery ? searchResults.length >= MAX_RESULTS : false,
+    isTruncated: hasActiveQuery ? searchResults.length >= maxResults : false,
     aiMetadata, // Expose AI metadata for debugging
   };
 }

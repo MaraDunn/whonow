@@ -12,8 +12,8 @@
 // Allowed origins for CORS. For production, set ALLOWED_ORIGINS in Supabase
 // (Edge Function secrets) to your domain(s), e.g.:
 //   ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
-// If unset, only DEFAULT_ORIGINS (localhost) are used and waitlist/form requests
-// from your production site will fail CORS.
+// If unset, only DEFAULT_ORIGINS (localhost) are used and requests from your
+// production site will fail CORS.
 const DEFAULT_ORIGINS = [
   "http://localhost:8080",  // Default dev server port
   "http://localhost:5173",  // Alternative Vite port
@@ -238,31 +238,6 @@ export function rateLimitExceededResponse(resetIn: number, origin?: string | nul
         "Content-Type": "application/json",
         "Retry-After": String(Math.ceil(resetIn / 1000))
       } 
-    }
-  );
-}
-
-/**
- * Check if the application is in waitlist mode
- * Returns blocked status and current mode
- */
-export function checkLaunchMode(): { blocked: boolean; mode: string } {
-  const mode = Deno.env.get("APP_LAUNCH_MODE") || "live";
-  return { blocked: mode === "waitlist", mode };
-}
-
-/**
- * Create a 403 response for waitlist mode blocking
- */
-export function waitlistModeBlockedResponse(origin?: string | null): Response {
-  return new Response(
-    JSON.stringify({ error: "Service unavailable" }),
-    {
-      status: 403,
-      headers: {
-        ...getCorsHeaders(origin),
-        "Content-Type": "application/json",
-      },
     }
   );
 }

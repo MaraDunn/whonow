@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { checkLaunchMode, waitlistModeBlockedResponse, getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/security.ts";
 
 /**
  * Deterministic Search Query Parser - NO AI/LLM
@@ -146,11 +146,6 @@ export async function handler(req: Request): Promise<Response> {
   const corsHeaders = getCorsHeaders(origin);
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
-
-  const { blocked } = checkLaunchMode();
-  if (blocked) {
-    return waitlistModeBlockedResponse(origin);
-  }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {

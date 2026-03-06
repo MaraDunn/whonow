@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
-import { getAuthRedirectOrigin, IS_WAITLIST_MODE_EFFECTIVE } from "@/utils/launchMode";
+import { getAuthRedirectOrigin } from "@/utils/launchMode";
 
 const emailSchema = z.string().email("Please enter a valid email address").max(254, "Email is too long");
 const passwordSchema = z.string()
@@ -99,17 +99,12 @@ const Auth = () => {
     }
   }, [loading, user, isReturningFromEmailLink, hash, search]);
 
-  // Redirect if already authenticated and email is verified. In waitlist mode, send verified users to landing with ?verified=1 so they see success there.
+  // Redirect if already authenticated and email is verified
   useEffect(() => {
     if (!loading && user && user.email_confirmed_at) {
-      const fromCallback = isReturningFromEmailLink;
-      if (IS_WAITLIST_MODE_EFFECTIVE && fromCallback) {
-        navigate("/?verified=1", { replace: true });
-      } else {
-        navigate(redirectParam || "/app", { replace: true });
-      }
+      navigate(redirectParam || "/app", { replace: true });
     }
-  }, [user, loading, navigate, redirectParam, isReturningFromEmailLink]);
+  }, [user, loading, navigate, redirectParam]);
 
   // Show message when redirected from ProtectedRoute due to unverified email
   useEffect(() => {
