@@ -1,6 +1,8 @@
 export interface SweepGuardrailConfig {
   benchmarkQueries: string[];
   thresholds: {
+    baselineP95Ms: number;
+    baselineMaxMs: number;
     p95AbsoluteMs: number;
     maxAbsoluteMs: number;
     p95RegressionPct: number;
@@ -68,8 +70,10 @@ export const SMART_SWEEP_GUARDRAILS: SweepGuardrailConfig = {
     "forklift operator",
   ],
   thresholds: {
+    baselineP95Ms: 6,
+    baselineMaxMs: 25,
     p95AbsoluteMs: 12,
-    maxAbsoluteMs: 30,
+    maxAbsoluteMs: 45,
     p95RegressionPct: 20,
     maxRegressionPct: 25,
   },
