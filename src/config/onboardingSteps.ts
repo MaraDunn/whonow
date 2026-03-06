@@ -24,7 +24,7 @@ export const onboardingSteps: OnboardingStep[] = [
   {
     id: "directories",
     title: "Contacts & Client Directory",
-    content: "Use the sidebar to switch between All Contacts and Client Directory. Team Directory appears when you’re in an organization.",
+    content: "Use the sidebar to switch between All Contacts and Client Directory. Internal Directory appears when you’re in an organization.",
     targetSelector: "[data-onboarding-client-directory]",
     position: "right",
   },

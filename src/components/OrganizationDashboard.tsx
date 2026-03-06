@@ -128,7 +128,7 @@ export function OrganizationDashboard({
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-xl sm:text-2xl font-display font-semibold">Organization Dashboard</h2>
+        <h2 className="text-xl sm:text-2xl font-display font-semibold">Shared Directory</h2>
         <p className="text-muted-foreground mt-1 text-sm sm:text-base">
           {allSharedContacts.length} shared contact{allSharedContacts.length !== 1 ? "s" : ""}
         </p>

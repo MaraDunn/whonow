@@ -96,7 +96,7 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
           onClick={onClick}
           isActive={isActive}
           tooltip={tooltip}
-          className={cn("w-full", dragStateClass)}
+          className={cn("w-full min-w-0 pl-6", dragStateClass)}
           data-onboarding-all-contacts
           {...dropProps}
         >
@@ -110,7 +110,7 @@ export const DroppableAllContacts = React.forwardRef<HTMLButtonElement, Droppabl
         ref={ref}
         onClick={onClick}
         isActive={isActive}
-        className={cn("w-full min-w-0", dragStateClass)}
+        className={cn("w-full min-w-0 pl-6", dragStateClass)}
         data-onboarding-all-contacts
         {...dropProps}
       >

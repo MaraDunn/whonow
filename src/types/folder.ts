@@ -1,6 +1,6 @@
 import type { SearchQueryFilters } from "./searchQuery";
 
-export type DirectoryType = 'contacts' | 'clients' | 'team';
+export type DirectoryType = 'contacts' | 'clients' | 'team' | 'org';
 
 /** Stored filter for smart folders (saved search). Same shape as SearchQuery.filters. */
 export type SmartFolderFilterCriteria = SearchQueryFilters | null;

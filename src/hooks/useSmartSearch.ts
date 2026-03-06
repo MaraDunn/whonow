@@ -53,7 +53,16 @@ function mapSearchRowToContact(row: Record<string, unknown>): Contact {
   };
 }
 
-export type UseSmartSearchOptions = { totalCount?: number; contactMarkedVersion?: number; scopeToContacts?: boolean; maxResults?: number };
+export type UseSmartSearchOptions = {
+  totalCount?: number;
+  contactMarkedVersion?: number;
+  scopeToContacts?: boolean;
+  maxResults?: number;
+  /** When true, restrict results to contacts with is_client = true (client directory smart folders). */
+  clientOnly?: boolean;
+  /** When true, restrict results to contacts with is_shared = true (team directory smart folders). */
+  sharedOnly?: boolean;
+};
 
 /**
  * Universal smart search: Always uses server-side smart_search_contacts RPC.
@@ -68,6 +77,8 @@ export function useSmartSearch(
   const contactMarkedVersion = options?.contactMarkedVersion ?? 0;
   const scopeToContacts = options?.scopeToContacts ?? false;
   const maxResults = options?.maxResults ?? MAX_RESULTS;
+  const clientOnly = options?.clientOnly ?? false;
+  const sharedOnly = options?.sharedOnly ?? false;
   const { user } = useAuth();
   const [finalQuery, setFinalQuery] = useState<SearchQuery | null>(null);
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
@@ -167,6 +178,8 @@ export function useSmartSearch(
           _location: searchParams._location ?? null,
           _relationship_type: searchParams._relationship_type ?? null,
           _semantic_hint: searchParams._semantic_hint ?? null,
+          _client_only: clientOnly,
+          _shared_only: sharedOnly,
           _limit: searchParams._limit ?? MAX_RESULTS,
         };
 
@@ -248,7 +261,7 @@ export function useSmartSearch(
     return () => {
       controller.abort();
     };
-  }, [query, user?.id, hasActiveQuery, contactMarkedVersion, maxResults]);
+  }, [query, user?.id, hasActiveQuery, contactMarkedVersion, maxResults, clientOnly, sharedOnly]);
 
   // Update search results when contacts change (for optimistic updates)
   useEffect(() => {

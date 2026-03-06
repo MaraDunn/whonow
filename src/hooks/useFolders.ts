@@ -101,6 +101,16 @@ export const useFolders = () => {
     [allFolders]
   );
 
+  const orgFolders = useMemo(
+    () => allFolders.filter((f) => f.directoryType === "org" && !f.isOrganizationFolder),
+    [allFolders]
+  );
+
+  const organizationOrgFolders = useMemo(
+    () => allFolders.filter((f) => f.directoryType === "org" && f.isOrganizationFolder),
+    [allFolders]
+  );
+
   // Check if a folder name already exists in a specific directory
   const isFolderNameDuplicate = (
     name: string,
@@ -190,6 +200,8 @@ export const useFolders = () => {
     organizationClientFolders,
     teamFolders,
     organizationTeamFolders,
+    orgFolders,
+    organizationOrgFolders,
     allFolders,
     isLoading,
     addFolder: addFolder.mutate,
