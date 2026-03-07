@@ -78,6 +78,8 @@ interface ContactGridProps {
   isLoadingMore?: boolean;
   /** When true and there are no contacts, show a sample contact card (e.g. during onboarding). Hidden after tutorial and when user has real contacts. */
   showSampleContact?: boolean;
+  /** Contact id -> count of "contacted" interactions in last 90 days; used for relationship health frequency score (scores above 70). */
+  interactionCounts?: Record<string, number>;
 }
 
 export function ContactGrid({ 
@@ -119,6 +121,7 @@ export function ContactGrid({
   onLoadMore,
   isLoadingMore = false,
   showSampleContact = false,
+  interactionCounts,
 }: ContactGridProps) {
   const responsiveView = useResponsiveView();
   const isInternalContact = useCallback(
@@ -326,6 +329,7 @@ export function ContactGrid({
                 selectionMode={false}
                 onMarkContacted={() => {}}
                 onToggleClient={() => {}}
+                interactionCounts={interactionCounts}
               />
             </div>
           </div>
@@ -437,6 +441,7 @@ export function ContactGrid({
                         isSelected={selectedContactIds.has(contact.id)}
                         onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
                         selectionMode={selectionMode}
+                        interactionCounts={interactionCounts}
                       />
                     </div>
                   ))}
@@ -479,6 +484,7 @@ export function ContactGrid({
               isSelected={selectedContactIds.has(contact.id)}
               onSelect={onSelectContact ? (selected) => onSelectContact(contact.id, selected) : undefined}
               selectionMode={selectionMode}
+              interactionCounts={interactionCounts}
               />
             </div>
           ))}

@@ -11,6 +11,7 @@ import { useReminderSettings } from "@/hooks/useReminderSettings";
 import type { Contact } from "@/types/contact";
 import type { Folder } from "@/types/folder";
 import type { ActionType } from "@/hooks/useActionSearch";
+import { useHealthClock } from "@/contexts/HealthClockContext";
 import { computeHealthScore } from "@/utils/relationshipHealth";
 import type { HealthStatus } from "@/utils/relationshipHealth";
 
@@ -59,6 +60,7 @@ interface ClientDashboardProps {
   hasClientAccess?: boolean;
   selectionMode?: boolean;
   onToggleSelectionMode?: (mode: boolean) => void;
+  interactionCounts?: Record<string, number>;
 }
 
 export function ClientDashboard({
@@ -91,6 +93,7 @@ export function ClientDashboard({
   hasClientAccess,
   selectionMode,
   onToggleSelectionMode,
+  interactionCounts,
 }: ClientDashboardProps) {
   const { reminderInterval } = useReminderSettings();
   const [outreachPreSelected, setOutreachPreSelected] = useState<Set<string>>(new Set());
@@ -101,12 +104,14 @@ export function ClientDashboard({
     onTabChange("outreach");
   }, [onTabChange]);
 
-  // Compute health scores once for the directory contacts (O(n), no network calls)
-  const now = useMemo(() => new Date(), []);
+  const healthClock = useHealthClock(); // ticks every minute so directory health stays current
+  // Compute health scores for the directory (use current time so scores stay live)
   const directoryContacts = useMemo(() => {
+    const now = new Date();
     let list = contacts.map((c) => {
       if (!c.isClient) return c;
-      const { score, status } = computeHealthScore(c, 0, now);
+      const count = interactionCounts?.[c.id] ?? 0;
+      const { score, status } = computeHealthScore(c, count, now);
       return { ...c, relationshipHealthScore: score, relationshipHealthStatus: status };
     });
 
@@ -127,7 +132,7 @@ export function ClientDashboard({
     }
 
     return list;
-  }, [contacts, healthFilter, clientSortOption, now]);
+  }, [contacts, healthFilter, clientSortOption, healthClock, interactionCounts]);
 
   return (
     <div>
@@ -247,6 +252,7 @@ export function ClientDashboard({
             hasClientAccess={hasClientAccess}
             selectionMode={selectionMode}
             onToggleSelectionMode={onToggleSelectionMode}
+            interactionCounts={interactionCounts}
           />
         </TabsContent>
 

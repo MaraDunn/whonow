@@ -390,16 +390,19 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <label className="text-xs font-medium shrink-0">Message template</label>
-              <div className="flex items-center gap-1 flex-wrap justify-end">
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
                 {VARIABLE_HINTS.map((hint) => (
-                  <button
+                  <Button
                     key={hint.key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleInsertVariable(hint.key)}
-                    className="text-[10px] font-mono px-1.5 py-0.5 rounded border bg-muted hover:bg-accent transition-colors"
-                    title={`Insert ${hint.label}`}
+                    className="text-xs h-7 font-normal"
+                    title={`Insert ${hint.key}`}
                   >
-                    {hint.key}
-                  </button>
+                    {hint.label}
+                  </Button>
                 ))}
               </div>
             </div>

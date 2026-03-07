@@ -39,6 +39,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { SearchQueryFilters } from "@/types/searchQuery";
 import { applySearchFiltersToContacts } from "@/utils/applySearchFilters";
 import { ContactDragProvider } from "@/contexts/ContactDragContext";
+import { HealthClockProvider } from "@/contexts/HealthClockContext";
 
 type ClientSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added";
 type OrgSortOption = "oldest-contacted" | "newest-contacted" | "oldest-added" | "newest-added" | "health-desc" | "health-asc";
@@ -111,6 +112,7 @@ const IndexContent = () => {
   const { profile, needsCompanySetup, needsOnboarding, completeOnboarding, createCompany, joinCompany, skipCompanySetup, company, isAdmin, isSuperAdmin, isCreatingCompany } = useProfile(user?.id);
   const { canAccessFeature, showCreateOrganizationAfterUpgrade, dismissCreateOrgPrompt } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
+  const hasSmartFoldersAccess = canAccessFeature("smart_folders");
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -190,6 +192,8 @@ const IndexContent = () => {
     loadMoreContacts,
     isLoadingMoreContacts,
     getContactById,
+    updateContactInListCache,
+    interactionCounts,
   } = useContacts();
   const { 
     folders, 
@@ -206,6 +210,20 @@ const IndexContent = () => {
     deleteFolder 
   } = useFolders();
   const { keywords, addKeyword, removeKeyword, resetToDefaults, isCompanyKeywords, canEditKeywords } = useCustomKeywords();
+
+  // Clear smart folder selection when user doesn't have Pro+ (e.g. after downgrade)
+  useEffect(() => {
+    if (hasSmartFoldersAccess) return;
+    const clearIfSmart = (folderId: string | null, setter: (id: string | null) => void) => {
+      if (!folderId) return;
+      const folder = allFolders.find((f) => f.id === folderId);
+      if (folder?.isSmartFolder) setter(null);
+    };
+    clearIfSmart(selectedFolderId, setSelectedFolderId);
+    clearIfSmart(selectedClientFolderId, setSelectedClientFolderId);
+    clearIfSmart(selectedTeamFolderId, setSelectedTeamFolderId);
+    clearIfSmart(selectedOrgFolderId, setSelectedOrgFolderId);
+  }, [hasSmartFoldersAccess, selectedFolderId, selectedClientFolderId, selectedTeamFolderId, selectedOrgFolderId, allFolders]);
 
   // Handle OAuth callback redirects (e.g., from Slack)
   useEffect(() => {
@@ -907,7 +925,11 @@ const IndexContent = () => {
   const handleViewContact = async (contact: Contact) => {
     // Fetch full contact from DB so we always have address and other fields (lists like smart search may omit them)
     const full = await getContactById(contact.id);
-    setViewingContact(full ?? contact);
+    if (full) {
+      updateContactInListCache(full); // keep grid in sync so card health matches detail view
+    }
+    const contactToView: Contact | null = full ?? contact;
+    setViewingContact(contactToView);
     setDetailsDialogOpen(true);
   };
 
@@ -1090,6 +1112,7 @@ const IndexContent = () => {
 
   return (
         <ContactDragProvider>
+        <HealthClockProvider>
         <div className="h-screen bg-background flex w-full overflow-hidden">
           {/* Folder Sidebar */}
           <FolderSidebar
@@ -1289,6 +1312,7 @@ const IndexContent = () => {
                     hasClientAccess={hasClientAccess}
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
+                    interactionCounts={interactionCounts}
                   />
                 </>
               ) : clientView !== null ? (
@@ -1322,6 +1346,7 @@ const IndexContent = () => {
                   hasClientAccess={hasClientAccess}
                   selectionMode={selectionMode}
                   onToggleSelectionMode={handleToggleSelectionMode}
+                  interactionCounts={interactionCounts}
                 />
               ) : orgView !== null ? (
                 <OrganizationDashboard
@@ -1354,6 +1379,7 @@ const IndexContent = () => {
                   hasClientAccess={hasClientAccess}
                   selectionMode={selectionMode}
                   onToggleSelectionMode={handleToggleSelectionMode}
+                  interactionCounts={interactionCounts}
                 />
               ) : (
                 <ContactGrid
@@ -1387,6 +1413,7 @@ const IndexContent = () => {
                   onLoadMore={loadMoreContacts}
                   isLoadingMore={isLoadingMoreContacts}
                   folders={contactFoldersForMove}
+                  interactionCounts={interactionCounts}
                 />
               )}
 
@@ -1430,6 +1457,7 @@ const IndexContent = () => {
                 onEdit={handleEditFromDetails}
                 onSave={handleSaveContactFromDetails}
                 onDelete={handleDeleteFromDetails}
+                interactionCounts={interactionCounts}
               />
 
               <SettingsDialog
@@ -1491,6 +1519,7 @@ const IndexContent = () => {
             </div>
           </div>
         </div>
+        </HealthClockProvider>
         </ContactDragProvider>
   );
 };

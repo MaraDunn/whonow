@@ -250,6 +250,17 @@ export function FolderSidebar({
 
   const hasClientAccess = canAccessFeature("client_management");
   const hasTeamAccess = canAccessFeature("team_features");
+  const hasSmartFoldersAccess = canAccessFeature("smart_folders");
+
+  // Hide smart folders from sidebar when user doesn't have Pro+ (smart_folders feature)
+  const contactFoldersToShow = hasSmartFoldersAccess ? folders : folders.filter((f) => !f.isSmartFolder);
+  const organizationFoldersToShow = hasSmartFoldersAccess ? organizationFolders : organizationFolders.filter((f) => !f.isSmartFolder);
+  const clientFoldersToShow = hasSmartFoldersAccess ? clientFolders : clientFolders.filter((f) => !f.isSmartFolder);
+  const organizationClientFoldersToShow = hasSmartFoldersAccess ? organizationClientFolders : organizationClientFolders.filter((f) => !f.isSmartFolder);
+  const orgFoldersToShow = hasSmartFoldersAccess ? orgFolders : orgFolders.filter((f) => !f.isSmartFolder);
+  const organizationOrgFoldersToShow = hasSmartFoldersAccess ? organizationOrgFolders : organizationOrgFolders.filter((f) => !f.isSmartFolder);
+  const teamFoldersToShow = hasSmartFoldersAccess ? teamFolders : teamFolders.filter((f) => !f.isSmartFolder);
+  const organizationTeamFoldersToShow = hasSmartFoldersAccess ? organizationTeamFolders : organizationTeamFolders.filter((f) => !f.isSmartFolder);
 
   const handleSaveFolder = (folderData: Omit<FolderType, "id" | "createdAt">) => {
     if (editingFolder) {
@@ -387,10 +398,12 @@ export function FolderSidebar({
                       <FolderPlus className="h-4 w-4 mr-2" />
                       Folder
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleAddSmartFolder("contacts")}>
-                      <Filter className="h-4 w-4 mr-2" />
-                      Smart folder
-                    </DropdownMenuItem>
+                    {hasSmartFoldersAccess && (
+                      <DropdownMenuItem onClick={() => handleAddSmartFolder("contacts")}>
+                        <Filter className="h-4 w-4 mr-2" />
+                        Smart folder
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -482,7 +495,7 @@ export function FolderSidebar({
                 )}
 
                 {/* Personal Contact Folders */}
-                {wasContactDirectoryExpanded && folders.map((folder) => (
+                {wasContactDirectoryExpanded && contactFoldersToShow.map((folder) => (
                   <SidebarMenuItem key={folder.id} className="group relative">
                     <DroppableFolder
                       folder={folder}
@@ -524,7 +537,7 @@ export function FolderSidebar({
                 ))}
 
                 {/* Organization Contact Folders */}
-                {hasCompany && organizationFolders.length > 0 && wasContactDirectoryExpanded && (
+                {hasCompany && organizationFoldersToShow.length > 0 && wasContactDirectoryExpanded && (
                   <>
                     {!isCollapsed && (
                       <div className="px-2 py-1.5 mt-2">
@@ -534,7 +547,7 @@ export function FolderSidebar({
                         </p>
                       </div>
                     )}
-                    {organizationFolders.map((folder) => (
+                    {organizationFoldersToShow.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <DroppableFolder
                           folder={folder}
@@ -626,10 +639,12 @@ export function FolderSidebar({
                           <FolderPlus className="h-4 w-4 mr-2" />
                           Folder
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleAddSmartFolder("clients")}>
-                          <Filter className="h-4 w-4 mr-2" />
-                          Smart folder
-                        </DropdownMenuItem>
+                        {hasSmartFoldersAccess && (
+                          <DropdownMenuItem onClick={() => handleAddSmartFolder("clients")}>
+                            <Filter className="h-4 w-4 mr-2" />
+                            Smart folder
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                     )}
@@ -682,7 +697,7 @@ export function FolderSidebar({
                     </SidebarMenuItem>
 
                     {/* Personal Client Folders */}
-                    {hasClientAccess && wasClientDirectoryExpanded && clientFolders.map((folder) => (
+                    {hasClientAccess && wasClientDirectoryExpanded && clientFoldersToShow.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <DroppableFolder
                           folder={folder}
@@ -727,7 +742,7 @@ export function FolderSidebar({
                     ))}
 
                     {/* Organization Client Folders */}
-                    {hasClientAccess && hasCompany && organizationClientFolders.length > 0 && wasClientDirectoryExpanded && (
+                    {hasClientAccess && hasCompany && organizationClientFoldersToShow.length > 0 && wasClientDirectoryExpanded && (
                       <>
                         {!isCollapsed && (
                           <div className="px-2 py-1.5 mt-2">
@@ -737,7 +752,7 @@ export function FolderSidebar({
                             </p>
                           </div>
                         )}
-                        {organizationClientFolders.map((folder) => (
+                        {organizationClientFoldersToShow.map((folder) => (
                           <SidebarMenuItem key={folder.id} className="group relative">
                             <DroppableFolder
                               folder={folder}
@@ -833,10 +848,12 @@ export function FolderSidebar({
                             <FolderPlus className="h-4 w-4 mr-2" />
                             Folder
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleAddSmartFolder("org")}>
-                            <Filter className="h-4 w-4 mr-2" />
-                            Smart folder
-                          </DropdownMenuItem>
+                          {hasSmartFoldersAccess && (
+                            <DropdownMenuItem onClick={() => handleAddSmartFolder("org")}>
+                              <Filter className="h-4 w-4 mr-2" />
+                              Smart folder
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
@@ -865,7 +882,7 @@ export function FolderSidebar({
                     </SidebarMenuItem>
 
                     {/* Personal org (shared contact) folders */}
-                    {wasOrgDirectoryExpanded && orgFolders.map((folder) => (
+                    {wasOrgDirectoryExpanded && orgFoldersToShow.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <DroppableFolder
                           folder={folder}
@@ -910,7 +927,7 @@ export function FolderSidebar({
                     ))}
 
                     {/* Organization org folders */}
-                    {hasCompany && organizationOrgFolders.length > 0 && wasOrgDirectoryExpanded && (
+                    {hasCompany && organizationOrgFoldersToShow.length > 0 && wasOrgDirectoryExpanded && (
                       <>
                         {!isCollapsed && (
                           <div className="px-2 py-1.5 mt-2">
@@ -920,7 +937,7 @@ export function FolderSidebar({
                             </p>
                           </div>
                         )}
-                        {organizationOrgFolders.map((folder) => (
+                        {organizationOrgFoldersToShow.map((folder) => (
                           <SidebarMenuItem key={folder.id} className="group relative">
                             <DroppableFolder
                               folder={folder}
@@ -1016,10 +1033,12 @@ export function FolderSidebar({
                             <FolderPlus className="h-4 w-4 mr-2" />
                             Folder
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleAddSmartFolder("team")}>
-                            <Filter className="h-4 w-4 mr-2" />
-                            Smart folder
-                          </DropdownMenuItem>
+                          {hasSmartFoldersAccess && (
+                            <DropdownMenuItem onClick={() => handleAddSmartFolder("team")}>
+                              <Filter className="h-4 w-4 mr-2" />
+                              Smart folder
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
@@ -1048,7 +1067,7 @@ export function FolderSidebar({
                     </SidebarMenuItem>
 
                     {/* Personal Team Folders */}
-                    {wasTeamDirectoryExpanded && teamFolders.map((folder) => (
+                    {wasTeamDirectoryExpanded && teamFoldersToShow.map((folder) => (
                       <SidebarMenuItem key={folder.id} className="group relative">
                         <DroppableFolder
                           folder={folder}
@@ -1093,7 +1112,7 @@ export function FolderSidebar({
                     ))}
 
                     {/* Organization Team Folders */}
-                    {hasCompany && organizationTeamFolders.length > 0 && wasTeamDirectoryExpanded && (
+                    {hasCompany && organizationTeamFoldersToShow.length > 0 && wasTeamDirectoryExpanded && (
                       <>
                         {!isCollapsed && (
                           <div className="px-2 py-1.5 mt-2">
@@ -1103,7 +1122,7 @@ export function FolderSidebar({
                             </p>
                           </div>
                         )}
-                        {organizationTeamFolders.map((folder) => (
+                        {organizationTeamFoldersToShow.map((folder) => (
                           <SidebarMenuItem key={folder.id} className="group relative">
                             <DroppableFolder
                               folder={folder}

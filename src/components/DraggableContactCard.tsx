@@ -33,6 +33,8 @@ export interface DraggableContactCardProps {
   isSelected?: boolean;
   onSelect?: (selected: boolean) => void;
   selectionMode?: boolean;
+  /** Contact id -> count of interactions in last 90 days; for health score frequency (scores above 70). */
+  interactionCounts?: Record<string, number>;
 }
 
 export function DraggableContactCard({ 
@@ -63,6 +65,7 @@ export function DraggableContactCard({
   isSelected = false,
   onSelect,
   selectionMode = false,
+  interactionCounts,
 }: DraggableContactCardProps) {
   return (
     <ContactCard
@@ -93,6 +96,7 @@ export function DraggableContactCard({
       isSelected={isSelected}
       onSelect={onSelect}
       selectionMode={selectionMode}
+      interactionCounts={interactionCounts}
     />
   );
 }

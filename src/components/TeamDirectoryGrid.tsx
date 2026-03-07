@@ -28,6 +28,7 @@ interface TeamDirectoryGridProps {
   hasClientAccess?: boolean;
   selectionMode?: boolean;
   onToggleSelectionMode?: () => void;
+  interactionCounts?: Record<string, number>;
 }
 
 export function TeamDirectoryGrid({ 
@@ -51,6 +52,7 @@ export function TeamDirectoryGrid({
   hasClientAccess = false,
   selectionMode = false,
   onToggleSelectionMode,
+  interactionCounts,
 }: TeamDirectoryGridProps) {
   const responsiveView = useResponsiveView();
   const isCompactMode = responsiveView === 'mobile' || responsiveView === 'tablet';
@@ -118,6 +120,7 @@ export function TeamDirectoryGrid({
               isSelected={selectedContactIds.has(member.id)}
               onSelect={onSelectContact ? (selected) => onSelectContact(member.id, selected) : undefined}
               selectionMode={selectionMode}
+              interactionCounts={interactionCounts}
             />
           </div>
         ))}

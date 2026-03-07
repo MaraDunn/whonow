@@ -159,6 +159,7 @@ interface ContactDetailsDialogProps {
   onDelete: () => void;
   onExportContact?: (contact: Contact) => void;
   onSave?: (contact: Contact) => void;
+  interactionCounts?: Record<string, number>;
 }
 
 export function ContactDetailsDialog({
@@ -175,6 +176,7 @@ export function ContactDetailsDialog({
   onDelete,
   onExportContact,
   onSave,
+  interactionCounts,
 }: ContactDetailsDialogProps) {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareTeamsDialogOpen, setShareTeamsDialogOpen] = useState(false);
@@ -1165,9 +1167,10 @@ export function ContactDetailsDialog({
                       </span>
                     )}
                     {contact.isClient && (() => {
+                      const count = interactionCounts?.[contact.id] ?? 0;
                       const h = (contact.relationshipHealthScore !== undefined && contact.relationshipHealthStatus !== undefined)
                         ? { score: contact.relationshipHealthScore, status: contact.relationshipHealthStatus }
-                        : computeHealthScore(contact, 0);
+                        : computeHealthScore(contact, count);
                       return (
                         <RelationshipHealthBadge score={h.score} status={h.status} />
                       );

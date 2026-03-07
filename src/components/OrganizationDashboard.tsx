@@ -11,6 +11,7 @@ import { useReminderSettings } from "@/hooks/useReminderSettings";
 import type { Contact } from "@/types/contact";
 import type { Folder } from "@/types/folder";
 import type { ActionType } from "@/hooks/useActionSearch";
+import { useHealthClock } from "@/contexts/HealthClockContext";
 import { computeHealthScore } from "@/utils/relationshipHealth";
 import type { HealthStatus } from "@/utils/relationshipHealth";
 
@@ -59,6 +60,7 @@ interface OrganizationDashboardProps {
   hasClientAccess?: boolean;
   selectionMode?: boolean;
   onToggleSelectionMode?: (mode: boolean) => void;
+  interactionCounts?: Record<string, number>;
 }
 
 export function OrganizationDashboard({
@@ -91,6 +93,7 @@ export function OrganizationDashboard({
   hasClientAccess,
   selectionMode,
   onToggleSelectionMode,
+  interactionCounts,
 }: OrganizationDashboardProps) {
   const { reminderInterval } = useReminderSettings();
   const [outreachPreSelected, setOutreachPreSelected] = useState<Set<string>>(new Set());
@@ -101,10 +104,12 @@ export function OrganizationDashboard({
     onTabChange("outreach");
   }, [onTabChange]);
 
-  const now = useMemo(() => new Date(), []);
+  const healthClock = useHealthClock();
   const directoryContacts = useMemo(() => {
+    const now = new Date();
     let list = contacts.map((c) => {
-      const { score, status } = computeHealthScore(c, 0, now);
+      const count = interactionCounts?.[c.id] ?? 0;
+      const { score, status } = computeHealthScore(c, count, now);
       return { ...c, relationshipHealthScore: score, relationshipHealthStatus: status };
     });
 
@@ -123,7 +128,7 @@ export function OrganizationDashboard({
     }
 
     return list;
-  }, [contacts, healthFilter, orgSortOption, now]);
+  }, [contacts, healthFilter, orgSortOption, healthClock, interactionCounts]);
 
   return (
     <div>
@@ -241,6 +246,7 @@ export function OrganizationDashboard({
             hasClientAccess={hasClientAccess}
             selectionMode={selectionMode}
             onToggleSelectionMode={onToggleSelectionMode}
+            interactionCounts={interactionCounts}
           />
         </TabsContent>
 

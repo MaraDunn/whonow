@@ -18,7 +18,9 @@ export interface HealthResult {
  *
  * Formula:
  *   intervalRatio  = daysSince / interval
- *   recencyScore   = 70 if ratio ≤ 1, linear decay to 0 between ratio 1–2, 0 above 2
+ *   recencyScore   = 70 only when ratio < HEALTHY_CAP (within interval with buffer);
+ *                    then linear decay to 0 between HEALTHY_CAP and (HEALTHY_CAP + 1).
+ *   So at or past preferred contact time (ratio >= 1) the score is already decaying.
  *   frequencyScore = min(recentInteractionCount, 10) * 3   (max 30)
  *   rawScore       = (recencyScore + frequencyScore) * weight
  *   finalScore     = min(round(rawScore), 100)
@@ -26,6 +28,7 @@ export interface HealthResult {
  * Status thresholds:
  *   ≥ 70 → Healthy   |   ≥ 40 → At Risk   |   < 40 → Cold
  */
+const HEALTHY_CAP = 0.9; // Full recency score only when within 90% of preferred interval; past that we decay so "due" = At Risk
 export function computeHealthScore(
   contact: Pick<Contact, "lastContactedAt" | "preferredContactIntervalDays" | "clientWeight">,
   recentInteractionCount: number,
@@ -50,12 +53,14 @@ export function computeHealthScore(
   const daysSince = Math.max(0, (now.getTime() - lastDate.getTime()) / 86_400_000);
   const intervalRatio = daysSince / interval;
 
-  // Recency score: 0–70
+  // Recency score: 0–70. Decay starts before preferred interval so "at or past due" is no longer Healthy.
+  const decayStart = HEALTHY_CAP;
+  const decayEnd = HEALTHY_CAP + 1; // 0 at ratio = 1.9 (e.g. 30-day interval → 0 at 57 days)
   let recencyScore: number;
-  if (intervalRatio <= 1) {
+  if (intervalRatio <= decayStart) {
     recencyScore = 70;
-  } else if (intervalRatio <= 2) {
-    recencyScore = 70 * (2 - intervalRatio);
+  } else if (intervalRatio <= decayEnd) {
+    recencyScore = 70 * (decayEnd - intervalRatio) / (decayEnd - decayStart);
   } else {
     recencyScore = 0;
   }

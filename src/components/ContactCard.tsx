@@ -31,6 +31,7 @@ import { RelationshipHealthBadge } from "@/components/RelationshipHealthBadge";
 import { computeHealthScore } from "@/utils/relationshipHealth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useContactDrag } from "@/contexts/ContactDragContext";
+import { useHealthClock } from "@/contexts/HealthClockContext";
 
 /** Data type for drag payload so sidebar can validate drops (e.g. shared/client/smart). */
 export const CONTACT_DRAG_TYPE = "application/x-whonow-contact";
@@ -83,6 +84,8 @@ interface ContactCardProps {
   isSelected?: boolean;
   onSelect?: (selected: boolean) => void;
   selectionMode?: boolean;
+  /** Contact id -> count of "contacted" in last 90 days; enables health scores above 70. */
+  interactionCounts?: Record<string, number>;
 }
 
 function CardFollowUpButton({ contactId, followUpDate }: { contactId: string; followUpDate?: string }) {
@@ -168,6 +171,7 @@ const ContactCardComponent = function ContactCard({
   isSelected = false,
   onSelect,
   selectionMode = false,
+  interactionCounts,
 }: ContactCardProps) {
   const [folderPopoverOpen, setFolderPopoverOpen] = React.useState(false);
   const isMobile = useIsMobile();
@@ -225,15 +229,21 @@ const ContactCardComponent = function ContactCard({
     [contact.lastContactedAt]
   );
 
-  // Use pre-computed health score from parent when available (e.g. ClientDashboard passes
-  // scores that include the frequency component). Fall back to recency-only computation.
+  const healthClock = useHealthClock();
+  const recentInteractionCount = interactionCounts?.[contact.id] ?? 0;
+  // Recompute health every minute (healthClock); frequency (recentInteractionCount) allows scores above 70.
   const healthResult = React.useMemo(() => {
     if (!contact.isClient) return null;
-    if (contact.relationshipHealthScore !== undefined && contact.relationshipHealthStatus !== undefined) {
-      return { score: contact.relationshipHealthScore, status: contact.relationshipHealthStatus };
-    }
-    return computeHealthScore(contact, 0);
-  }, [contact]);
+    return computeHealthScore(contact, recentInteractionCount);
+  }, [
+    healthClock,
+    contact.id,
+    contact.lastContactedAt,
+    contact.preferredContactIntervalDays,
+    contact.clientWeight,
+    contact.isClient,
+    recentInteractionCount,
+  ]);
 
   const handleAction = React.useCallback((type: ActionType) => {
     if (!type) return;
@@ -1300,11 +1310,11 @@ export const ContactCard = React.memo(ContactCardComponent, (prevProps, nextProp
     prevProps.compact !== nextProps.compact ||
     prevProps.isExpanded !== nextProps.isExpanded ||
     prevProps.isSelected !== nextProps.isSelected ||
-    prevProps.selectionMode !== nextProps.selectionMode
+    prevProps.selectionMode !== nextProps.selectionMode ||
+    (prevProps.interactionCounts?.[prevProps.contact.id] ?? 0) !== (nextProps.interactionCounts?.[nextProps.contact.id] ?? 0)
   ) {
     return false; // Props changed, need to re-render
   }
-  
-  // Props are equal, skip re-render
+
   return true;
 });

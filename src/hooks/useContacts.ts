@@ -304,6 +304,27 @@ export const useContacts = (options?: UseContactsListOptions) => {
     []
   );
 
+  // Update a single contact in the list cache (e.g. after fetching full contact for detail view).
+  // Keeps grid in sync with fresh DB data so health and other fields stay correct.
+  const updateContactInListCache = useCallback(
+    (updated: ContactWithMeta) => {
+      const applyUpdate = (old: unknown) => {
+        if (!old || typeof old !== "object" || !("pages" in (old as object))) return old;
+        const paged = old as { pages: ContactWithMeta[][]; pageParams: unknown[] };
+        return {
+          ...paged,
+          pages: paged.pages.map((page) =>
+            Array.isArray(page)
+              ? page.map((c) => (c?.id === updated.id ? { ...updated } : c))
+              : page
+          ),
+        };
+      };
+      queryClient.setQueriesData({ queryKey: ["contacts", "list"] }, applyUpdate);
+    },
+    [queryClient]
+  );
+
   // Prefetch the next page as soon as we have data and there is more to load,
   // so "Load more" feels instant (data is often already in cache).
   useEffect(() => {
@@ -318,6 +339,29 @@ export const useContacts = (options?: UseContactsListOptions) => {
       toast.error("Failed to load contacts. Try refreshing.");
     }
   }, [isListError]);
+
+  // Interaction counts (last 90 days) for relationship health frequency score (enables scores above 70).
+  const { data: interactionCountsMap = {} } = useQuery({
+    queryKey: ["contacts", "interaction-counts", user?.id],
+    queryFn: async (): Promise<Record<string, number>> => {
+      if (!user?.id) return {};
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000).toISOString();
+      const { data, error } = await supabase
+        .from("activity_log")
+        .select("contact_id")
+        .eq("activity_type", "contacted")
+        .gte("created_at", ninetyDaysAgo);
+      if (error) throw error;
+      const out: Record<string, number> = {};
+      for (const row of data ?? []) {
+        const id = (row as { contact_id: string }).contact_id;
+        if (id) out[id] = (out[id] ?? 0) + 1;
+      }
+      return out;
+    },
+    enabled: !!user,
+    staleTime: 60_000, // 1 min
+  });
 
   // Fetch count of trashed contacts (accurate count, not limited by 1000)
   const { data: trashCount = 0 } = useQuery({
@@ -1151,6 +1195,8 @@ export const useContacts = (options?: UseContactsListOptions) => {
     isLoadingMoreContacts: isFetchingNextPage,
     refetchContacts: refetchList,
     getContactById,
+    updateContactInListCache,
+    interactionCounts: interactionCountsMap,
     addContact: addContact.mutate,
     updateContact: updateContact.mutate,
     deleteContact: deleteContact.mutate,
