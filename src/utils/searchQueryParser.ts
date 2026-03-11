@@ -365,8 +365,6 @@ const ENTITY_PREPOSITIONS = {
 
 // Semantic verb mapping - verbs that imply entity relationships
 const SEMANTIC_VERB_MAP: Record<string, { entityType: keyof ParsedQuery["entities"]; hint: string }> = {
-  "handles": { entityType: "departments", hint: "responsibility" },
-  "handle": { entityType: "departments", hint: "responsibility" },
   "works at": { entityType: "companies", hint: "company" },
   "work at": { entityType: "companies", hint: "company" },
   "works for": { entityType: "companies", hint: "company" },
@@ -1443,9 +1441,10 @@ function extractEntities(words: string[]): ParsedQuery["entities"] {
   // Use semantic verbs to extract entities and track relationships
   const queryText = words.join(" ").toLowerCase();
   for (const [verb, mapping] of Object.entries(SEMANTIC_VERB_MAP)) {
-    if (queryText.includes(verb)) {
-      // Find what comes after the verb
-      const verbIndex = queryText.indexOf(verb);
+    const verbRegex = new RegExp(`(?:^|\\s)${verb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
+    const verbMatch = queryText.match(verbRegex);
+    if (verbMatch) {
+      const verbIndex = (verbMatch.index ?? 0) + (verbMatch[0].startsWith(' ') ? 1 : 0);
       const beforeVerb = queryText.substring(0, verbIndex);
       const afterVerb = queryText.substring(verbIndex + verb.length).trim();
       const afterWords = afterVerb.split(/\s+/).slice(0, 3); // Take up to 3 words
@@ -2178,6 +2177,14 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
     const company = cleanCompanyName(match[1]);
     if (company) return company;
   }
+
+  // Pattern 3b: "who handles [company]" / "who handle [company]" — company in description (e.g. "Handles billing for: Jackson and Sons")
+  match = query.match(/who\s+handles?\s+(.+?)(?:\s*\?|$)/i);
+  devLog('[SEARCH DEBUG] Pattern 3b (who handles X) match:', match);
+  if (match && match[1]) {
+    const company = cleanCompanyName(match[1]);
+    if (company) return company;
+  }
   
   // Pattern 4: "who is at [company]"
   match = query.match(/who\s+(?:is|are)\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
@@ -2745,15 +2752,21 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
   }
 
   // Map job_title (from roles OR responsibility domain for broader matching)
-  if (parsed.responsibility) {
-    // Use responsibility department (e.g. "legal") for broader matching vs specific role (e.g. "lawyer")
-    // This matches "Legal Counsel", "Attorney" etc. via ILIKE '%legal%'
+  // When the user asked "who handles [company]", we already have a company filter; don't also
+  // require responsibility (e.g. "legal") or we over-filter and get 0 results (e.g. billing
+  // contact with "Jackson and Sons" in description is not legal, legal counsels don't have that company).
+  if (parsed.responsibility && parsed.entities.companies.length === 0) {
     const dept = parsed.responsibility.filters.departments?.[0];
     const role = parsed.responsibility.filters.roles?.[0];
     filters.job_title = dept || role || parsed.entities.roles[0];
-  } else if (parsed.entities.roles.length > 0 || parsed.entities.departments.length > 0) {
+  } else if (
+    (parsed.entities.roles.length > 0 || parsed.entities.departments.length > 0) &&
+    !(parsed.responsibility && parsed.entities.companies.length > 0)
+  ) {
     // Prefer department over first role: e.g. "legal counsel" → entities.departments=["legal"], entities.roles=["law","attorney",...]
     // Using "legal" matches "Legal Counsel" via ILIKE; using "law" (first synonym) would not
+    // Skip when responsibility injected the roles AND a company is present — the roles likely
+    // came from a false positive responsibility match on the company name tokens.
     filters.job_title = parsed.entities.departments?.[0] ?? parsed.entities.roles?.[0];
   }
 
@@ -2878,9 +2891,15 @@ export function parseSearchQueryToSchema(query: string): SearchQuery {
   const result = convertToSearchQuery(parsed);
 
   // Preserve responsibility phrase fallback: when pattern matched but no predefined
-  // responsibility (e.g. "I need a driver"), use phrase as job_title for ILIKE matching
+  // responsibility (e.g. "I need a driver"), use phrase as job_title for ILIKE matching.
+  // Skip when we already have a company (e.g. "Who handles Jackson and") so we don't set
+  // job_title to "jackson and" and over-filter to 0 results while the user is typing.
   const responsibilityResult = extractResponsibility(query);
-  if (!result.filters.job_title && responsibilityResult.phrase) {
+  if (
+    !result.filters.job_title &&
+    responsibilityResult.phrase &&
+    !result.filters.company
+  ) {
     result.filters.job_title = responsibilityResult.phrase;
   }
 

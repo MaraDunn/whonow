@@ -6,15 +6,22 @@
 import { RESPONSIBILITY_ALIASES } from "@/data/responsibilityAliases";
 import { RESPONSIBILITIES } from "@/data/responsibilities";
 
+const STOP_TOKENS = new Set([
+  "and", "or", "for", "of", "in", "to", "with", "by", "on", "at", "is",
+  "the", "an", "it", "if", "my", "we", "do", "so", "up", "no", "be",
+]);
+
 /**
- * Tokenize text into words
+ * Tokenize text into words, filtering common stop words that cause
+ * false-positive responsibility matches (e.g. "and" in "Jackson and Sons"
+ * matching "terms and conditions").
  */
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^\w\s]/g, " ")
     .split(/\s+/)
-    .filter(t => t.length >= 2);
+    .filter(t => t.length >= 2 && !STOP_TOKENS.has(t));
 }
 
 /**
