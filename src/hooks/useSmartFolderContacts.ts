@@ -59,6 +59,9 @@ function buildSearchRpcParams(
     _location: f.location ?? null,
     _relationship_type: f.relationship_type ?? null,
     _semantic_hint: deterministicQuery.semantic_hint ?? null,
+    _role_keywords: f.role_keywords ?? null,
+    _client_only: false,
+    _shared_only: false,
     _limit: limit,
   };
 }

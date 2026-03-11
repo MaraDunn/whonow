@@ -2759,6 +2759,10 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     const dept = parsed.responsibility.filters.departments?.[0];
     const role = parsed.responsibility.filters.roles?.[0];
     filters.job_title = dept || role || parsed.entities.roles[0];
+    // So role ILIKE matches e.g. "Lawyer" when job_title is "legal"
+    const departments = parsed.responsibility.filters.departments ?? [];
+    const roles = parsed.responsibility.filters.roles ?? [];
+    filters.role_keywords = [...new Set([...departments, ...roles])];
   } else if (
     (parsed.entities.roles.length > 0 || parsed.entities.departments.length > 0) &&
     !(parsed.responsibility && parsed.entities.companies.length > 0)
@@ -2768,6 +2772,11 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     // Skip when responsibility injected the roles AND a company is present — the roles likely
     // came from a false positive responsibility match on the company name tokens.
     filters.job_title = parsed.entities.departments?.[0] ?? parsed.entities.roles?.[0];
+    const depts = parsed.entities.departments ?? [];
+    const entityRoles = parsed.entities.roles ?? [];
+    if (depts.length || entityRoles.length) {
+      filters.role_keywords = [...new Set([...depts, ...entityRoles])];
+    }
   }
 
   // Normalize job_title: strip trailing 's' so plural forms match singular roles

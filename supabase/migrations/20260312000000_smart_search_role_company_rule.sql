@@ -1,11 +1,5 @@
--- Company filter: also match _company against contact description.
--- Fixes "Who handles Jackson and Sons" returning contacts whose description says
--- "Handles billing for: Jackson and Sons" (previously only c.company was matched).
---
--- Role/company rule: when matching on job_title or semantic_hint, a contact matches
--- by company (or description) ONLY if their role is null/empty OR their role also
--- matches. So e.g. "I need a contract" (job_title=legal) does not return everyone
--- at "Legal Partners LLP" unless their role is null or role contains "legal".
+-- Re-apply role/company rule: contacts match by company/description ONLY if role is null or role matches.
+-- (Migration 20260311000000 may have been applied before the logic was added; this ensures the fix is live.)
 DROP FUNCTION IF EXISTS public.smart_search_contacts(uuid, text, timestamptz, timestamptz, timestamptz, timestamptz, text, text, text[], text, text, text, boolean, boolean, int);
 CREATE OR REPLACE FUNCTION public.smart_search_contacts(
   _user_id UUID,
@@ -137,4 +131,4 @@ AS $$
   SELECT id, name, email, phone, company, role, avatar, folder_id, tags, created_at, is_shared, owner_id, last_contacted_at, is_client, company_id FROM filtered;
 $$;
 GRANT EXECUTE ON FUNCTION public.smart_search_contacts(uuid, text, timestamptz, timestamptz, timestamptz, timestamptz, text, text, text[], text, text, text, boolean, boolean, int) TO authenticated;
-COMMENT ON FUNCTION public.smart_search_contacts IS 'Smart search: FTS for ranking only. Company filter matches company and description. _client_only and _shared_only for client/team directories. Limit 1-1000.';
+COMMENT ON FUNCTION public.smart_search_contacts IS 'Smart search: FTS for ranking only. Company filter matches company and description. Role/company rule: company/description match only when role is null or role matches. Limit 1-1000.';

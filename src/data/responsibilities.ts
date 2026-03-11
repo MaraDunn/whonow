@@ -172,7 +172,7 @@ export const RESPONSIBILITIES: Record<string, Responsibility> = {
     priority: 85,
     filters: {
       departments: ["legal"],
-      roles: ["legal counsel", "contracts manager", "paralegal"],
+      roles: ["legal counsel", "contracts manager", "paralegal", "lawyer", "attorney", "general counsel"],
       tags: ["contracts", "legal", "agreements"],
     },
   },

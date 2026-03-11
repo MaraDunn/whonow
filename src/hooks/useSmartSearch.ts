@@ -163,9 +163,11 @@ export function useSmartSearch(
         if (deterministicQuery.semantic_hint) {
           searchParams._semantic_hint = deterministicQuery.semantic_hint;
         }
+        if (deterministicQuery.filters.role_keywords?.length) {
+          searchParams._role_keywords = deterministicQuery.filters.role_keywords;
+        }
         
-        // Pass all params in function order (some PostgREST setups require this)
-        const rpcParams = {
+        const rpcParams: Record<string, unknown> = {
           _user_id: user.id,
           _job_title: searchParams._job_title ?? null,
           _date_range_from: searchParams._date_range_from ?? null,
@@ -178,6 +180,7 @@ export function useSmartSearch(
           _location: searchParams._location ?? null,
           _relationship_type: searchParams._relationship_type ?? null,
           _semantic_hint: searchParams._semantic_hint ?? null,
+          _role_keywords: searchParams._role_keywords ?? null,
           _client_only: clientOnly,
           _shared_only: sharedOnly,
           _limit: searchParams._limit ?? MAX_RESULTS,

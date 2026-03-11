@@ -16,6 +16,8 @@ export interface SearchQueryFilters {
   name?: string;
   company?: string;
   job_title?: string;
+  /** Role synonyms for this responsibility (e.g. legal → lawyer, attorney, counsel). Used by RPC for role ILIKE matching. */
+  role_keywords?: string[];
   introduced_by?: string;
   relationship_type?: RelationshipType;
   date_range?: DateRange;

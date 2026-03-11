@@ -1,11 +1,5 @@
--- Company filter: also match _company against contact description.
--- Fixes "Who handles Jackson and Sons" returning contacts whose description says
--- "Handles billing for: Jackson and Sons" (previously only c.company was matched).
---
--- Role/company rule: when matching on job_title or semantic_hint, a contact matches
--- by company (or description) ONLY if their role is null/empty OR their role also
--- matches. So e.g. "I need a contract" (job_title=legal) does not return everyone
--- at "Legal Partners LLP" unless their role is null or role contains "legal".
+-- Add _role_keywords so role matching uses responsibility synonyms (e.g. legal → lawyer, attorney, counsel).
+-- Fixes "I need a contract" returning tag matches but not contacts whose role is "Lawyer".
 DROP FUNCTION IF EXISTS public.smart_search_contacts(uuid, text, timestamptz, timestamptz, timestamptz, timestamptz, text, text, text[], text, text, text, boolean, boolean, int);
 CREATE OR REPLACE FUNCTION public.smart_search_contacts(
   _user_id UUID,
@@ -20,6 +14,7 @@ CREATE OR REPLACE FUNCTION public.smart_search_contacts(
   _location text DEFAULT NULL,
   _relationship_type text DEFAULT NULL,
   _semantic_hint text DEFAULT NULL,
+  _role_keywords text[] DEFAULT NULL,
   _client_only boolean DEFAULT false,
   _shared_only boolean DEFAULT false,
   _limit int DEFAULT 10
@@ -77,11 +72,18 @@ AS $$
       AND (NOT _shared_only OR c.is_shared = true)
       AND (
         _job_title IS NULL
-        OR c.role ILIKE '%' || _job_title || '%'
+        OR (
+          c.role ILIKE '%' || _job_title || '%'
+          OR (_role_keywords IS NOT NULL AND array_length(_role_keywords, 1) > 0 AND EXISTS (SELECT 1 FROM unnest(_role_keywords) AS kw WHERE c.role ILIKE '%' || kw || '%'))
+        )
         OR _job_title = ANY(c.tags)
         OR (
           (c.company ILIKE '%' || _job_title || '%' OR COALESCE(c.description, '') ILIKE '%' || _job_title || '%')
-          AND (c.role IS NULL OR c.role = '' OR c.role ILIKE '%' || _job_title || '%')
+          AND (
+            c.role IS NULL OR c.role = ''
+            OR c.role ILIKE '%' || _job_title || '%'
+            OR (_role_keywords IS NOT NULL AND array_length(_role_keywords, 1) > 0 AND EXISTS (SELECT 1 FROM unnest(_role_keywords) AS kw WHERE c.role ILIKE '%' || kw || '%'))
+          )
         )
         OR (
           _semantic_hint IS NOT NULL
@@ -136,5 +138,5 @@ AS $$
   )
   SELECT id, name, email, phone, company, role, avatar, folder_id, tags, created_at, is_shared, owner_id, last_contacted_at, is_client, company_id FROM filtered;
 $$;
-GRANT EXECUTE ON FUNCTION public.smart_search_contacts(uuid, text, timestamptz, timestamptz, timestamptz, timestamptz, text, text, text[], text, text, text, boolean, boolean, int) TO authenticated;
-COMMENT ON FUNCTION public.smart_search_contacts IS 'Smart search: FTS for ranking only. Company filter matches company and description. _client_only and _shared_only for client/team directories. Limit 1-1000.';
+GRANT EXECUTE ON FUNCTION public.smart_search_contacts(uuid, text, timestamptz, timestamptz, timestamptz, timestamptz, text, text, text[], text, text, text, text[], boolean, boolean, int) TO authenticated;
+COMMENT ON FUNCTION public.smart_search_contacts IS 'Smart search: FTS for ranking. Company/description match only when role null or matches. _role_keywords expands role match (e.g. legal→lawyer,attorney). Limit 1-1000.';
