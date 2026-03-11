@@ -42,7 +42,8 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.bulk-insert-contacts]
-verify_jwt = true
+# Verify JWT inside the function (body.jwt or Authorization) to avoid gateway "Invalid JWT Object" with some token types
+verify_jwt = false
 
 [functions.help-email]
 verify_jwt = false

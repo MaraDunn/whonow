@@ -984,16 +984,22 @@ const IndexContent = () => {
         let totalSkipped = 0;
         const allErrors: string[] = [];
 
+        // Refresh session once so we have a valid token for all batches (avoids gateway 401 with verify_jwt)
+        await supabase.auth.refreshSession();
+
         // Process batches sequentially to avoid overwhelming the browser
         for (let i = 0; i < batches.length; i++) {
           const batch = batches[i];
           console.log(`Processing batch ${i + 1}/${batches.length} (${batch.length} contacts)`);
           
           try {
-            // Use direct fetch to get better error details
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
+            if (!session?.access_token) {
               throw new Error("Not authenticated");
+            }
+            const token = typeof session.access_token === "string" ? session.access_token : null;
+            if (!token) {
+              throw new Error("Invalid session token");
             }
 
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -1004,9 +1010,10 @@ const IndexContent = () => {
               headers: {
                 "Content-Type": "application/json",
                 apikey: supabaseAnonKey,
-                Authorization: `Bearer ${session.access_token}`,
+                Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({ 
+                jwt: token,
                 contacts: batch,
                 isShared: false,
               }),
@@ -1065,7 +1072,8 @@ const IndexContent = () => {
         queryClient.invalidateQueries({ queryKey: ["contacts"] });
         queryClient.invalidateQueries({ queryKey: ["team-directory-contacts"] });
 
-        if (totalInserted === 0) {
+        const totalProcessed = totalInserted + totalMerged + totalSkipped;
+        if (totalProcessed === 0) {
           throw new Error(`Failed to import any contacts. ${allErrors.length > 0 ? `Errors: ${allErrors.join("; ")}` : ""}`);
         }
 
@@ -1073,18 +1081,15 @@ const IndexContent = () => {
           ? ` (${allErrors.length} batch error${allErrors.length > 1 ? "s" : ""} occurred)` 
           : "";
         
-        // Build success message with details
-        let successMsg = `Imported ${totalInserted} of ${normalizedContacts.length} contacts`;
+        // Build success message: new inserts and/or merged/skipped (duplicates)
         const duplicateCount = totalMerged + totalSkipped;
-        if (duplicateCount > 0) {
-          const parts: string[] = [];
-          if (totalMerged > 0) {
-            parts.push(`${totalMerged} merged`);
-          }
-          if (totalSkipped > 0) {
-            parts.push(`${totalSkipped} skipped`);
-          }
-          successMsg += ` (${parts.join(', ')} duplicate${duplicateCount !== 1 ? 's' : ''})`;
+        let successMsg: string;
+        if (totalInserted > 0 && duplicateCount > 0) {
+          successMsg = `Imported ${totalInserted} new, ${duplicateCount} merged with existing`;
+        } else if (totalInserted > 0) {
+          successMsg = `Imported ${totalInserted} contact${totalInserted !== 1 ? "s" : ""}`;
+        } else {
+          successMsg = `${normalizedContacts.length} contact${normalizedContacts.length !== 1 ? "s" : ""} synced (merged with existing)`;
         }
         successMsg += errorMsg;
         
@@ -1094,9 +1099,18 @@ const IndexContent = () => {
         const message = error instanceof Error ? error.message : "Failed to import contacts";
         console.error("Error details:", error);
         toast.error(message);
-        // Fall back to individual inserts if bulk insert fails
-        console.log("Falling back to individual inserts...");
-        contacts.forEach((contact) => addContact(contact));
+        // Skip fallback on auth or "no contacts" errors (avoid 198 parallel requests and ERR_INSUFFICIENT_RESOURCES)
+        const skipFallback = typeof message === "string" && (
+          message.includes("401") ||
+          message.includes("Invalid JWT") ||
+          message.includes("Unauthorized") ||
+          message.includes("Not authenticated") ||
+          message.includes("Failed to import any contacts")
+        );
+        if (!skipFallback && normalizedContacts.length > 0) {
+          console.log("Falling back to individual inserts...");
+          normalizedContacts.forEach((contact) => addContact(contact));
+        }
       }
     } else {
       // Single contact - use regular add

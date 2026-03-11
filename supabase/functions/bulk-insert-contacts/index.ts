@@ -78,11 +78,29 @@ serve(async (req) => {
   });
 
   try {
-    // Get authorization header
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    // Parse request body first (JWT may be in body when gateway has verify_jwt=false)
+    let body: { jwt?: string; contacts?: unknown[]; isShared?: boolean };
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      console.error("[bulk-insert-contacts] JSON parse error:", parseError);
       return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const authHeader = req.headers.get("Authorization");
+    const tokenFromHeader = authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "").trim() : null;
+    const tokenFromBody = typeof body.jwt === "string" ? body.jwt.trim() : null;
+    const token = tokenFromHeader || tokenFromBody;
+
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization (send Authorization: Bearer <token> or body.jwt)" }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -97,8 +115,6 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Manually verify JWT token from Authorization header
-    const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
       error: userError,
@@ -131,21 +147,6 @@ serve(async (req) => {
       userId: user.id,
       companyId,
     });
-
-    // Parse request body
-    let body;
-    try {
-      body = await req.json();
-    } catch (parseError) {
-      console.error("[bulk-insert-contacts] JSON parse error:", parseError);
-      return new Response(
-        JSON.stringify({ error: "Invalid JSON in request body" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
 
     const { contacts, isShared = false } = body;
     console.log("[bulk-insert-contacts] Parsed request", {

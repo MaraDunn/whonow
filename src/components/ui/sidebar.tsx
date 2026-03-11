@@ -179,10 +179,12 @@ const Sidebar = React.forwardRef<
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
             } as React.CSSProperties
-          }
+            }
           side={side}
         >
-          <div className="flex h-full w-full flex-col">{children}</div>
+          <div className="flex h-full w-full flex-col px-4 overflow-x-hidden min-w-0">
+            {children}
+          </div>
         </SheetContent>
       </Sheet>
     );

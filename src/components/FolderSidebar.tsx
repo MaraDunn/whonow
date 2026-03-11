@@ -138,6 +138,8 @@ export function FolderSidebar({
   const [activeDirectoryType, setActiveDirectoryType] = useState<DirectoryType>("contacts");
   const { state, toggleSidebar, setOpenMobile, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
+  /** On mobile always use expanded layout (full header + directory titles); on desktop follow collapse state */
+  const useExpandedLayout = !isCollapsed || isMobile;
 
   // On mobile, close the sidebar (Sheet) after navigation so the user sees the selected content immediately.
   const withCloseMobile = useCallback(
@@ -320,10 +322,11 @@ export function FolderSidebar({
   return (
     <div className="relative">
       <Sidebar collapsible="icon" className="border-r border-border">
-        <SidebarHeader className="p-2">
+        {/* Fixed min-height so logo appearing on expand doesn't shift content below */}
+        <SidebarHeader className="p-2 min-h-20 flex flex-col justify-center">
           <div className={cn(
-            "flex items-center gap-2",
-            isCollapsed ? "justify-center" : "justify-start px-2"
+            "flex items-center min-h-20 relative",
+            useExpandedLayout ? "w-full justify-start gap-2 px-2" : "w-full justify-center"
           )}>
             {/* Hamburger Menu Button */}
             <TooltipProvider>
@@ -332,21 +335,23 @@ export function FolderSidebar({
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-7 w-7" 
+                    className={cn("h-7 w-7 shrink-0", useExpandedLayout && "absolute left-2 top-1/2 -translate-y-1/2 z-10")}
                     onClick={toggleSidebar}
                   >
                     <Menu className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  <p>{isCollapsed ? "Expand sidebar" : "Collapse sidebar"}</p>
+                  <p>{isMobile ? "Close menu" : isCollapsed ? "Expand sidebar" : "Collapse sidebar"}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
             
-            {/* Company Logo */}
-            {!isCollapsed && (
-              <WhoNowLogo variant="icon" size="sm" showText={false} className="min-w-0 flex-1 overflow-hidden" />
+            {/* Company Logo - centered in header when expanded (or on mobile) */}
+            {useExpandedLayout && (
+              <div className="flex-1 flex justify-center items-center min-w-0">
+                <WhoNowLogo variant="icon" size="sm" showText={false} className="shrink-0" />
+              </div>
             )}
           </div>
         </SidebarHeader>
@@ -355,7 +360,7 @@ export function FolderSidebar({
           <SidebarContent>
           {/* Contact Directory Section */}
           <SidebarGroup>
-            {!isCollapsed && (
+            {useExpandedLayout && (
               <div className="flex items-center justify-between px-2">
                 <div className="flex items-center gap-1.5 flex-1">
                       <Button
@@ -599,7 +604,7 @@ export function FolderSidebar({
           {onSelectClientDirectory && (
             <>
               <SidebarGroup>
-                {!isCollapsed && (
+                {useExpandedLayout && (
                   <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-1.5 flex-1">
                       <Button
@@ -808,7 +813,7 @@ export function FolderSidebar({
           {hasCompany && onSelectOrgDirectory && (
             <>
               <SidebarGroup>
-                {!isCollapsed && (
+                {useExpandedLayout && (
                   <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-1.5 flex-1">
                       <Button
@@ -993,7 +998,7 @@ export function FolderSidebar({
           {hasTeamAccess && companyMembers.length > 0 && onSelectDirectory && (
             <>
               <SidebarGroup>
-                {!isCollapsed && (
+                {useExpandedLayout && (
                   <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-1.5 flex-1">
                       <Button

@@ -24,6 +24,7 @@ type GooglePerson = {
 
 type PeopleConnectionsResponse = {
   connections?: GooglePerson[];
+  nextPageToken?: string;
 };
 
 // Prefer VITE_GOOGLE_CLIENT_ID from env; fallback for backwards compatibility.
@@ -75,23 +76,32 @@ export const useGoogleContacts = () => {
   const fetchContacts = async (token: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch(
-        "https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses,phoneNumbers,organizations,photos&pageSize=200",
-        {
+      const baseUrl =
+        "https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses,phoneNumbers,organizations,photos&pageSize=1000";
+      const allConnections: GooglePerson[] = [];
+      let pageToken: string | undefined;
+
+      do {
+        const url = pageToken
+          ? `${baseUrl}&pageToken=${encodeURIComponent(pageToken)}`
+          : baseUrl;
+        const response = await fetch(url, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch contacts");
         }
-      );
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch contacts");
-      }
+        const data = (await response.json()) as PeopleConnectionsResponse;
+        const connections = data.connections || [];
+        allConnections.push(...connections);
+        pageToken = data.nextPageToken;
+      } while (pageToken);
 
-      const data = (await response.json()) as PeopleConnectionsResponse;
-      const connections = data.connections || [];
-
-      const mapped: GoogleContact[] = connections
+      const mapped: GoogleContact[] = allConnections
         .filter((c) => Boolean(c.names?.[0]?.displayName))
         .map((c) => ({
           name: c.names?.[0]?.displayName || "",
