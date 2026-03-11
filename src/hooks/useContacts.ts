@@ -950,37 +950,35 @@ export const useContacts = (options?: UseContactsListOptions) => {
       // Snapshot the previous value
       const previousContacts = queryClient.getQueriesData({ queryKey: ["contacts"] });
 
-      // Optimistically update the contact in all contact queries
-      queryClient.setQueriesData<{ pages?: Array<{ data?: Contact[] }> } | Contact[]>(
+      // Optimistically update the contact in all contact queries.
+      // List query uses infinite query: pages are Contact[][] (each page is an array of contacts).
+      queryClient.setQueriesData<{ pages?: Contact[][] } | Contact[]>(
         { queryKey: ["contacts"] },
         (old) => {
           if (!old) return old;
-          
-          // Handle infinite query structure (pages array)
-          if (old && typeof old === 'object' && 'pages' in old && Array.isArray(old.pages)) {
+
+          // Handle infinite query structure (pages = array of contact arrays)
+          if (old && typeof old === "object" && "pages" in old && Array.isArray((old as { pages: unknown }).pages)) {
+            const paged = old as { pages: Contact[][]; pageParams?: unknown[] };
             return {
-              ...old,
-              pages: old.pages.map((page) => {
-                if (!page || !page.data || !Array.isArray(page.data)) {
-                  return page;
-                }
-                return {
-                  ...page,
-                  data: page.data.map((contact) =>
-                    contact?.id === id ? { ...contact, isClient } : contact
-                  ),
-                };
-              }),
+              ...paged,
+              pages: paged.pages.map((page) =>
+                Array.isArray(page)
+                  ? page.map((contact) =>
+                      contact?.id === id ? { ...contact, isClient } : contact
+                    )
+                  : page
+              ),
             };
           }
-          
+
           // Handle array structure (direct contacts array)
           if (Array.isArray(old)) {
             return old.map((contact) =>
               contact?.id === id ? { ...contact, isClient } : contact
             );
           }
-          
+
           return old;
         }
       );
