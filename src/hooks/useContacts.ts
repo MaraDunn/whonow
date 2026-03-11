@@ -283,12 +283,18 @@ export const useContacts = (options?: UseContactsListOptions) => {
   const flatPages = (listData?.pages ?? []).flat() as ContactWithMeta[];
   const lastKnownGoodRef = useRef<ContactWithMeta[]>([]);
   if (flatPages.length > 0) lastKnownGoodRef.current = flatPages;
-  // Never show fewer contacts than we've already loaded (avoids grid clearing on fetch error or race).
+  // Only use last-known-good during load/error so we don't clear the grid mid-refetch. When we
+  // successfully get an empty list (e.g. after deleting all contacts), show empty.
   const contacts: ContactWithMeta[] = useMemo(() => {
     if (flatPages.length > 0) return flatPages;
-    if (lastKnownGoodRef.current.length > 0) return lastKnownGoodRef.current;
+    const showStale = (isLoading || isFetchingNextPage || isListError) && lastKnownGoodRef.current.length > 0;
+    if (showStale) return lastKnownGoodRef.current;
     return flatPages;
-  }, [flatPages]);
+  }, [flatPages, isLoading, isFetchingNextPage, isListError]);
+  // Clear last-known-good when we successfully receive an empty list so the main list updates.
+  useEffect(() => {
+    if (flatPages.length === 0 && !isLoading && !isListError) lastKnownGoodRef.current = [];
+  }, [flatPages.length, isLoading, isListError]);
 
   const loadMoreContacts = useCallback(() => {
     fetchNextPage();
