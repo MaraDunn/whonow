@@ -12,7 +12,7 @@ const Terms = () => {
         onGetStarted={() => navigate("/", { state: { authModal: "signup" } })}
       />
 
-      <main className="flex-1 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <main className="flex-1 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
         <div className="prose prose-slate dark:prose-invert max-w-none">
           <h1 className="text-4xl font-bold mb-8">Terms of Service</h1>
           
