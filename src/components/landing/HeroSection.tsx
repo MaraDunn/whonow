@@ -1,4 +1,4 @@
-import { ArrowRight, Sparkles, Search, Heart, Bell, Puzzle } from "lucide-react";
+import { ArrowRight, Search, Heart, Bell, Puzzle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -13,7 +13,7 @@ export const HeroSection = ({ onSignIn, onGetStarted }: HeroSectionProps) => {
   const navigate = useNavigate();
 
   return (
-    <section className="relative min-h-[90vh] flex items-center justify-center pt-16 overflow-hidden">
+    <section className="relative min-h-[90vh] flex items-center justify-center pt-20 overflow-hidden">
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/10" />
       
@@ -24,12 +24,6 @@ export const HeroSection = ({ onSignIn, onGetStarted }: HeroSectionProps) => {
       </div>
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        {/* Category badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/50 border border-primary/20 mb-8 animate-fade-in">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">Relationship Intelligence Layer</span>
-        </div>
-
         {/* Main headline */}
         <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 animate-fade-in" style={{ animationDelay: "0.1s" }}>
           Find the right person.{" "}

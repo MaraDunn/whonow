@@ -109,7 +109,7 @@ export function Header({
     <header className="flex items-center justify-between mb-4 sm:mb-6 md:mb-8 animate-fade-in gap-2 sm:gap-4">
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
         <SidebarTrigger className="md:hidden shrink-0" />
-        <WhoNowLogo size={isMobile ? "sm" : "md"} showText={!isMobile} />
+        <WhoNowLogo variant="full" size={isMobile ? "sm" : "lg"} />
         {!isMobile && (
           <div className="border-l border-border pl-2 sm:pl-4 min-w-0">
             <p className="text-xs sm:text-sm text-muted-foreground truncate">

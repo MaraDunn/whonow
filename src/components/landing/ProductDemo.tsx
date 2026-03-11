@@ -547,7 +547,7 @@ export const ProductDemo = () => {
               <div className="flex-1 min-h-0 flex flex-col p-6 sm:p-8 overflow-hidden">
                 <div className="flex items-center justify-between mb-6 shrink-0">
                   <div className="flex items-center gap-4">
-                    <WhoNowLogo size="sm" showText={true} />
+                    <WhoNowLogo variant="full" size="md" />
                     {showClientView && (
                       <div className="border-l border-border pl-4 flex items-center gap-2">
                         <Star className="h-4 w-4 text-amber-500 fill-amber-500" />

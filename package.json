@@ -21,7 +21,11 @@
     "tauri:build:mac:intel": "tauri build --target x86_64-apple-darwin",
     "tauri:build:mac:all": "node scripts/build-mac-all.js",
     "tauri:build:linux": "tauri build --target x86_64-unknown-linux-gnu",
-    "build:windows": "bash scripts/trigger-windows-build.sh"
+    "build:windows": "bash scripts/trigger-windows-build.sh",
+    "generate:favicons": "node scripts/generate-favicons.js",
+    "generate:tauri-icons": "node scripts/generate-tauri-icons.js",
+    "generate:icons": "npm run generate:favicons && npm run generate:tauri-icons",
+    "generate:og-image": "node scripts/generate-og-image.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

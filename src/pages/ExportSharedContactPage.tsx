@@ -80,7 +80,7 @@ export default function ExportSharedContactPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
         <div className="flex justify-center mb-4">
-          <WhoNowLogo size="lg" />
+          <WhoNowLogo variant="full" size="lg" />
         </div>
         <div className="flex items-center gap-2 text-muted-foreground">
           <FileDown className="h-5 w-5" />
@@ -96,7 +96,7 @@ export default function ExportSharedContactPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="flex justify-center mb-4">
-        <WhoNowLogo size="lg" />
+        <WhoNowLogo variant="full" size="lg" />
       </div>
       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       <p className="mt-4 text-sm text-muted-foreground">Preparing CSV download…</p>

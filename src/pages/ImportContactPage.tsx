@@ -149,7 +149,7 @@ export default function ImportContactPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex justify-center">
-          <WhoNowLogo size="lg" />
+          <WhoNowLogo variant="full" size="lg" />
         </div>
         <Card>
           <CardHeader>

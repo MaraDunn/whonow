@@ -1,15 +1,25 @@
 import { useBranding } from "@/hooks/useBranding";
 
 interface WhoNowLogoProps {
+  /** "icon" = icon only (optionally with text); "full" = icon + wordmark image from branding */
+  variant?: "icon" | "full";
   size?: "sm" | "md" | "lg";
   showText?: boolean;
   className?: string;
 }
 
-const sizeClasses = {
-  sm: "h-10 w-10",
-  md: "h-16 w-16",
-  lg: "h-20 w-20",
+/** Icon-only sizes (2x scale from base) */
+const iconSizeClasses = {
+  sm: "h-20 w-20",
+  md: "h-32 w-32",
+  lg: "h-40 w-40",
+};
+
+/** Full logo height (2x scale from base) */
+const fullLogoHeightClasses = {
+  sm: "h-28",
+  md: "h-32",
+  lg: "h-40",
 };
 
 const textSizes = {
@@ -18,22 +28,40 @@ const textSizes = {
   lg: "text-4xl",
 };
 
-export function WhoNowLogo({ size = "md", showText = true, className = "" }: WhoNowLogoProps) {
+export function WhoNowLogo({
+  variant = "icon",
+  size = "md",
+  showText = true,
+  className = "",
+}: WhoNowLogoProps) {
   const branding = useBranding();
   const companyName = branding.companyName || "WhoNow";
-  
-  // Split company name: "Who" in white, "Now" with gradient
-  // For custom company names, use the whole name but apply styling to appropriate parts
-  const nameParts = companyName.toLowerCase() === "whonow" 
-    ? { first: "Who", rest: "Now" }
-    : { first: companyName, rest: "" };
+
+  // Full logo (icon + wordmark): single image for headers, OG
+  if (variant === "full") {
+    const fullSrc = branding.logoFull || branding.logo;
+    return (
+      <img
+        src={fullSrc}
+        alt={companyName}
+        className={`${fullLogoHeightClasses[size]} w-auto shrink-0 object-contain object-left ${className}`}
+        title={companyName}
+      />
+    );
+  }
+
+  // Icon only (optionally with rendered text) — favicon-style, compact UI
+  const nameParts =
+    companyName.toLowerCase() === "whonow"
+      ? { first: "Who", rest: "Now" }
+      : { first: companyName, rest: "" };
 
   return (
     <div className={`flex items-center gap-3 min-w-0 ${className}`}>
       <img
         src={branding.logo}
-        alt={branding.companyName || "Logo"}
-        className={`${sizeClasses[size]} shrink-0 object-contain`}
+        alt={companyName}
+        className={`${iconSizeClasses[size]} shrink-0 object-contain`}
       />
       {showText && (
         <span
