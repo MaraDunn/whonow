@@ -1,3 +1,4 @@
+import { useTheme } from "next-themes";
 import { useBranding } from "@/hooks/useBranding";
 
 interface WhoNowLogoProps {
@@ -35,11 +36,15 @@ export function WhoNowLogo({
   className = "",
 }: WhoNowLogoProps) {
   const branding = useBranding();
+  const { resolvedTheme } = useTheme();
   const companyName = branding.companyName || "WhoNow";
+  const isLight = resolvedTheme === "light";
 
   // Full logo (icon + wordmark): single image for headers, OG
   if (variant === "full") {
-    const fullSrc = branding.logoFull || branding.logo;
+    const fullSrc = isLight
+      ? (branding.logoFullLight || branding.logoFull || branding.logo)
+      : (branding.logoFull || branding.logo);
     return (
       <img
         src={fullSrc}
@@ -51,6 +56,10 @@ export function WhoNowLogo({
   }
 
   // Icon only (optionally with rendered text) — favicon-style, compact UI
+  const iconSrc = isLight
+    ? (branding.logoLight || branding.logo)
+    : branding.logo;
+
   const nameParts =
     companyName.toLowerCase() === "whonow"
       ? { first: "Who", rest: "Now" }
@@ -59,7 +68,7 @@ export function WhoNowLogo({
   return (
     <div className={`flex items-center gap-3 min-w-0 ${className}`}>
       <img
-        src={branding.logo}
+        src={iconSrc}
         alt={companyName}
         className={`${iconSizeClasses[size]} shrink-0 object-contain`}
       />

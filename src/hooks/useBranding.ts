@@ -6,12 +6,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { FEATURE_ACCESS } from "@/types/subscription";
 import whonowLogoIcon from "@/assets/whonow-logo-icon.png";
 import whonowLogoFull from "@/assets/whonow-logo.png";
+import whonowLogoIconLight from "@/assets/WhoNow-logo-icon-BW.png";
+import whonowLogoFullLight from "@/assets/WhoNow-logo-BW.png";
 
 export interface BrandingAssets {
-  /** Icon only (square) — favicon, Tauri, Slack/email, compact UI */
+  /** Icon only (square) — favicon, Tauri, Slack/email, compact UI (dark mode) */
   logo: string;
-  /** Icon + wordmark — headers, OG image */
+  /** Icon + wordmark — headers, OG image (dark mode) */
   logoFull?: string;
+  /** Icon only for light mode */
+  logoLight?: string;
+  /** Icon + wordmark for light mode */
+  logoFullLight?: string;
   favicon?: string;
   primaryColor?: string;
   secondaryColor?: string;
@@ -102,6 +108,8 @@ export function useBranding(): BrandingAssets {
       const branding: BrandingAssets = {
         logo: company.logoUrl || whonowLogoIcon,
         logoFull: company.logoUrl || whonowLogoFull,
+        logoLight: company.logoUrl || whonowLogoIconLight,
+        logoFullLight: company.logoUrl || whonowLogoFullLight,
         favicon: company.faviconUrl,
         primaryColor: company.primaryColor,
         secondaryColor: company.secondaryColor,
@@ -117,6 +125,8 @@ export function useBranding(): BrandingAssets {
       return {
         logo: whonowLogoIcon,
         logoFull: whonowLogoFull,
+        logoLight: whonowLogoIconLight,
+        logoFullLight: whonowLogoFullLight,
         companyName: "WhoNow",
       };
     }
@@ -129,6 +139,8 @@ export function useBranding(): BrandingAssets {
       return {
         logo: company.logoUrl || whonowLogoIcon,
         logoFull: company.logoUrl || whonowLogoFull,
+        logoLight: company.logoUrl || whonowLogoIconLight,
+        logoFullLight: company.logoUrl || whonowLogoFullLight,
         favicon: company.faviconUrl,
         primaryColor: company.primaryColor,
         secondaryColor: company.secondaryColor,
@@ -142,6 +154,8 @@ export function useBranding(): BrandingAssets {
       return {
         logo: cachedBranding.logo || whonowLogoIcon,
         logoFull: cachedBranding.logoFull || whonowLogoFull,
+        logoLight: cachedBranding.logoLight || whonowLogoIconLight,
+        logoFullLight: cachedBranding.logoFullLight || whonowLogoFullLight,
         favicon: cachedBranding.favicon,
         primaryColor: cachedBranding.primaryColor,
         secondaryColor: cachedBranding.secondaryColor,
@@ -153,6 +167,8 @@ export function useBranding(): BrandingAssets {
     return {
       logo: whonowLogoIcon,
       logoFull: whonowLogoFull,
+      logoLight: whonowLogoIconLight,
+      logoFullLight: whonowLogoFullLight,
       companyName: "WhoNow",
     };
   }, [hasCustomBranding, company, profile, user, isLandingPage, cachedBranding]);
