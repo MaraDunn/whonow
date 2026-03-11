@@ -51,6 +51,7 @@ After updating the images, test them using:
 
 ## Notes
 
+- The generator uses the same full logo as the main site (`src/assets/whonow-logo.png`). A copy at `og-logo.png` in the project root lets the logo load when you open the HTML file directly; if you update the logo in `src/assets/`, run `cp src/assets/whonow-logo.png og-logo.png` so the generator stays in sync.
 - The image uses WhoNow branding colors (teal/cyan gradient)
 - The design matches your app's visual style
 - Both OpenGraph and Twitter will use the same image (you can create separate versions if needed)
