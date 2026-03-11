@@ -23,6 +23,7 @@ import { onboardingSteps } from "@/config/onboardingSteps";
 import { SelectionToolbar } from "@/components/SelectionToolbar";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { useSmartSearch } from "@/hooks/useSmartSearch";
 import { useContacts } from "@/hooks/useContacts";
 import { useFolders } from "@/hooks/useFolders";
@@ -124,6 +125,7 @@ const IndexContent = () => {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importDefaultTab, setImportDefaultTab] = useState<string | undefined>(undefined);
+  const [importProgress, setImportProgress] = useState<{ percent: number; label: string } | null>(null);
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [showDirectory, setShowDirectory] = useState(false);
@@ -984,13 +986,24 @@ const IndexContent = () => {
         let totalSkipped = 0;
         const allErrors: string[] = [];
 
+        setImportProgress({
+          percent: 0,
+          label: `Importing ${normalizedContacts.length} contacts…`,
+        });
+
         // Refresh session once so we have a valid token for all batches (avoids gateway 401 with verify_jwt)
         await supabase.auth.refreshSession();
 
         // Process batches sequentially to avoid overwhelming the browser
         for (let i = 0; i < batches.length; i++) {
           const batch = batches[i];
-          console.log(`Processing batch ${i + 1}/${batches.length} (${batch.length} contacts)`);
+          const batchNum = i + 1;
+          const percent = Math.round((batchNum / batches.length) * 100);
+          setImportProgress({
+            percent,
+            label: `Importing contacts… ${batchNum} of ${batches.length} batches`,
+          });
+          console.log(`Processing batch ${batchNum}/${batches.length} (${batch.length} contacts)`);
           
           try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -1074,8 +1087,11 @@ const IndexContent = () => {
 
         const totalProcessed = totalInserted + totalMerged + totalSkipped;
         if (totalProcessed === 0) {
+          setImportProgress(null);
           throw new Error(`Failed to import any contacts. ${allErrors.length > 0 ? `Errors: ${allErrors.join("; ")}` : ""}`);
         }
+
+        setImportProgress({ percent: 100, label: "Complete" });
 
         const errorMsg = allErrors.length > 0 
           ? ` (${allErrors.length} batch error${allErrors.length > 1 ? "s" : ""} occurred)` 
@@ -1094,7 +1110,9 @@ const IndexContent = () => {
         successMsg += errorMsg;
         
         toast.success(successMsg);
+        setImportProgress(null);
       } catch (error) {
+        setImportProgress(null);
         console.error("Bulk import error:", error);
         const message = error instanceof Error ? error.message : "Failed to import contacts";
         console.error("Error details:", error);
@@ -1128,6 +1146,17 @@ const IndexContent = () => {
         <ContactDragProvider>
         <HealthClockProvider>
         <div className="h-screen bg-background flex w-full overflow-hidden">
+          {/* Import progress bar – fixed at top when bulk import is running */}
+          {importProgress && (
+            <div className="fixed top-0 left-0 right-0 z-50 flex flex-col bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b shadow-sm">
+              <div className="max-w-6xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 py-2">
+                <p className="text-sm font-medium text-foreground mb-1.5 truncate">
+                  {importProgress.label}
+                </p>
+                <Progress value={importProgress.percent} className="h-2" />
+              </div>
+            </div>
+          )}
           {/* Folder Sidebar */}
           <FolderSidebar
             folders={folders}

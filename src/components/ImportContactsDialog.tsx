@@ -820,9 +820,15 @@ export function ImportContactsDialog({
                 </p>
               </div>
             ) : google.isLoading ? (
-              <div className="flex flex-col items-center justify-center py-8">
+              <div className="flex flex-col items-center justify-center py-8 px-4 w-full max-w-sm mx-auto">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-                <p className="text-sm text-muted-foreground">Loading contacts...</p>
+                <p className="text-sm text-muted-foreground mb-3">Syncing contacts from Google…</p>
+                <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className="h-full w-1/3 rounded-full bg-primary animate-sync-indeterminate"
+                    aria-hidden
+                  />
+                </div>
               </div>
             ) : google.contacts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
