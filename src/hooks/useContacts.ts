@@ -144,6 +144,8 @@ export type UseContactsListOptions = {
   folderId?: string | null;
   showClientDirectory?: boolean;
   ownershipFilter?: ContactOwnershipFilter;
+  /** When true, fetch trashed contacts list (for Trash view). Defer when false to speed initial load. */
+  loadTrash?: boolean;
 };
 
 export const useContacts = (options?: UseContactsListOptions) => {
@@ -154,87 +156,15 @@ export const useContacts = (options?: UseContactsListOptions) => {
   const folderId = options?.folderId ?? null;
   const showClientDirectory = options?.showClientDirectory ?? false;
   const ownershipFilter = options?.ownershipFilter ?? "all";
+  const loadTrash = options?.loadTrash ?? false;
 
   // Incremented when contacts are marked as contacted; used to re-run smart search
   const [contactMarkedVersion, setContactMarkedVersion] = useState(0);
 
-  // Fetch total count of active contacts (not limited by 1000 row default)
-  // Exclude "my-profile" contacts to match the contacts array filtering
-  // Uses a database function to ensure accurate count regardless of PostgREST limits
-  const { data: totalCount = 0 } = useQuery({
-    queryKey: ["contacts", "count", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return 0;
-
-      // Use database function to count contacts server-side
-      // This bypasses PostgREST's 1000 row limit and respects RLS policies
-      const { data, error } = await supabase.rpc("count_active_contacts", {
-        _user_id: user.id,
-      });
-
-      if (error) {
-        console.error("Error counting contacts:", error);
-        throw error;
-      }
-
-      return data || 0;
-    },
-    enabled: !!user,
-  });
-
-  // Fetch accurate counts using database functions (not limited by 1000 row default)
-  const { data: personalContactsCount = 0 } = useQuery({
-    queryKey: ["contacts", "personal-count", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return 0;
-      const { data, error } = await supabase.rpc("count_personal_contacts", {
-        _user_id: user.id,
-      });
-      if (error) {
-        console.error("Error counting personal contacts:", error);
-        return 0; // Fallback to 0 if function doesn't exist yet
-      }
-      return data || 0;
-    },
-    enabled: !!user,
-  });
-
-  const { data: sharedContactsCount = 0 } = useQuery({
-    queryKey: ["contacts", "shared-count", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return 0;
-      const { data, error } = await supabase.rpc("count_shared_contacts", {
-        _user_id: user.id,
-      });
-      if (error) {
-        console.error("Error counting shared contacts:", error);
-        return 0; // Fallback to 0 if function doesn't exist yet
-      }
-      return data || 0;
-    },
-    enabled: !!user && !!profile?.companyId,
-  });
-
-  const { data: clientCount = 0 } = useQuery({
-    queryKey: ["contacts", "client-count", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return 0;
-      const { data, error } = await supabase.rpc("count_client_contacts", {
-        _user_id: user.id,
-      });
-      if (error) {
-        console.error("Error counting client contacts:", error);
-        return 0; // Fallback to 0 if function doesn't exist yet
-      }
-      return data || 0;
-    },
-    enabled: !!user,
-  });
-
   // Cursor for list_contacts_slim RPC keyset pagination.
   type ListCursor = { created_at: string; id: string } | null;
 
-  // Fetch active contacts via list_contacts_slim (slim payload = faster load more).
+  // Fetch active contacts via list_contacts_slim first (critical path for grid). Count and other queries are deferred until this settles.
   const {
     data: listData,
     isLoading,
@@ -346,7 +276,67 @@ export const useContacts = (options?: UseContactsListOptions) => {
     }
   }, [isListError]);
 
-  // Interaction counts (last 90 days) for relationship health frequency score (enables scores above 70).
+  // Deferred: run only after list query has settled so initial load is dominated by list_contacts_slim.
+  const listSettled = !isLoading;
+
+  // Fetch total count of active contacts (deferred until after list loads).
+  const { data: totalCount = 0 } = useQuery({
+    queryKey: ["contacts", "count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { data, error } = await supabase.rpc("count_active_contacts", { _user_id: user.id });
+      if (error) {
+        console.error("Error counting contacts:", error);
+        throw error;
+      }
+      return data || 0;
+    },
+    enabled: !!user && listSettled,
+  });
+
+  const { data: personalContactsCount = 0 } = useQuery({
+    queryKey: ["contacts", "personal-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { data, error } = await supabase.rpc("count_personal_contacts", { _user_id: user.id });
+      if (error) {
+        console.error("Error counting personal contacts:", error);
+        return 0;
+      }
+      return data || 0;
+    },
+    enabled: !!user && listSettled,
+  });
+
+  const { data: sharedContactsCount = 0 } = useQuery({
+    queryKey: ["contacts", "shared-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { data, error } = await supabase.rpc("count_shared_contacts", { _user_id: user.id });
+      if (error) {
+        console.error("Error counting shared contacts:", error);
+        return 0;
+      }
+      return data || 0;
+    },
+    enabled: !!user && !!profile?.companyId && listSettled,
+  });
+
+  const { data: clientCount = 0 } = useQuery({
+    queryKey: ["contacts", "client-count", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { data, error } = await supabase.rpc("count_client_contacts", { _user_id: user.id });
+      if (error) {
+        console.error("Error counting client contacts:", error);
+        return 0;
+      }
+      return data || 0;
+    },
+    enabled: !!user && listSettled,
+  });
+
+  // Interaction counts (last 90 days) for relationship health — deferred until after list loads.
   const { data: interactionCountsMap = {} } = useQuery({
     queryKey: ["contacts", "interaction-counts", user?.id],
     queryFn: async (): Promise<Record<string, number>> => {
@@ -365,31 +355,25 @@ export const useContacts = (options?: UseContactsListOptions) => {
       }
       return out;
     },
-    enabled: !!user,
-    staleTime: 60_000, // 1 min
+    enabled: !!user && listSettled,
+    staleTime: 60_000,
   });
 
-  // Fetch count of trashed contacts (accurate count, not limited by 1000)
   const { data: trashCount = 0 } = useQuery({
     queryKey: ["contacts", "trash-count", user?.id],
     queryFn: async () => {
       if (!user?.id) return 0;
-
-      const { data, error } = await supabase.rpc("count_trashed_contacts", {
-        _user_id: user.id,
-      });
-
+      const { data, error } = await supabase.rpc("count_trashed_contacts", { _user_id: user.id });
       if (error) {
         console.error("Error counting trashed contacts:", error);
         throw error;
       }
-
       return data || 0;
     },
-    enabled: !!user,
+    enabled: !!user && listSettled,
   });
 
-  // Fetch trashed contacts (for display; count from trashCount is accurate)
+  // Fetch trashed contacts only when Trash view is active (deferred for initial load).
   const { data: trashedContacts = [], isLoading: trashLoading } = useQuery({
     queryKey: ["contacts", "trash", user?.id],
     queryFn: async () => {
@@ -399,11 +383,10 @@ export const useContacts = (options?: UseContactsListOptions) => {
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
         .limit(TRASH_PAGE_SIZE);
-
       if (error) throw error;
       return (data as DbContact[]).map(mapDbToContact);
     },
-    enabled: !!user,
+    enabled: !!user && loadTrash,
   });
 
   const addContact = useMutation({

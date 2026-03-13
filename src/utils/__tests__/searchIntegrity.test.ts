@@ -132,6 +132,12 @@ describe('Search Integrity Tests', () => {
       expect(query.filters.job_title).toBe('marketing');
     });
 
+    it('should resolve "who handles marketing for smart solutions?" to job_title and company', () => {
+      const query = parseSearchQueryToSchema('who handles marketing for smart solutions?');
+      expect(query.filters.job_title).toBe('marketing');
+      expect(query.filters.company).toBe('smart solutions');
+    });
+
     it('should resolve bare phrase "hr person" to hr job_title', () => {
       const query = parseSearchQueryToSchema('hr person');
       expect(query.filters.job_title).toBe('hr');

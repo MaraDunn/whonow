@@ -19,12 +19,18 @@ type DbProfile = {
   updated_at: string;
 };
 
-export const useTeamDirectoryContacts = () => {
+export type UseTeamDirectoryContactsOptions = {
+  /** When false, do not fetch until user opens directory (reduces initial load). */
+  shouldLoad?: boolean;
+};
+
+export const useTeamDirectoryContacts = (options?: UseTeamDirectoryContactsOptions) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
+  const shouldLoad = options?.shouldLoad ?? false;
 
-  // Fetch profiles directly for all company members
+  // Fetch profiles only when directory is visible or a team folder is selected (lazy load).
   const { data: teamContacts = [], isLoading, refetch } = useQuery({
     queryKey: ["team-directory-contacts", profile?.companyId],
     queryFn: async () => {
@@ -64,7 +70,7 @@ export const useTeamDirectoryContacts = () => {
       // Sort by name
       return result.sort((a, b) => a.name.localeCompare(b.name));
     },
-    enabled: !!profile?.companyId,
+    enabled: !!profile?.companyId && shouldLoad,
   });
 
   // Set up real-time subscription for profile updates

@@ -114,7 +114,6 @@ const IndexContent = () => {
   const { canAccessFeature, showCreateOrganizationAfterUpgrade, dismissCreateOrgPrompt } = useSubscription();
   const hasClientAccess = canAccessFeature("client_management");
   const hasSmartFoldersAccess = canAccessFeature("smart_folders");
-  const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoadingDelayed, setSearchLoadingDelayed] = useState(false);
   const loadingDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -139,6 +138,9 @@ const IndexContent = () => {
   const [selectedClientFolderId, setSelectedClientFolderId] = useState<string | null>(null);
   const [selectedTeamFolderId, setSelectedTeamFolderId] = useState<string | null>(null);
   const [selectedOrgFolderId, setSelectedOrgFolderId] = useState<string | null>(null);
+  const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts({
+    shouldLoad: showDirectory || selectedTeamFolderId !== null,
+  });
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -173,6 +175,7 @@ const IndexContent = () => {
     contactMarkedVersion,
     trashedContacts,
     trashCount,
+    trashLoading,
     personalContactsCount: accuratePersonalCount,
     sharedContactsCount: accurateSharedCount,
     clientCount: accurateClientCount,
@@ -198,9 +201,9 @@ const IndexContent = () => {
     getContactById,
     updateContactInListCache,
     interactionCounts,
-  } = useContacts();
-  const { 
-    folders, 
+  } = useContacts({ loadTrash: showTrash });
+  const {
+    folders,
     organizationFolders, 
     clientFolders, 
     organizationClientFolders, 
@@ -1446,6 +1449,7 @@ const IndexContent = () => {
                 <ContactGrid
                   contacts={filteredContacts}
                   searchQuery={searchQuery}
+                  isLoading={contactsLoading || (showTrash && trashLoading)}
                   action={showTrash ? undefined : action}
                   onEditContact={handleEditContact}
                   onViewContact={handleViewContact}

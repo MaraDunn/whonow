@@ -21,6 +21,7 @@ const SAMPLE_CONTACT: Contact = {
 import { ActionType } from "@/hooks/useActionSearch";
 import { devLog } from "@/lib/devLog";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useResponsiveView } from "@/hooks/use-mobile";
 
 const VIRTUALIZE_THRESHOLD = 500;
@@ -80,6 +81,8 @@ interface ContactGridProps {
   showSampleContact?: boolean;
   /** Contact id -> count of "contacted" interactions in last 90 days; used for relationship health frequency score (scores above 70). */
   interactionCounts?: Record<string, number>;
+  /** When true and contacts are empty, show a grid of skeleton cards (reduces perceived latency on initial load). */
+  isLoading?: boolean;
 }
 
 export function ContactGrid({ 
@@ -122,6 +125,7 @@ export function ContactGrid({
   isLoadingMore = false,
   showSampleContact = false,
   interactionCounts,
+  isLoading = false,
 }: ContactGridProps) {
   const responsiveView = useResponsiveView();
   const isInternalContact = useCallback(
@@ -297,7 +301,42 @@ export function ContactGrid({
     });
   }, [useVirtualizedList, contacts.length, rowCount]);
 
-  // Early return AFTER all hooks
+  // Early return AFTER all hooks: show skeleton when loading and no data yet (stable layout, reduces perceived latency).
+  const SKELETON_CARD_COUNT = 12;
+  const gridScrollContainerClass = "overflow-x-hidden overflow-y-auto rounded-lg pr-3";
+  const gridScrollContainerStyle = { height: "70vh" } as const;
+
+  if (isLoading && contacts.length === 0 && !showSampleContact) {
+    const skeletonMinH = isCompactMode ? "min-h-[5rem]" : "min-h-[24rem]";
+    return (
+      <div className={gridScrollContainerClass} style={gridScrollContainerStyle}>
+        <div className="min-w-0 overflow-x-hidden w-full animate-fade-in">
+          <div className={gridClasses}>
+          {Array.from({ length: SKELETON_CARD_COUNT }, (_, i) => (
+            <div key={i} className={cardWrapperClass}>
+              <div className={`h-full ${skeletonMinH} rounded-xl sm:rounded-2xl border border-border bg-card p-4 sm:p-5 flex flex-col gap-3`}>
+                <div className="flex items-start gap-3">
+                  <Skeleton className="size-12 sm:size-14 rounded-full shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <Skeleton className="h-5 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+                <div className="mt-auto pt-2 flex gap-2">
+                  <Skeleton className="h-9 w-20" />
+                  <Skeleton className="h-9 w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (contacts.length === 0) {
     const showSampleCard = showSampleContact && !isTrashView && !searchQuery;
     // When showing sample card, render it in the same grid position as the first contact would be
@@ -377,12 +416,12 @@ export function ContactGrid({
           </Button>
         </div>
       )}
+      <div
+        ref={parentRef}
+        className={gridScrollContainerClass}
+        style={gridScrollContainerStyle}
+      >
       {useVirtualizedList ? (
-        <div
-          ref={parentRef}
-          className="overflow-x-hidden overflow-y-auto rounded-lg"
-          style={{ height: "70vh" }}
-        >
           <div
             style={{
               height: `${rowVirtualizer.getTotalSize()}px`,
@@ -450,7 +489,6 @@ export function ContactGrid({
             });
             })()}
           </div>
-        </div>
       ) : (
         <div className="min-w-0 overflow-x-hidden w-full">
           <div className={gridClasses}>
@@ -491,6 +529,7 @@ export function ContactGrid({
           </div>
         </div>
       )}
+      </div>
       {hasMore && onLoadMore && !isTrashView && (
         <>
           <div ref={loadMoreSentinelRef} className="min-h-px w-full" aria-hidden />

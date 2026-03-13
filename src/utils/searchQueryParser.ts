@@ -2170,15 +2170,30 @@ function extractKeywords(words: string[]): string[] {
 }
 
 /**
+ * "Who handles [role] for [company]?" e.g. "who handles marketing for smart solutions?"
+ * Returns { company, role } so we set both filters and don't treat the whole phrase as company.
+ */
+function getWhoHandlesRoleForCompany(query: string): { company: string; role: string } | null {
+  const match = query.match(/who\s+handles?\s+(.+?)\s+for\s+(.+?)(?:\s*\?|$)/i);
+  if (!match || !match[1] || !match[2]) return null;
+  const company = cleanCompanyName(match[2]);
+  const role = match[1].trim().toLowerCase();
+  if (!company || !role) return null;
+  return { company, role };
+}
+
+/**
  * Extract company from natural language question patterns
  * This runs FIRST and handles common question patterns explicitly
  * Uses the ORIGINAL query (not normalized) to preserve structure
  */
 function extractCompanyFromQuestionPatterns(query: string): string | null {
   devLog('[SEARCH DEBUG] extractCompanyFromQuestionPatterns - Input query:', query);
-  
+  // "Who handles X for Y" is handled by getWhoHandlesRoleForCompany; don't return "X Y" as company here.
+  if (/who\s+handles?\s+.+\s+for\s+.+/i.test(query)) return null;
+
   // Try multiple specific patterns in order of specificity
-  
+
   // Pattern 1: "who do I know at [company]" - most specific
   // Improved regex to capture company names including suffixes like "inc", "llc", etc.
   let match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]+?)(?:\s*\?|$)/i);
@@ -2399,7 +2414,15 @@ export function parseSearchQuery(query: string): ParsedQuery {
     names: entities.names,
     locations: entities.locations
   });
-  
+
+  // "Who handles [role] for [company]?" e.g. "who handles marketing for smart solutions?" → company + role
+  const whoHandlesFor = getWhoHandlesRoleForCompany(query);
+  if (whoHandlesFor) {
+    entities.companies.unshift(whoHandlesFor.company);
+    entities.roles.unshift(whoHandlesFor.role);
+    devLog('[SEARCH DEBUG] parseSearchQuery - Who handles X for Y:', whoHandlesFor);
+  }
+
   // If we extracted a company from question patterns, add it (highest priority)
   if (questionCompany && !entities.companies.includes(questionCompany)) {
     devLog('[SEARCH DEBUG] parseSearchQuery - Adding question company to entities');
@@ -2812,9 +2835,9 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
   }
 
   // Map job_title (from roles OR responsibility domain for broader matching)
-  // When the user asked "who handles [company]", we already have a company filter; don't also
-  // require responsibility (e.g. "legal") or we over-filter and get 0 results (e.g. billing
-  // contact with "Jackson and Sons" in description is not legal, legal counsels don't have that company).
+  // When the user asked "who handles [company]" (no "for"), we only have company; don't inject
+  // responsibility or we over-filter. When they asked "who handles [role] for [company]", we
+  // have both in entities from getWhoHandlesRoleForCompany and set job_title from entities.roles.
   if (parsed.responsibility && parsed.entities.companies.length === 0) {
     const dept = parsed.responsibility.filters.departments?.[0];
     const role = parsed.responsibility.filters.roles?.[0];
@@ -2823,10 +2846,7 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     const departments = parsed.responsibility.filters.departments ?? [];
     const roles = parsed.responsibility.filters.roles ?? [];
     filters.role_keywords = [...new Set([...departments, ...roles])];
-  } else if (
-    (parsed.entities.roles.length > 0 || parsed.entities.departments.length > 0) &&
-    !(parsed.responsibility && parsed.entities.companies.length > 0)
-  ) {
+  } else if (parsed.entities.roles.length > 0 || parsed.entities.departments.length > 0) {
     // Prefer department over first role: e.g. "legal counsel" → entities.departments=["legal"], entities.roles=["law","attorney",...]
     // Using "legal" matches "Legal Counsel" via ILIKE; using "law" (first synonym) would not
     // Skip when responsibility injected the roles AND a company is present — the roles likely
