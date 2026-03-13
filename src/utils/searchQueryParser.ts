@@ -1719,7 +1719,7 @@ function extractTimeRange(query: string): TimeRange | undefined {
     return { start, end };
   }
   
-  // FIRST: Check for combined patterns like "last [day] [time-of-day]" (e.g., "last friday night")
+  // FIRST: Check for combined patterns like "last [day] [time-of-day]" or "[day] [time-of-day]"
   // This must come before individual day/time-of-day checks
   const dayNamesPattern = DAY_NAMES.join("|");
   const timeOfDayKeys = Object.keys(TIME_OF_DAY).join("|");
@@ -1730,7 +1730,15 @@ function extractTimeRange(query: string): TimeRange | undefined {
     "i"
   );
   const lastDayTimeMatch = normalized.match(lastDayTimePattern);
-  
+
+  // Pattern: "[day] [time-of-day]" without "last" (e.g., "wednesday afternoon", "monday morning")
+  // Must be checked before standalone time-of-day so we don't match only "afternoon" and default to today
+  const dayTimePattern = new RegExp(
+    `\\b(${dayNamesPattern})\\s+(${timeOfDayKeys})\\b`,
+    "i"
+  );
+  const dayTimeMatch = normalized.match(dayTimePattern);
+
   if (lastDayTimeMatch) {
     const dayName = lastDayTimeMatch[1].toLowerCase();
     const timeOfDay = lastDayTimeMatch[2].toLowerCase();
@@ -1764,6 +1772,38 @@ function extractTimeRange(query: string): TimeRange | undefined {
         end.setHours(timeRange.end, 0, 0, 0);
       }
       
+      return { start, end };
+    }
+  }
+
+  // "[day] [time-of-day]" e.g. "wednesday afternoon", "monday morning"
+  if (dayTimeMatch) {
+    const dayName = dayTimeMatch[1].toLowerCase();
+    const timeOfDay = dayTimeMatch[2].toLowerCase();
+    const dayIndex = DAY_NAMES.findIndex(d => d.toLowerCase() === dayName);
+    const timeRange = TIME_OF_DAY[timeOfDay as keyof typeof TIME_OF_DAY];
+
+    if (dayIndex !== -1 && timeRange) {
+      const end = new Date();
+      const start = new Date();
+      const today = end.getDay();
+      const targetDay = dayIndex;
+
+      let daysDiff = today - targetDay;
+      if (daysDiff < 0) daysDiff += 7; // target day in the future → use previous week
+      // If today is that day (daysDiff === 0), use today; otherwise use most recent past occurrence
+      start.setDate(end.getDate() - daysDiff);
+      end.setDate(start.getDate());
+      start.setHours(timeRange.start, 0, 0, 0);
+
+      if (timeRange.end < timeRange.start) {
+        end.setDate(start.getDate() + 1);
+        end.setHours(timeRange.end, 0, 0, 0);
+      } else if (timeRange.end === 24) {
+        end.setHours(23, 59, 59, 999);
+      } else {
+        end.setHours(timeRange.end, 0, 0, 0);
+      }
       return { start, end };
     }
   }
@@ -2145,13 +2185,19 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   devLog('[SEARCH DEBUG] Pattern 1 match:', match);
   if (match && match[1]) {
     devLog('[SEARCH DEBUG] Pattern 1 captured:', match[1]);
+    const raw = match[1].trim().replace(/[?!.,;:]+$/, "").trim();
+    // Single-token abbreviations (e.g. "j&j", "J&J", "AT&T") — use as-is so cleanCompanyName can't drop them
+    if (raw.length >= 2 && /^[a-zA-Z0-9&]+$/.test(raw)) {
+      devLog('[SEARCH DEBUG] Pattern 1 using raw abbreviation:', raw);
+      return raw;
+    }
     const company = cleanCompanyName(match[1]);
     devLog('[SEARCH DEBUG] Pattern 1 cleaned company:', company);
     if (company) return company;
   }
   
-  // Pattern 1b: More specific pattern that handles "at tech solutions inc" better
-  match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*(?:\s+(?:inc|llc|ltd|corp|company|co)\.?)?)(?:\s*\?|$)/i);
+  // Pattern 1b: More specific pattern that handles "at tech solutions inc" and "J&J" (allow & in names)
+  match = query.match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([a-zA-Z0-9&]+(?:\s+[a-zA-Z0-9&]+)*(?:\s+(?:inc|llc|ltd|corp|company|co)\.?)?)(?:\s*\?|$)/i);
   devLog('[SEARCH DEBUG] Pattern 1b match:', match);
   if (match && match[1]) {
     devLog('[SEARCH DEBUG] Pattern 1b captured:', match[1]);
@@ -2165,6 +2211,11 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   devLog('[SEARCH DEBUG] Pattern 2 match:', match);
   if (match && match[1]) {
     devLog('[SEARCH DEBUG] Pattern 2 captured:', match[1]);
+    const raw = match[1].trim().replace(/[?!.,;:]+$/, "").trim();
+    if (raw.length >= 2 && /^[a-zA-Z0-9&]+$/.test(raw)) {
+      devLog('[SEARCH DEBUG] Pattern 2 using raw abbreviation:', raw);
+      return raw;
+    }
     const company = cleanCompanyName(match[1]);
     devLog('[SEARCH DEBUG] Pattern 2 cleaned company:', company);
     if (company) return company;
@@ -2208,8 +2259,8 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
   }
   
   // Pattern 5b: More specific "at [company]" with better word boundary handling
-  // This handles "at tech solutions inc" more reliably
-  const atMatch2 = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*(?:\s+(?:inc|llc|ltd|corp|company|co))?\.?)(?:\s*\?|$)/i);
+  // This handles "at tech solutions inc" and "J&J" (allow & in names)
+  const atMatch2 = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9&]+(?:\s+[a-zA-Z0-9&]+)*(?:\s+(?:inc|llc|ltd|corp|company|co))?\.?)(?:\s*\?|$)/i);
   devLog('[SEARCH DEBUG] Pattern 5b (enhanced at) match:', atMatch2);
   if (atMatch2 && atMatch2[1]) {
     devLog('[SEARCH DEBUG] Pattern 5b captured:', atMatch2[1]);
@@ -2218,8 +2269,8 @@ function extractCompanyFromQuestionPatterns(query: string): string | null {
     if (company) return company;
   }
   
-  // Pattern 6: "at [company]" at start or with word boundary
-  match = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*?)(?:\s*\?|$)/i);
+  // Pattern 6: "at [company]" at start or with word boundary (allow & e.g. "J&J")
+  match = query.match(/(?:^|\s)(?:at|from|@)\s+([a-zA-Z0-9&]+(?:\s+[a-zA-Z0-9&]+)*?)(?:\s*\?|$)/i);
   devLog('[SEARCH DEBUG] Pattern 6 match:', match);
   if (match && match[1]) {
     const company = cleanCompanyName(match[1]);
@@ -2592,7 +2643,12 @@ export function parseSearchQuery(query: string): ParsedQuery {
   
   // Check if query contains "add" or "added" - indicates creation date search
   const hasAddKeyword = normalized.includes("add") || normalized.includes("added");
-  
+  // "Who did I meet this week" = contacts added in that period (creation date), not last_contacted.
+  // Only treat as interaction when there's an explicit contact verb (call, email, phone, etc.).
+  const hasOnlyMeetVerb =
+    /\b(meet|met|meeting)\b/i.test(normalized) &&
+    !/\b(call|called|calling|email|emailed|phone|phoned|contact|contacted|contacting|text|texted|dial|dialed|reach out|reached out)\b/i.test(normalized);
+
   // If query has "add"/"added" and a time range, prioritize creation date over interaction date
   // This handles queries like "who did I add today?" vs "who did I call today?"
   // When "add" is present, we want creation date, not interaction date
@@ -2600,13 +2656,17 @@ export function parseSearchQuery(query: string): ParsedQuery {
     // Clear interaction filters - user is asking about when contacts were added, not when they interacted
     interactionType = null;
     interactionTimeRange = undefined;
-  } else if (interactionTimeRange && !hasAddKeyword) {
+  } else if (interactionTimeRange && !hasAddKeyword && !(hasOnlyMeetVerb && timeRange)) {
     // If we successfully extracted an interaction time range (e.g., "call last week"),
-    // this is clearly an interaction-based query, not a creation date query
-    // Clear the creation date time range and use the interaction time range instead
-    // This handles queries like "who did I call last week?" or "who did I email yesterday?"
+    // use it as interaction (last_contacted) unless the query is "who did I meet [period]"
+    // which means contacts added in that period (creation date).
+    // This handles "who did I call last week?" vs "who did I meet this week?" (creation date).
     timeRange = undefined;
     // Keep interactionType and interactionTimeRange - they're correctly set
+  } else if (interactionTimeRange && hasOnlyMeetVerb && timeRange) {
+    // "Who did I meet this week/last week/this month" = creation date (contacts added in that period)
+    interactionType = null;
+    interactionTimeRange = undefined;
   } else if (interactionType && timeRange && !hasAddKeyword && !interactionTimeRange) {
     // Edge case: interaction keyword present but no clear interaction time pattern extracted
     // This might be ambiguous, but if there's a time range, default to creation date
@@ -2796,9 +2856,14 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     filters.name = parsed.entities.names[0]; // Take first name
   }
 
-  // Map location
+  // Map location — but don't use a value that is the same as company (e.g. "j&j" in
+  // "who do I know at j&j" gets misclassified as location and would filter out all contacts)
   if (parsed.entities.locations.length > 0) {
-    filters.location = parsed.entities.locations[0]; // Take first location
+    const loc = parsed.entities.locations[0];
+    const sameAsCompany = filters.company && loc.toLowerCase().trim() === filters.company.toLowerCase().trim();
+    if (!sameAsCompany) {
+      filters.location = loc;
+    }
   }
 
   // Map relationship_type
@@ -2869,9 +2934,16 @@ function convertToSearchQuery(parsed: ParsedQuery): SearchQuery {
     // Skip for interaction-only queries ("who did I call last week") - no text to match
     semantic_hint = undefined;
   } else if (parsed.originalQuery && parsed.originalQuery.trim().length > 0) {
-    // Use original query for semantic ranking (FTS ranks but doesn't filter)
-    // This ensures we get results even if entity extraction is imperfect
-    semantic_hint = parsed.originalQuery;
+    // For "who do I know at [company]" queries, use only the company as semantic_hint.
+    // Passing the full phrase ("who do I know at J&J") can cause 0 results: FTS/plainto_tsquery
+    // tokenizes it and may not match contact text, and company filter is the real signal.
+    const whoKnowAtPattern = /who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+/i;
+    if (filters.company && whoKnowAtPattern.test(parsed.originalQuery.trim())) {
+      semantic_hint = filters.company;
+    } else {
+      // Use original query for semantic ranking (FTS ranks but doesn't filter)
+      semantic_hint = parsed.originalQuery;
+    }
   }
 
   return {
@@ -2910,6 +2982,19 @@ export function parseSearchQueryToSchema(query: string): SearchQuery {
     !result.filters.company
   ) {
     result.filters.job_title = responsibilityResult.phrase;
+  }
+
+  // Fallback: "who do I know at X" must always set company so search works (e.g. "j&j").
+  // If the full pipeline didn't set it (e.g. unicode & or trimming), extract here.
+  if (!result.filters.company && /who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+/i.test(query.trim())) {
+    const fallbackMatch = query.trim().match(/who\s+(?:do|does|did)\s+(?:i|you|we|they)\s+know\s+(?:at|from|@)\s+([^?]*?)(?:\s*\?|$)/i);
+    if (fallbackMatch && fallbackMatch[1]) {
+      const company = fallbackMatch[1].trim().replace(/[?!.,;:]+$/, "").trim();
+      if (company.length >= 1) {
+        result.filters.company = company;
+        devLog("[SEARCH DEBUG] parseSearchQueryToSchema - set company from fallback:", company);
+      }
+    }
   }
 
   return result;

@@ -477,7 +477,7 @@ const IndexContent = () => {
   const {
     contacts: filteredContacts,
     action,
-    isLoading: searchLoading,
+    isLoading: isSearchLoading,
     understoodFilters,
     understoodRoleLabel,
     isTruncated,
@@ -491,7 +491,7 @@ const IndexContent = () => {
 
   // Only show loading indicator after search has been in progress for 200ms (avoids flashing spinner while typing)
   useEffect(() => {
-    if (!searchLoading) {
+    if (!isSearchLoading) {
       if (loadingDelayRef.current) {
         clearTimeout(loadingDelayRef.current);
         loadingDelayRef.current = null;
@@ -503,7 +503,7 @@ const IndexContent = () => {
     return () => {
       if (loadingDelayRef.current) clearTimeout(loadingDelayRef.current);
     };
-  }, [searchLoading]);
+  }, [isSearchLoading]);
 
   const handleSelectTrash = () => {
     setShowTrash(true);

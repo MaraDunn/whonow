@@ -2,17 +2,19 @@
 
 ## Quick Start
 
-1. **Open the generator**: Open `generate-og-image.html` in your browser
-2. **Generate the image**: Click "Download as PNG" button
-3. **Save the image**: The image will be downloaded as `whonow-og-image.png`
-4. **Move to public folder**: Copy the image to the `public/` folder
-5. **Update index.html**: The image paths are already configured (see below)
+**Option A — Node script (recommended):**  
+Run `npm run generate:og-image` (or `node scripts/generate-og-image.js`). This produces `public/og-image.png`, `public/twitter-image.png`, and `public/og-image-4x5.png` from `src/assets/whonow-logo.png`.
+
+**Option B — Browser generator:**  
+1. Open `generate-og-image.html` in your browser (or via `npx serve .` if downloads are blocked).  
+2. Download the desktop (1200×630), 4:5 (1080×1350), and/or square (1080×1080) images.  
+3. Copy the files into `public/`.
 
 ## Image Specifications
 
-- **Dimensions**: 1200x630px (standard OpenGraph/Twitter card size)
+- **Desktop (OG/Twitter)**: 1200×630px — `public/og-image.png` and `public/twitter-image.png`
+- **Vertical 4:5**: 1080×1350px — `public/og-image-4x5.png` (for feed and vertical placements)
 - **Format**: PNG (with transparency support)
-- **File location**: `public/og-image.png` and `public/twitter-image.png`
 
 ## Alternative Methods
 

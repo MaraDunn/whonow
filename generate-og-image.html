@@ -41,6 +41,7 @@
     canvas { display: block; }
     .desktop-canvas { max-width: 100%; height: auto; }
     .mobile-canvas { max-width: 400px; height: auto; }
+    .vertical-canvas { max-width: 280px; height: auto; }
     .actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 12px; }
     button {
       padding: 10px 24px;
@@ -87,6 +88,16 @@
   </div>
 
   <div class="section">
+    <div class="section-title">Vertical 4:5 &mdash; 1080 &times; 1350</div>
+    <div class="preview-container">
+      <canvas id="verticalCanvas" class="vertical-canvas" width="1080" height="1350"></canvas>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" onclick="download('verticalCanvas','og-image-4x5.png')">Download og-image-4x5.png</button>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="section-title">Mobile / Square &mdash; 1080 &times; 1080</div>
     <div class="preview-container">
       <canvas id="mobileCanvas" class="mobile-canvas" width="1080" height="1080"></canvas>
@@ -99,7 +110,7 @@
 
   <div class="info">
     <strong>After downloading:</strong> move files into <code>public/</code> and deploy.
-    The desktop image is used for link previews (OG/Twitter). The square image works great for Meta feed ads.
+    The desktop image is used for link previews (OG/Twitter). The 4:5 image is for feed and vertical placements. The square image works great for Meta feed ads.
   </div>
 
   <script>
@@ -269,6 +280,40 @@
       }
     }
 
+    // ── Vertical 1080×1350 (4:5) ──
+    function drawVertical() {
+      const c = document.getElementById('verticalCanvas');
+      const ctx = c.getContext('2d');
+      const W = 1080, H = 1350;
+
+      drawBackground(ctx, W, H);
+
+      const cx = W / 2;
+      const topOffset = Math.round((H - 870) / 2);
+
+      drawLogo(ctx, cx, topOffset, 211);
+
+      drawGradientText(ctx, 'Smart Contacts', cx, topOffset + 255, 64);
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = `400 22px 'Inter', sans-serif`;
+      ctx.fillText("Need to find a contact?", cx, topOffset + 325);
+      ctx.fillText("Don't ask your boss, ask WhoNow.", cx, topOffset + 351);
+
+      const cardW = 360;
+      const cardH = 126;
+      const cardGap = 35;
+      let cardY = topOffset + 422;
+
+      for (const contact of CONTACTS) {
+        const cardX = cx - cardW / 2;
+        drawContactCard(ctx, cardX, cardY, cardW, cardH, contact);
+        cardY += cardH + cardGap;
+      }
+    }
+
     // ── Mobile 1080×1080 ──
     function drawMobile() {
       const c = document.getElementById('mobileCanvas');
@@ -304,6 +349,7 @@
 
     function renderAll() {
       drawDesktop();
+      drawVertical();
       drawMobile();
     }
 

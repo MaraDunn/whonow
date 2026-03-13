@@ -23,7 +23,8 @@ interface SmartSearchResult {
   aiMetadata?: AIMetadata;
 }
 
-const MAX_RESULTS = 10;
+/** Default limit for search: return all matching results up to DB cap (1000). */
+const MAX_RESULTS = 1000;
 
 /** Map a contacts table row from search_contacts RPC to Contact */
 function mapSearchRowToContact(row: Record<string, unknown>): Contact {
@@ -115,7 +116,8 @@ export function useSmartSearch(
 
     // STEP 1: Parse query into structured filters
     const deterministicQuery = parseSearchQueryToSchema(query);
-    
+    devLog("[useSmartSearch] parsed filters:", { company: deterministicQuery.filters.company, query: query.slice(0, 80) });
+
     // STEP 2: Execute server-side smart search
     const performSearch = async () => {
       try {

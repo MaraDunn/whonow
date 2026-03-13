@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
+import { trackStartTrial } from "@/utils/metaPixel";
 
 const emailSchema = z.string().email("Please enter a valid email address").max(254, "Email is too long");
 const passwordSchema = z.string()
@@ -185,6 +186,7 @@ const Auth = () => {
         return;
       }
 
+      trackStartTrial();
       toast.success("Check your email to verify your account.");
       setSignUpEmailSent(email);
     } catch (err) {

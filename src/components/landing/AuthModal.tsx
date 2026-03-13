@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
+import { trackStartTrial } from "@/utils/metaPixel";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -111,6 +112,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
         toast.error(error.message);
       }
     } else {
+      trackStartTrial();
       toast.success("Check your email to verify your account.");
       setSignUpEmailSent(email);
     }

@@ -15,7 +15,7 @@ Two logo files are used so we can show **icon only** in some places and **icon +
 
    ```bash
    npm run generate:icons    # favicons, public/logo-icon.png, Tauri icons
-   npm run generate:og-image  # public/og-image.png and twitter-image.png (1200×630)
+   npm run generate:og-image  # public/og-image.png, twitter-image.png (1200×630), og-image-4x5.png (1080×1350, 4:5)
    ```
 
 Optional env for OG background: `OG_BACKGROUND_HEX` (default `#0f172a`).
