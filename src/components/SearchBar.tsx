@@ -17,17 +17,23 @@ export function SearchBar({ value, onChange, onEnter, placeholder = "Search cont
   const isComposingRef = useRef(false);
   const [localValue, setLocalValue] = useState(value);
   const lastEmittedRef = useRef<string>(value);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const DEBOUNCE_MS = 180;
 
   // Some embedded browsers / editors can inject bidi control characters (LRM/RLM, overrides/isolates)
   // which can make typing *appear reversed*. Strip them to keep search input stable.
   const sanitizeSearchValue = (raw: string) => raw.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "");
 
   // Keep local input in sync ONLY when the parent changes value externally (clear, navigation, etc).
-  // This avoids Cursor preview quirks where frequent controlled re-renders can disturb caret/selection.
   useEffect(() => {
     if (value === lastEmittedRef.current) return;
     setLocalValue(value);
     lastEmittedRef.current = value;
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
   }, [value]);
 
   useEffect(() => {
@@ -40,6 +46,10 @@ export function SearchBar({ value, onChange, onEnter, placeholder = "Search cont
         inputRef.current?.blur();
         setLocalValue("");
         lastEmittedRef.current = "";
+        if (debounceRef.current) {
+          clearTimeout(debounceRef.current);
+          debounceRef.current = null;
+        }
         onChange("");
       }
       if (e.key === "Enter" && document.activeElement === inputRef.current) {
@@ -61,14 +71,27 @@ export function SearchBar({ value, onChange, onEnter, placeholder = "Search cont
     }
     devLog("[SearchBar] handleChange:", next);
     setLocalValue(next);
-    lastEmittedRef.current = next;
-    onChange(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!next.trim()) {
+      lastEmittedRef.current = "";
+      onChange("");
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      lastEmittedRef.current = next;
+      onChange(next);
+    }, DEBOUNCE_MS);
   };
 
   const handleClear = () => {
     devLog('[SearchBar] handleClear called');
     setLocalValue("");
     lastEmittedRef.current = "";
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
     onChange("");
     inputRef.current?.focus();
   };

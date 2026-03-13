@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { SearchBar } from "@/components/SearchBar";
@@ -116,6 +116,8 @@ const IndexContent = () => {
   const hasSmartFoldersAccess = canAccessFeature("smart_folders");
   const { teamContacts, isLoading: teamContactsLoading, refetch: refetchTeamContacts } = useTeamDirectoryContacts();
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoadingDelayed, setSearchLoadingDelayed] = useState(false);
+  const loadingDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
@@ -486,6 +488,22 @@ const IndexContent = () => {
     clientOnly: clientView !== null,
     sharedOnly: showDirectory || orgView !== null,
   });
+
+  // Only show loading indicator after search has been in progress for 200ms (avoids flashing spinner while typing)
+  useEffect(() => {
+    if (!searchLoading) {
+      if (loadingDelayRef.current) {
+        clearTimeout(loadingDelayRef.current);
+        loadingDelayRef.current = null;
+      }
+      setSearchLoadingDelayed(false);
+      return;
+    }
+    loadingDelayRef.current = setTimeout(() => setSearchLoadingDelayed(true), 200);
+    return () => {
+      if (loadingDelayRef.current) clearTimeout(loadingDelayRef.current);
+    };
+  }, [searchLoading]);
 
   const handleSelectTrash = () => {
     setShowTrash(true);
@@ -1255,7 +1273,7 @@ const IndexContent = () => {
                       }
                     }}
                     placeholder="Try 'Who handles marketing?' or 'email sarah'..."
-                    isLoading={searchLoading}
+                    isLoading={searchLoadingDelayed}
                   />
                 </div>
               </div>
@@ -1267,7 +1285,7 @@ const IndexContent = () => {
                       <span className="font-medium text-foreground">"{searchQuery.trim()}"</span>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {searchLoading ? (
+                      {searchLoadingDelayed ? (
                         <span className="flex items-center gap-2">
                           <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                           Understanding your question...
