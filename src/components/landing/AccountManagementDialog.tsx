@@ -752,6 +752,9 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                   <Separator />
                   <div className="space-y-3">
                     <Label className="text-base font-medium text-destructive">Cancel Subscription</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Cancel anytime during your free trial or billing period to avoid being charged.
+                    </p>
                     {!isCancelConfirming ? (
                       <Button
                         variant="outline"
@@ -767,7 +770,7 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                         <p className="text-xs text-muted-foreground">
                           Your plan will remain active until the end of the current billing period on{" "}
                           {subscriptionEnd ? new Date(subscriptionEnd).toLocaleDateString() : "your next billing date"}.
-                          After that, you'll be downgraded to the free Starter plan.
+                          After that, you'll be downgraded to the free Starter plan. Cancel anytime to avoid being charged.
                         </p>
                         <div className="flex gap-2">
                           <Button

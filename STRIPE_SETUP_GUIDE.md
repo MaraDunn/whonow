@@ -82,7 +82,18 @@ For subscription events to work properly:
 5. Copy the **Signing secret** (starts with `whsec_`)
 6. Add it to Supabase secrets as: `STRIPE_WEBHOOK_SECRET`
 
-## Step 5: Test the Integration
+## Step 5: Free Trial and Customer Portal (No charge until trial end)
+
+**Free trial (14 days):**
+- The `create-checkout` Edge Function applies a **14-day free trial** for first-time subscribers. No payment is charged until the trial ends.
+- This is set in code via `subscription_data.trial_period_days: 14`. Do **not** add a "Setup fee" or "Initial payment" on your Stripe Prices, or customers could be charged at signup.
+- In **Stripe Dashboard → Products → [each Price]**: ensure the price is recurring only, with no one-time or setup fee that would charge immediately.
+
+**Cancel anytime:**
+- Users can cancel during the trial (or anytime) to avoid being charged. They do this via the **Stripe Customer Portal** (opened from the app’s "Manage subscription" / "Cancel subscription").
+- In **Stripe Dashboard → Settings → Billing → Customer portal**: enable **Cancel subscriptions** so customers can cancel their subscription. Without this, users cannot cancel and may be charged at trial end.
+
+## Step 6: Test the Integration
 
 1. **Check function logs:**
    - Go to **Supabase Dashboard** → **Edge Functions** → **Logs**
@@ -103,7 +114,7 @@ For subscription events to work properly:
    **"Invalid request body"**
    - Fix: The request isn't sending the tier correctly. Check the frontend code.
 
-## Step 6: Deploy Functions (If Using CLI)
+## Step 7: Deploy Functions (If Using CLI)
 
 If you have Supabase CLI installed:
 

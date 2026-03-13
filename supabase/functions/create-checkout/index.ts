@@ -84,6 +84,11 @@ serve(async (req) => {
     const redirectOrigin = getStripeRedirectOrigin(req);
     logStep("Redirect origin", { redirectOrigin });
 
+    // First-time subscribers: 14-day free trial. No charge until trial end; cancel anytime to avoid being charged.
+    const subscriptionData: Stripe.Checkout.SessionCreateParams["subscription_data"] | undefined = !hasUsedTrial
+      ? { trial_period_days: 14, metadata: { signup_trial: "14d" } }
+      : undefined;
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
@@ -94,14 +99,14 @@ serve(async (req) => {
         },
       ],
       mode: "subscription",
-      // Grant a 14-day free trial to first-time subscribers only
-      ...(!hasUsedTrial && { subscription_data: { trial_period_days: 14 } }),
+      ...(subscriptionData && { subscription_data: subscriptionData }),
       success_url: `${redirectOrigin}/app?subscription=success`,
       cancel_url: `${redirectOrigin}/?subscription=cancelled`,
       metadata: {
         user_id: user.id,
         tier: tier,
         seats: String(quantity),
+        ...(!hasUsedTrial && { free_trial: "14d" }),
       },
     });
 
