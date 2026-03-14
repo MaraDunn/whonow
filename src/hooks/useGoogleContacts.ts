@@ -18,14 +18,14 @@ type GooglePersonCreate = {
   phoneNumbers?: Array<{ value?: string }>;
   organizations?: Array<{ name?: string; title?: string }>;
   addresses?: Array<{
-    formattedValue?: string;
+    streetAddress?: string;
     city?: string;
     region?: string;
     postalCode?: string;
     country?: string;
   }>;
-  biographies?: Array<{ value: string; contentType: "TEXT_PLAIN" }>;
-  metadata?: { sources?: Array<{ etag?: string; id?: string; type?: string; updateTime?: string }> };
+  biographies?: Array<{ value: string }>;
+  metadata?: { sources?: Array<{ etag?: string }> };
 };
 
 type GoogleTokenResponse = {
@@ -122,9 +122,8 @@ function contactToGooglePerson(c: Contact, contactSource?: GoogleContactSource):
   const zipCode = (c.zipCode ?? "").trim();
   const country = (c.country ?? "").trim();
   if (address || city || state || zipCode || country) {
-    const formattedValue = [address, city, state, zipCode, country].filter(Boolean).join(", ");
     const addr: Record<string, string> = {};
-    if (formattedValue) addr.formattedValue = formattedValue;
+    if (address) addr.streetAddress = address;
     if (city) addr.city = city;
     if (state) addr.region = state;
     if (zipCode) addr.postalCode = zipCode;
@@ -134,7 +133,7 @@ function contactToGooglePerson(c: Contact, contactSource?: GoogleContactSource):
 
   const description = (c.description ?? "").trim();
   if (description) {
-    body.biographies = [{ value: description, contentType: "TEXT_PLAIN" }];
+    body.biographies = [{ value: description }];
   }
 
   if (contactSource?.etag?.trim()) {
@@ -142,10 +141,7 @@ function contactToGooglePerson(c: Contact, contactSource?: GoogleContactSource):
       sources: [
         omitUndefined({
           etag: contactSource.etag.trim(),
-          id: contactSource.id,
-          type: contactSource.type,
-          updateTime: contactSource.updateTime,
-        }) as GoogleContactSource,
+        }),
       ],
     };
   }
@@ -198,6 +194,28 @@ async function fetchGoogleConnectionsIndex(
 
 const SYNC_PERSON_FIELDS = "names,emailAddresses,phoneNumbers,organizations,addresses,biographies";
 
+function getUpdatePersonFields(body: GooglePersonCreate): string {
+  const writableFields: Array<keyof GooglePersonCreate> = [
+    "names",
+    "emailAddresses",
+    "phoneNumbers",
+    "organizations",
+    "addresses",
+    "biographies",
+  ];
+  return writableFields.filter((field) => Array.isArray(body[field]) && body[field]!.length > 0).join(",");
+}
+
+function stripOptionalGoogleFields(body: GooglePersonCreate): GooglePersonCreate {
+  return {
+    names: body.names,
+    emailAddresses: body.emailAddresses,
+    phoneNumbers: body.phoneNumbers,
+    organizations: body.organizations,
+    metadata: body.metadata,
+  };
+}
+
 /**
  * Sync WhoNow contacts to Google: update existing (matched by email or phone) or create new.
  * Runs sequentially. Skips contacts without a name. Returns created, updated, failed, errors.
@@ -242,22 +260,23 @@ export async function syncContactsToGoogle(
     const existing = emailKey ? index.byEmail.get(emailKey) : phoneKey ? index.byPhone.get(phoneKey) : undefined;
 
     if (existing) {
-      const updatePersonFields = SYNC_PERSON_FIELDS;
-      const updateUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${updatePersonFields}&personFields=${SYNC_PERSON_FIELDS}`;
       const body = contactToGooglePerson(c, existing.contactSource);
+      const updatePersonFields = getUpdatePersonFields(body);
+      if (!updatePersonFields) {
+        failed++;
+        errors.push(`${name}: nothing to update`);
+        continue;
+      }
+      const updateUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${updatePersonFields}&personFields=${SYNC_PERSON_FIELDS}`;
       try {
         let res = await fetch(updateUrl, { method: "PATCH", headers, body: JSON.stringify(body) });
         if (!res.ok && res.status === 400) {
-          const coreFields = "names,emailAddresses,phoneNumbers,organizations";
-          const coreUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${coreFields}&personFields=${coreFields}`;
-          const coreBody: GooglePersonCreate = {
-            names: body.names,
-            emailAddresses: body.emailAddresses,
-            phoneNumbers: body.phoneNumbers,
-            organizations: body.organizations,
-            metadata: body.metadata,
-          };
-          res = await fetch(coreUrl, { method: "PATCH", headers, body: JSON.stringify(coreBody) });
+          const fallbackBody = stripOptionalGoogleFields(body);
+          const fallbackFields = getUpdatePersonFields(fallbackBody);
+          if (fallbackFields) {
+            const fallbackUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${fallbackFields}&personFields=${fallbackFields}`;
+            res = await fetch(fallbackUrl, { method: "PATCH", headers, body: JSON.stringify(fallbackBody) });
+          }
         }
         if (res.ok) {
           updated++;
@@ -282,7 +301,11 @@ export async function syncContactsToGoogle(
     } else {
       const body = contactToGooglePerson(c);
       try {
-        const res = await fetch(createUrl, { method: "POST", headers, body: JSON.stringify(body) });
+        let res = await fetch(createUrl, { method: "POST", headers, body: JSON.stringify(body) });
+        if (!res.ok && res.status === 400) {
+          const fallbackBody = stripOptionalGoogleFields(body);
+          res = await fetch(createUrl, { method: "POST", headers, body: JSON.stringify(fallbackBody) });
+        }
         if (res.ok) {
           created++;
         } else {
