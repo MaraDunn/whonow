@@ -39,7 +39,7 @@ type GooglePerson = {
   phoneNumbers?: Array<{ value?: string }>;
   organizations?: Array<{ name?: string; title?: string }>;
   photos?: Array<{ url?: string }>;
-  metadata?: { sources?: Array<{ etag?: string }> };
+  metadata?: { sources?: Array<{ etag?: string; type?: string }> };
 };
 
 type PeopleConnectionsResponse = {
@@ -50,6 +50,13 @@ type PeopleConnectionsResponse = {
 /** Index entry for duplicate matching. */
 type ConnectionIndexEntry = { resourceName: string; etag: string };
 
+function getWritableContactEtag(person: GooglePerson): string | null {
+  const sources = person.metadata?.sources ?? [];
+  const contactSource = sources.find((s) => (s.type ?? "").toUpperCase() === "CONTACT");
+  const etag = (contactSource?.etag ?? "").trim();
+  return etag || null;
+}
+
 // Prefer VITE_GOOGLE_CLIENT_ID from env; fallback for backwards compatibility.
 const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID ||
@@ -59,6 +66,18 @@ const SCOPES = "https://www.googleapis.com/auth/contacts";
 
 function normalizeEmail(email: string): string {
   return (email ?? "").trim().toLowerCase();
+}
+
+/** People API rate limit: retry on 429/503 with exponential backoff. */
+async function fetchPeopleApi(url: string, headers: Record<string, string>, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, { headers });
+    if (res.status !== 429 && res.status !== 503) return res;
+    if (attempt === maxRetries) return res;
+    const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000);
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return fetch(url, { headers });
 }
 
 function normalizePhone(phone: string): string {
@@ -129,17 +148,16 @@ async function fetchGoogleConnectionsIndex(
   const baseUrl = `https://people.googleapis.com/v1/people/me/connections?personFields=${INDEX_PERSON_FIELDS}&pageSize=1000`;
   let pageToken: string | undefined;
 
+  const apiHeaders = { Authorization: `Bearer ${accessToken}` };
   do {
     const url = pageToken ? `${baseUrl}&pageToken=${encodeURIComponent(pageToken)}` : baseUrl;
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const response = await fetchPeopleApi(url, apiHeaders);
     if (!response.ok) throw new Error("Failed to fetch Google connections");
     const data = (await response.json()) as PeopleConnectionsResponse;
     const connections = data.connections || [];
     for (const p of connections) {
       const resourceName = p.resourceName;
-      const etag = p.metadata?.sources?.[0]?.etag ?? "";
+      const etag = getWritableContactEtag(p) ?? "";
       if (!resourceName || !etag) continue;
       const entry: ConnectionIndexEntry = { resourceName, etag };
       const email = p.emailAddresses?.[0]?.value;
@@ -225,9 +243,18 @@ export async function syncContactsToGoogle(
         if (res.ok) {
           updated++;
         } else {
-          failed++;
-          const errText = await res.text();
-          errors.push(`${name}: ${errText.slice(0, 80)}`);
+          const updateErrText = await res.text();
+          // If update fails (often because target isn't writable), fall back to create
+          // so sync still gets the contact into Google instead of hard-failing.
+          const createBody = contactToGooglePerson(c);
+          const createRes = await fetch(createUrl, { method: "POST", headers, body: JSON.stringify(createBody) });
+          if (createRes.ok) {
+            created++;
+          } else {
+            failed++;
+            const createErrText = await createRes.text();
+            errors.push(`${name}: update failed (${updateErrText.slice(0, 60)}), create failed (${createErrText.slice(0, 60)})`);
+          }
         }
       } catch (e) {
         failed++;
@@ -302,19 +329,16 @@ export const useGoogleContacts = () => {
         "https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses,phoneNumbers,organizations,photos&pageSize=1000";
       const allConnections: GooglePerson[] = [];
       let pageToken: string | undefined;
+      const apiHeaders = { Authorization: `Bearer ${token}` };
 
       do {
         const url = pageToken
           ? `${baseUrl}&pageToken=${encodeURIComponent(pageToken)}`
           : baseUrl;
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await fetchPeopleApi(url, apiHeaders);
 
         if (!response.ok) {
-          throw new Error("Failed to fetch contacts");
+          throw new Error(response.status === 429 ? "Too many requests; please try again in a minute." : "Failed to fetch contacts");
         }
 
         const data = (await response.json()) as PeopleConnectionsResponse;
@@ -337,7 +361,8 @@ export const useGoogleContacts = () => {
       setContacts(mapped);
       return mapped;
     } catch (error) {
-      toast.error("Failed to fetch Google contacts");
+      const msg = error instanceof Error ? error.message : "Failed to fetch Google contacts";
+      toast.error(msg);
       console.error(error);
       return [];
     } finally {

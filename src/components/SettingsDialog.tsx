@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Download, Loader2, RefreshCw, Calendar } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Download, Loader2, RefreshCw, Link2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 import { BrandingSettings } from "@/components/BrandingSettings";
@@ -42,62 +42,171 @@ interface SettingsDialogProps {
   canEditKeywords?: boolean;
 }
 
-function CalendarSettingsSection() {
-  const { status, isLoading, getStatus, connect, disconnect } = useGoogleCalendarIntegration();
+function GoogleSettingsSection() {
+  const { user } = useAuth();
+  const googleContacts = useGoogleContacts();
+  const { status: calendarStatus, isLoading: calendarLoading, getStatus, connect: connectCalendar, disconnect: disconnectCalendar } = useGoogleCalendarIntegration();
   const { addFollowUpsToCalendar, updateAddFollowUpsToCalendar } = useReminderSettings();
+  const [isSyncing, setIsSyncing] = useState(false);
+
   useEffect(() => {
     getStatus();
   }, [getStatus]);
+
+  const isGoogleConnected = googleContacts.isAuthenticated;
+  const isCalendarConnected = calendarStatus?.connected ?? false;
+
+  const handleConnectGoogle = async () => {
+    if (!googleContacts.isAuthenticated) {
+      await googleContacts.signIn();
+    }
+  };
+
+  const handleSyncToGoogle = async () => {
+    if (!user?.id) return;
+    if (!googleContacts.isAuthenticated) {
+      toast.info("Connect your Google account first");
+      await googleContacts.signIn();
+      return;
+    }
+    try {
+      const contacts = await fetchAllContactsForExport(supabase, user.id);
+      if (contacts.length === 0) {
+        toast.info("No contacts to sync");
+        return;
+      }
+      setIsSyncing(true);
+      await googleContacts.syncToGoogle(contacts);
+    } catch (err) {
+      console.error("Sync to Google error:", err);
+      toast.error("Failed to sync contacts to Google. Please try again.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-6 p-4 sm:p-6 md:p-8">
       <div>
-        <h2 className="text-2xl font-semibold mb-2">Calendar</h2>
+        <h2 className="text-2xl font-semibold mb-2">Connect to Google</h2>
         <p className="text-sm text-muted-foreground mb-6">
-          Connect Google Calendar to add follow-up reminders as all-day events when you set follow-up dates.
+          Connect your Google account once, then choose which features to use: import or sync contacts, and add follow-up reminders to Google Calendar.
         </p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Google Calendar</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Link2 className="h-4 w-4" />
+            Google account
+          </CardTitle>
           <CardDescription>
-            {status?.connected
-              ? "Your follow-up reminders can be added to your calendar."
-              : "Connect your Google account to add follow-up dates to your calendar."}
+            {isGoogleConnected
+              ? "Your Google account is connected. Use the toggles below to enable specific features."
+              : "Connect with Google to import contacts, sync contacts to Google, and optionally connect Google Calendar for follow-up events."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {status?.connected ? (
-            <Button variant="outline" onClick={disconnect} disabled={isLoading}>
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Disconnect Google Calendar
+          {!isGoogleConnected ? (
+            <Button onClick={handleConnectGoogle} disabled={googleContacts.isLoading}>
+              {googleContacts.isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Connect to Google
             </Button>
           ) : (
-            <Button onClick={connect} disabled={isLoading}>
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Connect Google Calendar
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="text-green-600 dark:text-green-400">Connected</Badge>
+              <Button variant="outline" size="sm" onClick={googleContacts.signOut} disabled={googleContacts.isLoading}>
+                Disconnect Google
+              </Button>
+            </div>
           )}
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Google Calendar</Label>
+            <p className="text-xs text-muted-foreground">
+              Add follow-up dates as all-day events on your Google Calendar.
+            </p>
+            {isCalendarConnected ? (
+              <Button variant="outline" size="sm" onClick={disconnectCalendar} disabled={calendarLoading}>
+                {calendarLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Disconnect Google Calendar
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={connectCalendar} disabled={calendarLoading}>
+                {calendarLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Connect Google Calendar
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Features</CardTitle>
+          <CardDescription>
+            Choose which Google features to enable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div className="space-y-0.5">
               <Label
                 htmlFor="add-follow-ups-to-calendar"
-                className={`text-sm font-medium ${!status?.connected ? "text-muted-foreground" : ""}`}
+                className={`text-sm font-medium ${!isCalendarConnected ? "text-muted-foreground" : ""}`}
               >
                 Add follow-ups to my calendar
               </Label>
               <p className="text-xs text-muted-foreground">
-                {status?.connected
+                {isCalendarConnected
                   ? "When you set a follow-up date on a contact, create an all-day event in Google Calendar."
-                  : "Connect Google Calendar above to add follow-up dates as all-day events."}
+                  : "Connect Google Calendar above to enable this."}
               </p>
             </div>
             <Switch
               id="add-follow-ups-to-calendar"
               checked={addFollowUpsToCalendar}
               onCheckedChange={(checked) => updateAddFollowUpsToCalendar(checked)}
-              disabled={!status?.connected}
+              disabled={!isCalendarConnected}
             />
           </div>
+
+          {googleContacts.isConfigured && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Sync contacts to Google</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Push your WhoNow contacts to your Google account. Existing contacts (matched by email or phone) are updated; others are created.
+                  </p>
+                </div>
+                {isGoogleConnected ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleSyncToGoogle}
+                    disabled={isSyncing}
+                  >
+                    {isSyncing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Syncing…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Sync now
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Connect Google above</span>
+                )}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -135,8 +244,7 @@ export function SettingsDialog({
     deleteCompany,
   } = useProfile(user?.id);
   const { tier, subscription, createCheckout, isLoading: subLoading, refreshSubscription, canAccessFeature } = useSubscription();
-  const googleContacts = useGoogleContacts();
-  
+
   // Fallback: if no owner is set and user is admin, treat as super admin (backwards compatibility)
   const isSuperAdmin = isSuperAdminFromHook || (isAdmin && (!company?.ownerId || company?.ownerId === user?.id));
   const tierConfig = TIER_CONFIGS[tier];
@@ -384,26 +492,6 @@ export function SettingsDialog({
     }
   };
 
-  const handleSyncToGoogle = async () => {
-    if (!user?.id) return;
-    if (!googleContacts.isAuthenticated) {
-      toast.info("Connect your Google account first");
-      await googleContacts.signIn();
-      return;
-    }
-    try {
-      const contacts = await fetchAllContactsForExport(supabase, user.id);
-      if (contacts.length === 0) {
-        toast.info("No contacts to sync");
-        return;
-      }
-      await googleContacts.syncToGoogle(contacts);
-    } catch (err) {
-      console.error("Sync to Google error:", err);
-      toast.error("Failed to sync contacts to Google. Please try again.");
-    }
-  };
-
   const handleJoinCompany = () => {
     if (!inviteCode.trim()) {
       toast.error("Please enter an invite code");
@@ -467,7 +555,7 @@ export function SettingsDialog({
           { id: "keywords", label: "Keywords", icon: Tags },
           { id: "export", label: "Export & backup", icon: Download },
           { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
-          { id: "calendar", label: "Calendar", icon: Calendar },
+          { id: "google", label: "Connect to Google", icon: Link2 },
         ],
       },
       {
@@ -832,55 +920,6 @@ export function SettingsDialog({
                   </CardContent>
                 </Card>
 
-                {googleContacts.isConfigured && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <RefreshCw className="h-4 w-4" />
-                        Sync to Google Contacts
-                      </CardTitle>
-                      <CardDescription>
-                        Push your WhoNow contacts to your Google account. Existing Google contacts (matched by email or phone) are updated; others are created. Addresses and notes are synced. Contacts without a name are skipped.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {!googleContacts.isAuthenticated ? (
-                        <Button
-                          onClick={handleSyncToGoogle}
-                          disabled={googleContacts.isLoading}
-                          variant="secondary"
-                        >
-                          {googleContacts.isLoading ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Connecting…
-                            </>
-                          ) : (
-                            "Connect Google account"
-                          )}
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={handleSyncToGoogle}
-                          disabled={googleContacts.isSyncing}
-                          variant="secondary"
-                        >
-                          {googleContacts.isSyncing ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Syncing to Google…
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                              Sync contacts to Google
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
               </div>
             )}
 
@@ -1030,9 +1069,9 @@ export function SettingsDialog({
               </div>
             )}
 
-            {/* Calendar Tab - Google Calendar connect + add follow-ups preference */}
-            {selectedCategory === "calendar" && (
-              <CalendarSettingsSection />
+            {/* Google - Connect to Google, Calendar, and feature toggles */}
+            {selectedCategory === "google" && (
+              <GoogleSettingsSection />
             )}
 
             {/* Security Tab */}
