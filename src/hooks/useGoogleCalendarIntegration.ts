@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { getValidSession } from "@/utils/authToken";
+import { getValidSession, isTokenValid } from "@/utils/authToken";
 
 interface GoogleCalendarStatus {
   connected: boolean;
@@ -33,13 +33,26 @@ export function useGoogleCalendarIntegration() {
           apikey: supabaseAnonKey,
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ action: "get-status", jwt: token }),
+        body: JSON.stringify({ action: "get-status" }),
       });
       const data = await resp.json().catch(() => ({}));
       if (resp.status === 401 && !retryAfter401) {
-        const retrySession = await getValidSession();
-        if (retrySession?.access_token) {
-          return getStatus(true);
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        if (refreshed.session?.access_token) {
+          const retryResp = await fetch(`${supabaseUrl}/functions/v1/google-calendar-integration`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${refreshed.session.access_token}`,
+            },
+            body: JSON.stringify({ action: "get-status" }),
+          });
+          const retryData = await retryResp.json().catch(() => ({}));
+          if (retryResp.ok) {
+            setStatus(retryData);
+            return retryData;
+          }
         }
       }
       if (!resp.ok) {
@@ -56,12 +69,34 @@ export function useGoogleCalendarIntegration() {
     }
   }, []);
 
-  // Fetch calendar connection status on mount so follow-up → calendar works without opening Settings
+  // Fetch calendar connection status once auth state is ready.
   useEffect(() => {
-    getStatus();
+    let cancelled = false;
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!cancelled && session?.access_token && isTokenValid(session)) {
+        await getStatus();
+      } else if (!cancelled) {
+        setStatus({ connected: false });
+      }
+    };
+    void init();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.access_token && isTokenValid(session)) {
+        void getStatus();
+      } else {
+        setStatus({ connected: false });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      authListener.subscription.unsubscribe();
+    };
   }, [getStatus]);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (retryAfter401 = false) => {
     try {
       setIsLoading(true);
       const session = await getValidSession();
@@ -83,12 +118,18 @@ export function useGoogleCalendarIntegration() {
           apikey: supabaseAnonKey,
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ action: "connect", jwt: token }),
+        body: JSON.stringify({ action: "connect" }),
       });
       const data = await resp.json().catch(() => ({}));
+      if (resp.status === 401 && !retryAfter401) {
+        const retrySession = await getValidSession();
+        if (retrySession?.access_token) {
+          return connect(true);
+        }
+      }
       if (!resp.ok || data?.error) {
         const msg = data?.error ?? "Failed to start Google Calendar connection";
-        if (resp.status === 401 && (data?.detail?.includes("expired") || msg.includes("token"))) {
+        if (resp.status === 401 || data?.detail?.includes("expired") || msg.includes("token")) {
           toast.error("Session expired. Please sign in again.");
         } else {
           toast.error(msg);
@@ -129,7 +170,7 @@ export function useGoogleCalendarIntegration() {
           apikey: supabaseAnonKey,
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ action: "disconnect", jwt: session.access_token }),
+        body: JSON.stringify({ action: "disconnect" }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || data?.error) {
@@ -154,6 +195,12 @@ export function useGoogleCalendarIntegration() {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
         if (!supabaseUrl || !supabaseAnonKey) return false;
+        const createEventBody = JSON.stringify({
+          action: "create-event",
+          contactId,
+          followUpDate,
+          contactName,
+        });
         const resp = await fetch(`${supabaseUrl}/functions/v1/google-calendar-integration`, {
           method: "POST",
           headers: {
@@ -161,14 +208,24 @@ export function useGoogleCalendarIntegration() {
             apikey: supabaseAnonKey,
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({
-            action: "create-event",
-            jwt: session.access_token,
-            contactId,
-            followUpDate,
-            contactName,
-          }),
+          body: createEventBody,
         });
+        if (resp.status === 401) {
+          const { data: refreshed } = await supabase.auth.refreshSession();
+          if (refreshed.session?.access_token) {
+            const retryResp = await fetch(`${supabaseUrl}/functions/v1/google-calendar-integration`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${refreshed.session.access_token}`,
+              },
+              body: createEventBody,
+            });
+            const retryData = await retryResp.json().catch(() => ({}));
+            return retryResp.ok && !!retryData?.success;
+          }
+        }
         const data = await resp.json().catch(() => ({}));
         return resp.ok && !!data?.success;
       } catch {

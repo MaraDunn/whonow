@@ -45,13 +45,9 @@ interface SettingsDialogProps {
 function GoogleSettingsSection() {
   const { user } = useAuth();
   const googleContacts = useGoogleContacts();
-  const { status: calendarStatus, isLoading: calendarLoading, getStatus, connect: connectCalendar, disconnect: disconnectCalendar } = useGoogleCalendarIntegration();
+  const { status: calendarStatus, isLoading: calendarLoading, connect: connectCalendar, disconnect: disconnectCalendar } = useGoogleCalendarIntegration();
   const { addFollowUpsToCalendar, updateAddFollowUpsToCalendar } = useReminderSettings();
   const [isSyncing, setIsSyncing] = useState(false);
-
-  useEffect(() => {
-    getStatus();
-  }, [getStatus]);
 
   const isGoogleConnected = googleContacts.isAuthenticated;
   const isCalendarConnected = calendarStatus?.connected ?? false;
@@ -90,32 +86,32 @@ function GoogleSettingsSection() {
       <div>
         <h2 className="text-2xl font-semibold mb-2">Connect to Google</h2>
         <p className="text-sm text-muted-foreground mb-6">
-          Connect your Google account once, then choose which features to use: import or sync contacts, and add follow-up reminders to Google Calendar.
+          Google Contacts and Google Calendar connect separately. Use Contacts for import/sync and Calendar for follow-up events.
         </p>
       </div>
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Link2 className="h-4 w-4" />
-            Google account
+            Google Contacts account
           </CardTitle>
           <CardDescription>
             {isGoogleConnected
-              ? "Your Google account is connected. Use the toggles below to enable specific features."
-              : "Connect with Google to import contacts, sync contacts to Google, and optionally connect Google Calendar for follow-up events."}
+              ? "Connected for importing contacts and syncing WhoNow contacts to Google Contacts."
+              : "Connect Google Contacts to import contacts and sync WhoNow contacts to your Google account."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!isGoogleConnected ? (
             <Button onClick={handleConnectGoogle} disabled={googleContacts.isLoading}>
               {googleContacts.isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Connect to Google
+              Connect Google Contacts
             </Button>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="text-green-600 dark:text-green-400">Connected</Badge>
+              <Badge variant="secondary" className="text-green-600 dark:text-green-400">Contacts connected</Badge>
               <Button variant="outline" size="sm" onClick={googleContacts.signOut} disabled={googleContacts.isLoading}>
-                Disconnect Google
+                Disconnect Google Contacts
               </Button>
             </div>
           )}
@@ -123,9 +119,14 @@ function GoogleSettingsSection() {
           <Separator />
 
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Google Calendar</Label>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium">Google Calendar integration</Label>
+              <Badge variant="secondary" className={isCalendarConnected ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+                {isCalendarConnected ? "Calendar connected" : "Calendar not connected"}
+              </Badge>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Add follow-up dates as all-day events on your Google Calendar.
+              This is separate from Google Contacts. Connect it to create calendar events from follow-up dates.
             </p>
             {isCalendarConnected ? (
               <Button variant="outline" size="sm" onClick={disconnectCalendar} disabled={calendarLoading}>
@@ -161,7 +162,7 @@ function GoogleSettingsSection() {
               <p className="text-xs text-muted-foreground">
                 {isCalendarConnected
                   ? "When you set a follow-up date on a contact, create an all-day event in Google Calendar."
-                  : "Connect Google Calendar above to enable this."}
+                  : "Connect Google Calendar above to enable this. Google Contacts alone is not enough."}
               </p>
             </div>
             <Switch

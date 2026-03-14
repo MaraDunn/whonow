@@ -46,13 +46,17 @@ export async function getValidAccessToken(): Promise<string | null> {
     return session.access_token;
   }
   const now = Date.now();
-  if (now - lastRefreshAt < REFRESH_THROTTLE_MS && lastRefreshedSession?.access_token) {
+  if (
+    now - lastRefreshAt < REFRESH_THROTTLE_MS &&
+    lastRefreshedSession?.access_token &&
+    isTokenValid(lastRefreshedSession)
+  ) {
     return lastRefreshedSession.access_token;
   }
   const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
   lastRefreshAt = now;
   lastRefreshedSession = refreshed ?? null;
-  if (error || !lastRefreshedSession?.access_token) return null;
+  if (error || !lastRefreshedSession?.access_token || !isTokenValid(lastRefreshedSession)) return null;
   return lastRefreshedSession.access_token;
 }
 
@@ -64,12 +68,16 @@ export async function getValidSession(): Promise<Session | null> {
   const { data: { session } } = await supabase.auth.getSession();
   if (session && isTokenValid(session)) return session;
   const now = Date.now();
-  if (now - lastRefreshAt < REFRESH_THROTTLE_MS && lastRefreshedSession) {
+  if (
+    now - lastRefreshAt < REFRESH_THROTTLE_MS &&
+    lastRefreshedSession &&
+    isTokenValid(lastRefreshedSession)
+  ) {
     return lastRefreshedSession;
   }
   const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
   lastRefreshAt = now;
   lastRefreshedSession = refreshed ?? null;
   if (error) return session && isTokenValid(session) ? session : null;
-  return lastRefreshedSession;
+  return lastRefreshedSession && isTokenValid(lastRefreshedSession) ? lastRefreshedSession : null;
 }
