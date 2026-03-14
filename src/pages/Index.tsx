@@ -239,11 +239,12 @@ const IndexContent = () => {
     const message = searchParams.get("message");
 
     if (integration && status) {
+      const integrationLabel = integration === "google_calendar" ? "Google Calendar" : integration.charAt(0).toUpperCase() + integration.slice(1);
       if (status === "success") {
-        toast.success(`${integration.charAt(0).toUpperCase() + integration.slice(1)} connected successfully!`);
+        toast.success(`${integrationLabel} connected successfully!`);
         setSettingsOpen(true);
       } else if (status === "error") {
-        toast.error(`Failed to connect ${integration}: ${message || "Unknown error"}`);
+        toast.error(`Failed to connect ${integrationLabel}: ${message || "Unknown error"}`);
       }
       
       // Clear the URL params

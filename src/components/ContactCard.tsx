@@ -9,6 +9,8 @@ import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { LockedFeatureButton, dialogJustClosed } from "@/components/LockedFeatureButton";
 import { useSetFollowUpDate } from "@/hooks/useFollowUps";
+import { useGoogleCalendarIntegration } from "@/hooks/useGoogleCalendarIntegration";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -88,9 +90,27 @@ interface ContactCardProps {
   interactionCounts?: Record<string, number>;
 }
 
-function CardFollowUpButton({ contactId, followUpDate }: { contactId: string; followUpDate?: string }) {
+function CardFollowUpButton({
+  contactId,
+  followUpDate,
+  contactName,
+}: {
+  contactId: string;
+  followUpDate?: string;
+  contactName?: string;
+}) {
   const [open, setOpen] = useStateReact(false);
-  const setFollowUpDate = useSetFollowUpDate();
+  const { status: calendarStatus, createEvent } = useGoogleCalendarIntegration();
+  const { addFollowUpsToCalendar } = useReminderSettings();
+  const onAfterSet =
+    calendarStatus?.connected && addFollowUpsToCalendar
+      ? (id: string, date: string, name: string) => {
+          createEvent(id, date, name).then((ok) => {
+            if (!ok) toast.error("Follow-up set; could not add to Google Calendar");
+          });
+        }
+      : undefined;
+  const setFollowUpDate = useSetFollowUpDate(onAfterSet ? { onAfterSet } : undefined);
   const today = new Date().toISOString().split("T")[0];
   const isOverdue = followUpDate && followUpDate < today;
 
@@ -119,7 +139,11 @@ function CardFollowUpButton({ contactId, followUpDate }: { contactId: string; fo
           mode="single"
           selected={followUpDate ? parseISO(followUpDate) : undefined}
           onSelect={(date) => {
-            setFollowUpDate.mutate({ id: contactId, date: date ? format(date, "yyyy-MM-dd") : null });
+            setFollowUpDate.mutate({
+              id: contactId,
+              date: date ? format(date, "yyyy-MM-dd") : null,
+              contactName,
+            });
             setOpen(false);
           }}
           initialFocus
@@ -130,7 +154,7 @@ function CardFollowUpButton({ contactId, followUpDate }: { contactId: string; fo
               className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-1 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
-                setFollowUpDate.mutate({ id: contactId, date: null });
+                setFollowUpDate.mutate({ id: contactId, date: null, contactName });
                 setOpen(false);
               }}
             >
@@ -1223,7 +1247,11 @@ const ContactCardComponent = function ContactCard({
             )
           )}
           {hasClientAccess && (
-            <CardFollowUpButton contactId={contact.id} followUpDate={contact.followUpDate} />
+            <CardFollowUpButton
+            contactId={contact.id}
+            followUpDate={contact.followUpDate}
+            contactName={contact.name}
+          />
           )}
         </div>
       )}

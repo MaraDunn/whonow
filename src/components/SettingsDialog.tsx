@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Download, Loader2 } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Download, Loader2, RefreshCw, Calendar } from "lucide-react";
 import { useTheme } from "next-themes";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 import { BrandingSettings } from "@/components/BrandingSettings";
@@ -25,6 +25,10 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
 import { validatePassword, validatePasswordMatch } from "@/lib/passwordValidation";
 import { fetchAllContactsForExport, contactsToCsv, downloadCsvFile } from "@/utils/exportContacts";
+import { useGoogleContacts } from "@/hooks/useGoogleContacts";
+import { useGoogleCalendarIntegration } from "@/hooks/useGoogleCalendarIntegration";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
+import { Switch } from "@/components/ui/switch";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -35,6 +39,64 @@ interface SettingsDialogProps {
   onResetKeywords: () => void;
   isCompanyKeywords?: boolean;
   canEditKeywords?: boolean;
+}
+
+function CalendarSettingsSection() {
+  const { status, isLoading, getStatus, connect, disconnect } = useGoogleCalendarIntegration();
+  const { addFollowUpsToCalendar, updateAddFollowUpsToCalendar } = useReminderSettings();
+  useEffect(() => {
+    getStatus();
+  }, [getStatus]);
+  return (
+    <div className="space-y-6 p-4 sm:p-6 md:p-8">
+      <div>
+        <h2 className="text-2xl font-semibold mb-2">Calendar</h2>
+        <p className="text-sm text-muted-foreground mb-6">
+          Connect Google Calendar to add follow-up reminders as all-day events when you set follow-up dates.
+        </p>
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Google Calendar</CardTitle>
+          <CardDescription>
+            {status?.connected
+              ? "Your follow-up reminders can be added to your calendar."
+              : "Connect your Google account to add follow-up dates to your calendar."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {status?.connected ? (
+            <Button variant="outline" onClick={disconnect} disabled={isLoading}>
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Disconnect Google Calendar
+            </Button>
+          ) : (
+            <Button onClick={connect} disabled={isLoading}>
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Connect Google Calendar
+            </Button>
+          )}
+          {status?.connected && (
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="add-follow-ups-to-calendar" className="text-sm font-medium">
+                  Add follow-ups to my calendar
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  When you set a follow-up date on a contact, create an all-day event in Google Calendar.
+                </p>
+              </div>
+              <Switch
+                id="add-follow-ups-to-calendar"
+                checked={addFollowUpsToCalendar}
+                onCheckedChange={(checked) => updateAddFollowUpsToCalendar(checked)}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 export function SettingsDialog({
@@ -68,6 +130,7 @@ export function SettingsDialog({
     deleteCompany,
   } = useProfile(user?.id);
   const { tier, subscription, createCheckout, isLoading: subLoading, refreshSubscription, canAccessFeature } = useSubscription();
+  const googleContacts = useGoogleContacts();
   
   // Fallback: if no owner is set and user is admin, treat as super admin (backwards compatibility)
   const isSuperAdmin = isSuperAdminFromHook || (isAdmin && (!company?.ownerId || company?.ownerId === user?.id));
@@ -316,6 +379,26 @@ export function SettingsDialog({
     }
   };
 
+  const handleSyncToGoogle = async () => {
+    if (!user?.id) return;
+    if (!googleContacts.isAuthenticated) {
+      toast.info("Connect your Google account first");
+      await googleContacts.signIn();
+      return;
+    }
+    try {
+      const contacts = await fetchAllContactsForExport(supabase, user.id);
+      if (contacts.length === 0) {
+        toast.info("No contacts to sync");
+        return;
+      }
+      await googleContacts.syncToGoogle(contacts);
+    } catch (err) {
+      console.error("Sync to Google error:", err);
+      toast.error("Failed to sync contacts to Google. Please try again.");
+    }
+  };
+
   const handleJoinCompany = () => {
     if (!inviteCode.trim()) {
       toast.error("Please enter an invite code");
@@ -379,6 +462,7 @@ export function SettingsDialog({
           { id: "keywords", label: "Keywords", icon: Tags },
           { id: "export", label: "Export & backup", icon: Download },
           { id: "duplicates", label: "Duplicate Cleanup", icon: AlertTriangle },
+          { id: "calendar", label: "Calendar", icon: Calendar },
         ],
       },
       {
@@ -741,6 +825,56 @@ export function SettingsDialog({
                     </Button>
                   </CardContent>
                 </Card>
+
+                {googleContacts.isConfigured && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <RefreshCw className="h-4 w-4" />
+                        Sync to Google Contacts
+                      </CardTitle>
+                      <CardDescription>
+                        Push your WhoNow contacts to your Google account. Existing Google contacts (matched by email or phone) are updated; others are created. Addresses and notes are synced. Contacts without a name are skipped.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {!googleContacts.isAuthenticated ? (
+                        <Button
+                          onClick={handleSyncToGoogle}
+                          disabled={googleContacts.isLoading}
+                          variant="secondary"
+                        >
+                          {googleContacts.isLoading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Connecting…
+                            </>
+                          ) : (
+                            "Connect Google account"
+                          )}
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={handleSyncToGoogle}
+                          disabled={googleContacts.isSyncing}
+                          variant="secondary"
+                        >
+                          {googleContacts.isSyncing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Syncing to Google…
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Sync contacts to Google
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
 
@@ -888,6 +1022,11 @@ export function SettingsDialog({
                   </CardContent>
                 </Card>
               </div>
+            )}
+
+            {/* Calendar Tab - Google Calendar connect + add follow-ups preference */}
+            {selectedCategory === "calendar" && (
+              <CalendarSettingsSection />
             )}
 
             {/* Security Tab */}

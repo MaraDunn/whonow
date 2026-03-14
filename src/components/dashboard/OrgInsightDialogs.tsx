@@ -31,6 +31,9 @@ import {
   useOrgHealthScoreData,
 } from "@/hooks/useOrgInsightContacts";
 import { useBulkSetFollowUpDate, useSetFollowUpDate } from "@/hooks/useFollowUps";
+import { useGoogleCalendarIntegration } from "@/hooks/useGoogleCalendarIntegration";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
+import { toast } from "sonner";
 import type { Contact } from "@/types/contact";
 
 // ─── Shared Components ───────────────────────────────────────────
@@ -295,8 +298,18 @@ export function OrgStaleContactsDialog({
   reminderInterval,
 }: OrgStaleContactsDialogProps) {
   const { data: contacts, isLoading } = useOrgStaleContacts(reminderInterval);
-  const setFollowUp = useSetFollowUpDate();
-  const bulkSetFollowUp = useBulkSetFollowUpDate();
+  const { status: calendarStatus, createEvent } = useGoogleCalendarIntegration();
+  const { addFollowUpsToCalendar } = useReminderSettings();
+  const onAfterSet = useMemo(() => {
+    if (!calendarStatus?.connected || !addFollowUpsToCalendar) return undefined;
+    return (contactId: string, date: string, contactName: string) => {
+      createEvent(contactId, date, contactName).then((ok) => {
+        if (!ok) toast.error("Follow-up set; could not add to Google Calendar");
+      });
+    };
+  }, [calendarStatus?.connected, addFollowUpsToCalendar, createEvent]);
+  const setFollowUp = useSetFollowUpDate({ onAfterSet });
+  const bulkSetFollowUp = useBulkSetFollowUpDate({ onAfterSet });
 
   const tomorrow = useMemo(() => {
     const d = new Date();
@@ -312,7 +325,11 @@ export function OrgStaleContactsDialog({
   const handleBulkAdd = () => {
     const ids = contactsWithoutFollowUp.map((c) => c.id);
     if (ids.length === 0) return;
-    bulkSetFollowUp.mutate({ ids, date: tomorrow });
+    const contactNames: Record<string, string> = {};
+    contactsWithoutFollowUp.forEach((c) => {
+      if (c.name) contactNames[c.id] = c.name;
+    });
+    bulkSetFollowUp.mutate({ ids, date: tomorrow, contactNames: Object.keys(contactNames).length > 0 ? contactNames : undefined });
   };
 
   return (
@@ -368,7 +385,7 @@ export function OrgStaleContactsDialog({
                         size="sm"
                         className="h-7 text-xs"
                         onClick={() =>
-                          setFollowUp.mutate({ id: c.id, date: tomorrow })
+                          setFollowUp.mutate({ id: c.id, date: tomorrow, contactName: c.name })
                         }
                       >
                         <Plus className="h-3 w-3 mr-1" />

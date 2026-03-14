@@ -77,6 +77,9 @@ type SlimContactRow = {
   last_contacted_at: string | null;
   is_client: boolean | null;
   company_id: string | null;
+  city?: string | null;
+  state?: string | null;
+  address?: string | null;
 };
 
 function mapSlimToContact(row: SlimContactRow): Contact {
@@ -96,6 +99,9 @@ function mapSlimToContact(row: SlimContactRow): Contact {
     isClient: row.is_client ?? false,
     companyId: row.company_id ?? undefined,
     createdAt: row.created_at,
+    city: row.city ?? undefined,
+    state: row.state ?? undefined,
+    address: row.address ?? undefined,
   };
 }
 

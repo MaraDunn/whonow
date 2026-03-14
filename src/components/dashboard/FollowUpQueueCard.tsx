@@ -15,6 +15,9 @@ import {
   getNeedsFollowUp,
   isOverdue,
 } from "@/hooks/useFollowUps";
+import { useGoogleCalendarIntegration } from "@/hooks/useGoogleCalendarIntegration";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
+import { toast } from "sonner";
 import type { Contact } from "@/types/contact";
 
 interface FollowUpQueueCardProps {
@@ -110,14 +113,29 @@ function BulkDatePickerPopover({ onSelect, disabled }: BulkDatePickerPopoverProp
   );
 }
 
+function useCalendarFollowUpCallback() {
+  const { status, createEvent } = useGoogleCalendarIntegration();
+  const { addFollowUpsToCalendar } = useReminderSettings();
+  return useMemo(() => {
+    if (!status?.connected || !addFollowUpsToCalendar) return undefined;
+    return (contactId: string, date: string, contactName: string) => {
+      createEvent(contactId, date, contactName).then((ok) => {
+        if (!ok) toast.error("Follow-up set; could not add to Google Calendar");
+      });
+    };
+  }, [status?.connected, addFollowUpsToCalendar, createEvent]);
+}
+
 export function FollowUpQueueCard({ contacts, onMoveToOutreach, onViewContact }: FollowUpQueueCardProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const onAfterSet = useCalendarFollowUpCallback();
 
-  const setFollowUpDate = useSetFollowUpDate();
-  const snoozeFollowUp = useSnoozeFollowUp();
-  const bulkSetFollowUpDate = useBulkSetFollowUpDate();
+  const setFollowUpDate = useSetFollowUpDate({ onAfterSet });
+  const snoozeFollowUp = useSnoozeFollowUp({ onAfterSnooze: onAfterSet });
+  const bulkSetFollowUpDate = useBulkSetFollowUpDate({ onAfterSet });
 
   const needsFollowUp = useMemo(() => getNeedsFollowUp(contacts), [contacts]);
+  const contactMap = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -137,8 +155,14 @@ export function FollowUpQueueCard({ contacts, onMoveToOutreach, onViewContact }:
   };
 
   const handleBulkSet = (date: string) => {
+    const ids = Array.from(selectedIds);
+    const contactNames: Record<string, string> = {};
+    ids.forEach((id) => {
+      const c = contactMap.get(id);
+      if (c?.name) contactNames[id] = c.name;
+    });
     bulkSetFollowUpDate.mutate(
-      { ids: Array.from(selectedIds), date },
+      { ids, date, contactNames: Object.keys(contactNames).length > 0 ? contactNames : undefined },
       { onSuccess: () => setSelectedIds(new Set()) }
     );
   };
@@ -263,7 +287,7 @@ export function FollowUpQueueCard({ contacts, onMoveToOutreach, onViewContact }:
                               size="icon"
                               className="h-7 w-7"
                               onClick={() =>
-                                snoozeFollowUp.mutate({ id: contact.id, days: 7 })
+                                snoozeFollowUp.mutate({ id: contact.id, days: 7, contactName: contact.name })
                               }
                             >
                               <AlarmClock className="h-3.5 w-3.5" />
@@ -275,7 +299,7 @@ export function FollowUpQueueCard({ contacts, onMoveToOutreach, onViewContact }:
                       <DatePickerPopover
                         currentDate={contact.followUpDate}
                         onSelect={(date) =>
-                          setFollowUpDate.mutate({ id: contact.id, date })
+                          setFollowUpDate.mutate({ id: contact.id, date, contactName: contact.name })
                         }
                       />
                     </div>

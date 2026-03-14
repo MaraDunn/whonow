@@ -3,7 +3,8 @@ import { Folder } from "@/types/folder";
 import { Mail, Phone, Building2, Briefcase, Clock, Star, User, Users, UserCircle, Folder as FolderIcon, FolderPlus, X, Edit, Trash2, Share2, FileDown, Save, ChevronDown, ChevronUp, Navigation, MapPin, Loader2, Check, Camera, MessageSquare, Video, Sparkles, Zap, CalendarClock, Activity } from "lucide-react";
 import { RelationshipHealthBadge } from "@/components/RelationshipHealthBadge";
 import { computeHealthScore } from "@/utils/relationshipHealth";
-import { useSetFollowUpDate } from "@/hooks/useFollowUps";
+import { useSetFollowUpDate, type SetFollowUpDateOptions } from "@/hooks/useFollowUps";
+import { useGoogleCalendarIntegration } from "@/hooks/useGoogleCalendarIntegration";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO } from "date-fns";
 import {
@@ -46,7 +47,7 @@ import { cn } from "@/lib/utils";
 import { ShareToSlackDialog } from "@/components/ShareToSlackDialog";
 import { ContactActivityTimeline } from "@/components/ContactActivityTimeline";
 import { ShareToTeamsDialog } from "@/components/ShareToTeamsDialog";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSlackIntegration } from "@/hooks/useSlackIntegration";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { useReminderSettings } from "@/hooks/useReminderSettings";
@@ -91,9 +92,19 @@ function CollapsibleSection({ title, open: isOpen, onOpenChange: setOpen, childr
   );
 }
 
-function FollowUpDateRow({ contactId, followUpDate }: { contactId: string; followUpDate?: string }) {
+function FollowUpDateRow({
+  contactId,
+  followUpDate,
+  contactName,
+  onAfterSet,
+}: {
+  contactId: string;
+  followUpDate?: string;
+  contactName?: string;
+  onAfterSet?: SetFollowUpDateOptions["onAfterSet"];
+}) {
   const [open, setOpen] = useState(false);
-  const setFollowUpDate = useSetFollowUpDate();
+  const setFollowUpDate = useSetFollowUpDate(onAfterSet ? { onAfterSet } : undefined);
 
   const label = followUpDate
     ? `Follow-up: ${format(parseISO(followUpDate), "MMM d, yyyy")}`
@@ -122,7 +133,11 @@ function FollowUpDateRow({ contactId, followUpDate }: { contactId: string; follo
           mode="single"
           selected={followUpDate ? parseISO(followUpDate) : undefined}
           onSelect={(date) => {
-            setFollowUpDate.mutate({ id: contactId, date: date ? format(date, "yyyy-MM-dd") : null });
+            setFollowUpDate.mutate({
+              id: contactId,
+              date: date ? format(date, "yyyy-MM-dd") : null,
+              contactName,
+            });
             setOpen(false);
           }}
           initialFocus
@@ -132,7 +147,7 @@ function FollowUpDateRow({ contactId, followUpDate }: { contactId: string; follo
             <button
               className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-1 transition-colors"
               onClick={() => {
-                setFollowUpDate.mutate({ id: contactId, date: null });
+                setFollowUpDate.mutate({ id: contactId, date: null, contactName });
                 setOpen(false);
               }}
             >
@@ -184,8 +199,18 @@ export function ContactDetailsDialog({
   const [folderPopoverOpen, setFolderPopoverOpen] = useState(false);
   const slack = useSlackIntegration();
   const { uploadAvatar, uploading } = useAvatarUpload();
-  const { contactInterval: globalContactInterval } = useReminderSettings();
+  const { contactInterval: globalContactInterval, addFollowUpsToCalendar } = useReminderSettings();
+  const { status: calendarStatus, createEvent } = useGoogleCalendarIntegration();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const onAfterSetFollowUp = useMemo(() => {
+    if (!calendarStatus?.connected || !addFollowUpsToCalendar) return undefined;
+    return (contactId: string, date: string, contactName: string) => {
+      createEvent(contactId, date, contactName).then((ok) => {
+        if (!ok) toast.error("Follow-up set; could not add to Google Calendar");
+      });
+    };
+  }, [calendarStatus?.connected, addFollowUpsToCalendar, createEvent]);
 
   // Form state for edit mode
   const [editedContact, setEditedContact] = useState<Contact | null>(null);
@@ -1201,7 +1226,12 @@ export function ContactDetailsDialog({
                   </div>
 
                   {/* Follow-up date */}
-                  <FollowUpDateRow contactId={contact.id} followUpDate={contact.followUpDate} />
+                  <FollowUpDateRow
+                  contactId={contact.id}
+                  followUpDate={contact.followUpDate}
+                  contactName={contact.name}
+                  onAfterSet={onAfterSetFollowUp}
+                />
                 </div>
               </div>
 

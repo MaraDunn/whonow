@@ -14,16 +14,17 @@ export const useReminderSettings = () => {
   const { data: settings, isLoading } = useQuery({
     queryKey: ["reminder-settings", user?.id],
     queryFn: async () => {
-      if (!user?.id) return { reminderInterval: DEFAULT_INTERVAL, contactInterval: DEFAULT_CONTACT_INTERVAL };
+      if (!user?.id) return { reminderInterval: DEFAULT_INTERVAL, contactInterval: DEFAULT_CONTACT_INTERVAL, addFollowUpsToCalendar: true };
       const { data, error } = await supabase
         .from("profiles")
-        .select("default_reminder_interval, default_contact_interval")
+        .select("default_reminder_interval, default_contact_interval, add_follow_ups_to_calendar")
         .eq("id", user.id)
         .single();
-      if (error) return { reminderInterval: DEFAULT_INTERVAL, contactInterval: DEFAULT_CONTACT_INTERVAL };
+      if (error) return { reminderInterval: DEFAULT_INTERVAL, contactInterval: DEFAULT_CONTACT_INTERVAL, addFollowUpsToCalendar: true };
       return {
         reminderInterval: (data?.default_reminder_interval as number | null) ?? DEFAULT_INTERVAL,
         contactInterval: (data?.default_contact_interval as number | null) ?? DEFAULT_CONTACT_INTERVAL,
+        addFollowUpsToCalendar: (data?.add_follow_ups_to_calendar as boolean | null) ?? true,
       };
     },
     enabled: !!user,
@@ -32,6 +33,7 @@ export const useReminderSettings = () => {
 
   const reminderInterval = settings?.reminderInterval ?? DEFAULT_INTERVAL;
   const contactInterval = settings?.contactInterval ?? DEFAULT_CONTACT_INTERVAL;
+  const addFollowUpsToCalendar = settings?.addFollowUpsToCalendar ?? true;
 
   const updateReminderInterval = useMutation({
     mutationFn: async (interval: number) => {
@@ -74,12 +76,34 @@ export const useReminderSettings = () => {
     },
   });
 
+  const updateAddFollowUpsToCalendar = useMutation({
+    mutationFn: async (value: boolean) => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ add_follow_ups_to_calendar: value })
+        .eq("id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, value) => {
+      queryClient.setQueryData(["reminder-settings", user?.id], (old: typeof settings) => ({
+        ...old,
+        addFollowUpsToCalendar: value,
+      }));
+    },
+    onError: (error) => {
+      toast.error("Failed to update calendar preference: " + error.message);
+    },
+  });
+
   return {
     reminderInterval,
     contactInterval,
+    addFollowUpsToCalendar,
     isLoading,
     updateInterval: updateReminderInterval.mutate,
     updateContactInterval: updateContactInterval.mutate,
+    updateAddFollowUpsToCalendar: updateAddFollowUpsToCalendar.mutate,
   };
 };
 

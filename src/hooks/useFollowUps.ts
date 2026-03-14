@@ -19,7 +19,11 @@ export function isOverdue(followUpDate: string | undefined): boolean {
   return followUpDate < today;
 }
 
-export const useSetFollowUpDate = () => {
+export type SetFollowUpDateOptions = {
+  onAfterSet?: (contactId: string, date: string, contactName: string) => void;
+};
+
+export const useSetFollowUpDate = (options?: SetFollowUpDateOptions) => {
   const queryClient = useQueryClient();
   const insertActivity = useInsertActivity();
 
@@ -30,6 +34,7 @@ export const useSetFollowUpDate = () => {
     }: {
       id: string;
       date: string | null;
+      contactName?: string;
     }) => {
       const { error } = await supabase
         .from("contacts")
@@ -45,6 +50,7 @@ export const useSetFollowUpDate = () => {
           activityType: "follow_up_set",
           metadata: { date: variables.date },
         });
+        options?.onAfterSet?.(variables.id, variables.date, variables.contactName ?? "Contact");
       }
     },
     onError: (error) => {
@@ -53,12 +59,16 @@ export const useSetFollowUpDate = () => {
   });
 };
 
-export const useSnoozeFollowUp = () => {
+export type SnoozeFollowUpOptions = {
+  onAfterSnooze?: (contactId: string, newDate: string, contactName: string) => void;
+};
+
+export const useSnoozeFollowUp = (options?: SnoozeFollowUpOptions) => {
   const queryClient = useQueryClient();
   const insertActivity = useInsertActivity();
 
   return useMutation({
-    mutationFn: async ({ id, days }: { id: string; days: number }) => {
+    mutationFn: async ({ id, days }: { id: string; days: number; contactName?: string }) => {
       // Calculate new date: max(today, current follow_up_date) + days
       const base = new Date();
       base.setDate(base.getDate() + days);
@@ -79,6 +89,7 @@ export const useSnoozeFollowUp = () => {
         metadata: { date: newDate, snoozed: true },
       });
       toast.success(`Follow-up snoozed to ${newDate}`);
+      options?.onAfterSnooze?.(variables.id, newDate, variables.contactName ?? "Contact");
     },
     onError: (error) => {
       toast.error("Failed to snooze follow-up: " + error.message);
@@ -86,11 +97,22 @@ export const useSnoozeFollowUp = () => {
   });
 };
 
-export const useBulkSetFollowUpDate = () => {
+export type BulkSetFollowUpDateOptions = {
+  onAfterSet?: (contactId: string, date: string, contactName: string) => void;
+};
+
+export const useBulkSetFollowUpDate = (options?: BulkSetFollowUpDateOptions) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ ids, date }: { ids: string[]; date: string }) => {
+    mutationFn: async ({
+      ids,
+      date,
+    }: {
+      ids: string[];
+      date: string;
+      contactNames?: Record<string, string>;
+    }) => {
       const batchSize = 50;
       let successCount = 0;
       for (let i = 0; i < ids.length; i += batchSize) {
@@ -105,11 +127,16 @@ export const useBulkSetFollowUpDate = () => {
       }
       return { updated: successCount, total: ids.length };
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       toast.success(
         `Follow-up date set for ${result.updated} contact${result.updated !== 1 ? "s" : ""}`
       );
+      if (options?.onAfterSet && variables.date) {
+        variables.ids.forEach((id) => {
+          options.onAfterSet!(id, variables.date, variables.contactNames?.[id] ?? "Contact");
+        });
+      }
     },
     onError: (error) => {
       toast.error("Failed to set follow-up dates: " + error.message);
