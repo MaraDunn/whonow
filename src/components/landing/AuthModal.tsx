@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { z } from "zod";
-import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, X, ArrowLeft } from "lucide-react";
+import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, X, ArrowLeft, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
 import { trackStartTrial } from "@/utils/metaPixel";
+import { cn } from "@/lib/utils";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -33,6 +34,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [stayLoggedIn, setStayLoggedIn] = useState(true);
   const [resetEmail, setResetEmail] = useState("");
   const [isResetting, setIsResetting] = useState(false);
   const [signUpEmailSent, setSignUpEmailSent] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
     if (!validateForm(false)) return;
 
     setIsSubmitting(true);
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(email, password, { stayLoggedIn });
     setIsSubmitting(false);
 
     if (error) {
@@ -159,6 +161,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
     setPassword("");
     setFullName("");
     setAgreeToTerms(false);
+    setStayLoggedIn(true);
     setSignUpEmailSent(null);
     setResendCooldown(0);
     setErrors({});
@@ -332,6 +335,25 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
                     </div>
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                   </div>
+
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={stayLoggedIn}
+                    onClick={() => setStayLoggedIn((v) => !v)}
+                    className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <span
+                      className={cn(
+                        "flex h-4 w-4 items-center justify-center rounded-full border border-primary ring-offset-background focus-visible:outline-none",
+                        stayLoggedIn ? "text-primary" : "text-transparent",
+                      )}
+                      aria-hidden="true"
+                    >
+                      <Circle className="h-2.5 w-2.5 fill-current" />
+                    </span>
+                    <span>Stay logged in</span>
+                  </button>
 
                   <Button type="submit" className="w-full gradient-hero text-primary-foreground" disabled={isSubmitting}>
                     {isSubmitting ? (

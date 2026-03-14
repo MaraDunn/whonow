@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams, useLocation, Link } from "react-router-dom";
 import { z } from "zod";
-import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, ArrowLeft, Loader2 } from "lucide-react";
+import { Mail, Lock, User, LogIn, UserPlus, Eye, EyeOff, ArrowLeft, Loader2, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
 import { trackStartTrial } from "@/utils/metaPixel";
+import { cn } from "@/lib/utils";
 
 const emailSchema = z.string().email("Please enter a valid email address").max(254, "Email is too long");
 const passwordSchema = z.string()
@@ -46,6 +47,7 @@ const Auth = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [stayLoggedIn, setStayLoggedIn] = useState(true);
   const [resetEmail, setResetEmail] = useState("");
   const [isResetting, setIsResetting] = useState(false);
   const [signUpEmailSent, setSignUpEmailSent] = useState<string | null>(null);
@@ -146,7 +148,7 @@ const Auth = () => {
 
     setIsSubmitting(true);
     try {
-      const { error } = await signIn(email, password);
+      const { error } = await signIn(email, password, { stayLoggedIn });
 
       if (error) {
         if (error.message?.includes("Invalid login credentials")) {
@@ -383,6 +385,25 @@ const Auth = () => {
                   </div>
                   {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                 </div>
+
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={stayLoggedIn}
+                  onClick={() => setStayLoggedIn((v) => !v)}
+                  className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 items-center justify-center rounded-full border border-primary ring-offset-background focus-visible:outline-none",
+                      stayLoggedIn ? "text-primary" : "text-transparent",
+                    )}
+                    aria-hidden="true"
+                  >
+                    <Circle className="h-2.5 w-2.5 fill-current" />
+                  </span>
+                  <span>Stay logged in</span>
+                </button>
 
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting ? (

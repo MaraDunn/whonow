@@ -39,30 +39,119 @@ function safePreview(value: string | undefined, keep: number): string {
   return `${v.slice(0, keep)}...`;
 }
 
+type AuthPersistenceMode = "local" | "session";
+const AUTH_PERSISTENCE_MODE_KEY = "whonow-auth-persistence-mode";
+let authPersistenceMode: AuthPersistenceMode = "local";
+
+function safeGetStorageItem(storage: Storage | undefined, key: string): string | null {
+  try {
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSetStorageItem(storage: Storage | undefined, key: string, value: string): boolean {
+  try {
+    storage?.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeRemoveStorageItem(storage: Storage | undefined, key: string): boolean {
+  try {
+    storage?.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readInitialAuthPersistenceMode(): AuthPersistenceMode {
+  const localValue = safeGetStorageItem(globalThis.localStorage, AUTH_PERSISTENCE_MODE_KEY);
+  if (localValue === "session" || localValue === "local") return localValue;
+
+  const sessionValue = safeGetStorageItem(globalThis.sessionStorage, AUTH_PERSISTENCE_MODE_KEY);
+  if (sessionValue === "session" || sessionValue === "local") return sessionValue;
+
+  return "local";
+}
+
+function persistAuthPersistenceMode(mode: AuthPersistenceMode) {
+  safeSetStorageItem(globalThis.localStorage, AUTH_PERSISTENCE_MODE_KEY, mode);
+  safeSetStorageItem(globalThis.sessionStorage, AUTH_PERSISTENCE_MODE_KEY, mode);
+}
+
+export function setAuthPersistenceMode(stayLoggedIn: boolean) {
+  authPersistenceMode = stayLoggedIn ? "local" : "session";
+  persistAuthPersistenceMode(authPersistenceMode);
+}
+
 // localStorage can throw in some WebView contexts; fall back to in-memory storage.
 function createSafeStorage() {
-  const mem = new Map<string, string>();
+  const localMem = new Map<string, string>();
+  const sessionMem = new Map<string, string>();
+  authPersistenceMode = readInitialAuthPersistenceMode();
+
+  const getLocal = (key: string) => safeGetStorageItem(globalThis.localStorage, key) ?? localMem.get(key) ?? null;
+  const setLocal = (key: string, value: string) => {
+    const saved = safeSetStorageItem(globalThis.localStorage, key, value);
+    if (!saved) localMem.set(key, value);
+  };
+  const removeLocal = (key: string) => {
+    const removed = safeRemoveStorageItem(globalThis.localStorage, key);
+    if (!removed) localMem.delete(key);
+  };
+
+  const getSession = (key: string) => safeGetStorageItem(globalThis.sessionStorage, key) ?? sessionMem.get(key) ?? null;
+  const setSession = (key: string, value: string) => {
+    const saved = safeSetStorageItem(globalThis.sessionStorage, key, value);
+    if (!saved) sessionMem.set(key, value);
+  };
+  const removeSession = (key: string) => {
+    const removed = safeRemoveStorageItem(globalThis.sessionStorage, key);
+    if (!removed) sessionMem.delete(key);
+  };
+
   return {
     getItem: (key: string) => {
-      try {
-        return localStorage.getItem(key);
-      } catch {
-        return mem.get(key) ?? null;
+      if (key === AUTH_PERSISTENCE_MODE_KEY) {
+        return authPersistenceMode;
       }
+
+      if (authPersistenceMode === "session") {
+        return getSession(key) ?? getLocal(key);
+      }
+
+      return getLocal(key) ?? getSession(key);
     },
     setItem: (key: string, value: string) => {
-      try {
-        localStorage.setItem(key, value);
-      } catch {
-        mem.set(key, value);
+      if (key === AUTH_PERSISTENCE_MODE_KEY) {
+        authPersistenceMode = value === "session" ? "session" : "local";
+        persistAuthPersistenceMode(authPersistenceMode);
+        return;
       }
+
+      if (authPersistenceMode === "session") {
+        setSession(key, value);
+        removeLocal(key);
+        return;
+      }
+
+      setLocal(key, value);
+      removeSession(key);
     },
     removeItem: (key: string) => {
-      try {
-        localStorage.removeItem(key);
-      } catch {
-        mem.delete(key);
+      if (key === AUTH_PERSISTENCE_MODE_KEY) {
+        authPersistenceMode = "local";
+        persistAuthPersistenceMode(authPersistenceMode);
+        return;
       }
+
+      removeLocal(key);
+      removeSession(key);
     },
   };
 }

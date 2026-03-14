@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { setAuthPersistenceMode, supabase } from "@/integrations/supabase/client";
 import { getAuthRedirectOrigin, isDesktopOrNativeApp } from "@/utils/launchMode";
 
 export const useAuth = () => {
@@ -74,8 +74,9 @@ export const useAuth = () => {
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, options?: { stayLoggedIn?: boolean }) => {
     try {
+      setAuthPersistenceMode(options?.stayLoggedIn !== false);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,

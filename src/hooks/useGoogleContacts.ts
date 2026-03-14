@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import type { Contact } from "@/types/contact";
 
@@ -25,11 +25,12 @@ type GooglePersonCreate = {
     country?: string;
   }>;
   biographies?: Array<{ value: string; contentType: "TEXT_PLAIN" }>;
-  metadata?: { sources?: Array<{ etag?: string }> };
+  metadata?: { sources?: Array<{ etag?: string; id?: string; type?: string; updateTime?: string }> };
 };
 
 type GoogleTokenResponse = {
   access_token?: string;
+  error?: string;
 };
 
 type GooglePerson = {
@@ -39,7 +40,7 @@ type GooglePerson = {
   phoneNumbers?: Array<{ value?: string }>;
   organizations?: Array<{ name?: string; title?: string }>;
   photos?: Array<{ url?: string }>;
-  metadata?: { sources?: Array<{ etag?: string; type?: string }> };
+  metadata?: { sources?: Array<{ etag?: string; id?: string; type?: string; updateTime?: string }> };
 };
 
 type PeopleConnectionsResponse = {
@@ -48,13 +49,21 @@ type PeopleConnectionsResponse = {
 };
 
 /** Index entry for duplicate matching. */
-type ConnectionIndexEntry = { resourceName: string; etag: string };
+type GoogleContactSource = { etag?: string; id?: string; type?: string; updateTime?: string };
+type ConnectionIndexEntry = { resourceName: string; contactSource: GoogleContactSource };
 
-function getWritableContactEtag(person: GooglePerson): string | null {
+function getWritableContactSource(person: GooglePerson): GoogleContactSource | null {
   const sources = person.metadata?.sources ?? [];
   const contactSource = sources.find((s) => (s.type ?? "").toUpperCase() === "CONTACT");
-  const etag = (contactSource?.etag ?? "").trim();
-  return etag || null;
+  if (!contactSource) return null;
+  const etag = (contactSource.etag ?? "").trim();
+  if (!etag) return null;
+  return {
+    etag,
+    id: contactSource.id,
+    type: contactSource.type,
+    updateTime: contactSource.updateTime,
+  };
 }
 
 // Prefer VITE_GOOGLE_CLIENT_ID from env; fallback for backwards compatibility.
@@ -63,6 +72,7 @@ const GOOGLE_CLIENT_ID =
   "340045414488-au8kh5fhtls67u767io9ka1is77k46ie.apps.googleusercontent.com";
 // Read + write so we can import (read) and sync back to Google (write).
 const SCOPES = "https://www.googleapis.com/auth/contacts";
+const GOOGLE_CONNECTION_PERSIST_KEY = "whonow.googleContacts.connected";
 
 function normalizeEmail(email: string): string {
   return (email ?? "").trim().toLowerCase();
@@ -94,7 +104,7 @@ function omitUndefined<T extends Record<string, unknown>>(o: T): T {
 }
 
 /** Map a WhoNow contact to a Google Person body for createContact / updateContact. */
-function contactToGooglePerson(c: Contact, etag?: string): GooglePersonCreate {
+function contactToGooglePerson(c: Contact, contactSource?: GoogleContactSource): GooglePersonCreate {
   const body: GooglePersonCreate = {};
   const name = (c.name ?? "").trim();
   if (name) body.names = [{ displayName: name }];
@@ -127,8 +137,17 @@ function contactToGooglePerson(c: Contact, etag?: string): GooglePersonCreate {
     body.biographies = [{ value: description, contentType: "TEXT_PLAIN" }];
   }
 
-  if (etag && etag.trim()) {
-    body.metadata = { sources: [{ etag: etag.trim() }] };
+  if (contactSource?.etag?.trim()) {
+    body.metadata = {
+      sources: [
+        omitUndefined({
+          etag: contactSource.etag.trim(),
+          id: contactSource.id,
+          type: contactSource.type,
+          updateTime: contactSource.updateTime,
+        }) as GoogleContactSource,
+      ],
+    };
   }
   return body;
 }
@@ -157,9 +176,9 @@ async function fetchGoogleConnectionsIndex(
     const connections = data.connections || [];
     for (const p of connections) {
       const resourceName = p.resourceName;
-      const etag = getWritableContactEtag(p) ?? "";
-      if (!resourceName || !etag) continue;
-      const entry: ConnectionIndexEntry = { resourceName, etag };
+      const contactSource = getWritableContactSource(p);
+      if (!resourceName || !contactSource?.etag) continue;
+      const entry: ConnectionIndexEntry = { resourceName, contactSource };
       const email = p.emailAddresses?.[0]?.value;
       if (email) {
         const key = normalizeEmail(email);
@@ -225,7 +244,7 @@ export async function syncContactsToGoogle(
     if (existing) {
       const updatePersonFields = SYNC_PERSON_FIELDS;
       const updateUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${updatePersonFields}&personFields=${SYNC_PERSON_FIELDS}`;
-      const body = contactToGooglePerson(c, existing.etag);
+      const body = contactToGooglePerson(c, existing.contactSource);
       try {
         let res = await fetch(updateUrl, { method: "PATCH", headers, body: JSON.stringify(body) });
         if (!res.ok && res.status === 400) {
@@ -290,6 +309,26 @@ export const useGoogleContacts = () => {
 
   const isConfigured = Boolean(GOOGLE_CLIENT_ID);
 
+  const setConnectedPreference = useCallback((connected: boolean) => {
+    try {
+      if (connected) {
+        localStorage.setItem(GOOGLE_CONNECTION_PERSIST_KEY, "1");
+      } else {
+        localStorage.removeItem(GOOGLE_CONNECTION_PERSIST_KEY);
+      }
+    } catch {
+      // Ignore storage failures (private browsing, blocked storage, etc.)
+    }
+  }, []);
+
+  const shouldRestoreConnection = useCallback(() => {
+    try {
+      return localStorage.getItem(GOOGLE_CONNECTION_PERSIST_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }, []);
+
   const signIn = useCallback(async () => {
     if (!GOOGLE_CLIENT_ID) {
       toast.error("Google OAuth is not configured. Please add VITE_GOOGLE_CLIENT_ID to your environment.");
@@ -308,8 +347,13 @@ export const useGoogleContacts = () => {
           if (response.access_token) {
             setAccessToken(response.access_token);
             setIsAuthenticated(true);
+            setConnectedPreference(true);
             await fetchContacts(response.access_token);
+          } else {
+            setIsAuthenticated(false);
+            setAccessToken(null);
           }
+          setIsLoading(false);
         },
       });
       
@@ -317,10 +361,9 @@ export const useGoogleContacts = () => {
     } catch (error) {
       toast.error("Failed to sign in with Google");
       console.error(error);
-    } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [setConnectedPreference]);
 
   const fetchContacts = async (token: string) => {
     setIsLoading(true);
@@ -374,10 +417,58 @@ export const useGoogleContacts = () => {
     if (accessToken) {
       google.accounts.oauth2.revoke(accessToken, () => {});
     }
+    setConnectedPreference(false);
     setAccessToken(null);
     setIsAuthenticated(false);
     setContacts([]);
-  }, [accessToken]);
+  }, [accessToken, setConnectedPreference]);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !shouldRestoreConnection()) return;
+
+    let cancelled = false;
+
+    const restoreGoogleConnection = async () => {
+      setIsLoading(true);
+      try {
+        await loadGoogleScript();
+
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: SCOPES,
+          callback: async (response: GoogleTokenResponse) => {
+            if (cancelled) return;
+            if (response.access_token) {
+              setAccessToken(response.access_token);
+              setIsAuthenticated(true);
+              await fetchContacts(response.access_token);
+            } else {
+              // Keep preference so we can try again next launch/session.
+              setAccessToken(null);
+              setIsAuthenticated(false);
+            }
+            setIsLoading(false);
+          },
+        });
+
+        // Silent re-auth: no prompts. If Google cannot silently issue a token,
+        // we keep the user disconnected in this runtime until they click connect.
+        client.requestAccessToken({ prompt: "none" });
+      } catch {
+        if (!cancelled) {
+          setIsLoading(false);
+          setAccessToken(null);
+          setIsAuthenticated(false);
+        }
+      }
+    };
+
+    void restoreGoogleConnection();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldRestoreConnection]);
 
   const clearContacts = useCallback(() => {
     setContacts([]);
@@ -460,7 +551,7 @@ declare global {
           client_id: string;
           scope: string;
           callback: (response: GoogleTokenResponse) => void;
-        }) => { requestAccessToken: () => void };
+        }) => { requestAccessToken: (options?: { prompt?: string }) => void };
         revoke: (token: string, callback: () => void) => void;
       };
     };
