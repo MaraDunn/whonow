@@ -14,7 +14,8 @@ interface GoogleContact {
 
 /** Person body for People API createContact / updateContact (subset we send). */
 type GooglePersonCreate = {
-  names?: Array<{ displayName?: string }>;
+  etag?: string;
+  names?: Array<{ givenName?: string; familyName?: string; unstructuredName?: string }>;
   emailAddresses?: Array<{ value?: string }>;
   phoneNumbers?: Array<{ value?: string }>;
   organizations?: Array<{ name?: string; title?: string }>;
@@ -26,7 +27,7 @@ type GooglePersonCreate = {
     country?: string;
   }>;
   biographies?: Array<{ value: string }>;
-  metadata?: { sources?: Array<{ etag?: string }> };
+  metadata?: { sources?: Array<{ etag?: string; type?: string; id?: string }> };
 };
 
 type GoogleTokenResponse = {
@@ -36,6 +37,7 @@ type GoogleTokenResponse = {
 
 type GooglePerson = {
   resourceName?: string;
+  etag?: string;
   names?: Array<{ displayName?: string }>;
   emailAddresses?: Array<{ value?: string }>;
   phoneNumbers?: Array<{ value?: string }>;
@@ -50,7 +52,7 @@ type PeopleConnectionsResponse = {
 };
 
 /** Index entry for duplicate matching. */
-type GoogleContactSource = { etag?: string; id?: string; type?: string; updateTime?: string };
+type GoogleContactSource = { etag?: string; id?: string; type?: string; updateTime?: string; personEtag?: string };
 type ConnectionIndexEntry = { resourceName: string; contactSource: GoogleContactSource };
 
 function getWritableContactSource(person: GooglePerson): GoogleContactSource | null {
@@ -64,6 +66,7 @@ function getWritableContactSource(person: GooglePerson): GoogleContactSource | n
     id: contactSource.id,
     type: contactSource.type,
     updateTime: contactSource.updateTime,
+    personEtag: (person.etag ?? "").trim() || undefined,
   };
 }
 
@@ -73,13 +76,11 @@ const GOOGLE_CLIENT_ID =
   "340045414488-au8kh5fhtls67u767io9ka1is77k46ie.apps.googleusercontent.com";
 // Read + write so we can import (read) and sync back to Google (write).
 const SCOPES = "https://www.googleapis.com/auth/contacts";
-const GOOGLE_CONNECTION_PERSIST_KEY = "whonow.googleContacts.connected";
 export const GOOGLE_REDIRECT_PENDING_KEY = "whonow.googleContacts.redirectPending";
 export const GOOGLE_PENDING_TOKEN_KEY = "whonow.googleContacts.pendingToken";
 const GOOGLE_CONTACTS_STATE = "google_contacts";
 const GOOGLE_SYNC_DEBUG =
   import.meta.env.DEV || String(import.meta.env.VITE_GOOGLE_SYNC_DEBUG ?? "").toLowerCase() === "true";
-const WRITE_THROTTLE_MS = 180;
 
 type GoogleApiErrorBody = {
   error?: {
@@ -113,22 +114,23 @@ type GoogleSyncFailureDebug = {
 
 type GoogleSyncOptions = {
   debugFailFast?: boolean;
-  maxWriteAttemptsPerContact?: number;
+  dryRun?: boolean;
+  onProgress?: (current: number, total: number, lastContactName: string) => void;
 };
 
 type GoogleSyncResult = {
   created: number;
   updated: number;
+  skipped: number;
   failed: number;
   errors: string[];
   failureReasonSummary: Record<string, number>;
   firstFailureDebug?: GoogleSyncFailureDebug;
+  dryRunPlan?: { toCreate: number; toUpdate: number; toSkip: number };
 };
 
 const GOOGLE_SYNC_FAIL_FAST =
   String(import.meta.env.VITE_GOOGLE_SYNC_FAIL_FAST ?? "").toLowerCase() === "true";
-const GOOGLE_SYNC_MAX_WRITE_ATTEMPTS_PER_CONTACT = 3;
-const WRITE_THROTTLE_MAX_MS = 5000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -246,7 +248,7 @@ function classifyGoogleError(status: number, bodyText: string): {
 }
 
 function shouldAttemptCreateAfterUpdateFailure(classification: GoogleErrorClassification): boolean {
-  return classification === "not_found";
+  return classification === "not_found" || classification === "invalid_payload" || classification === "other";
 }
 
 function formatGoogleApiError(status: number, bodyText: string): string {
@@ -340,11 +342,28 @@ function omitUndefined<T extends Record<string, unknown>>(o: T): T {
   return out;
 }
 
+/** Split "First Last" into given/family. Falls back to unstructuredName for single-word names. */
+function splitName(fullName: string): { givenName?: string; familyName?: string; unstructuredName?: string } {
+  const trimmed = fullName.trim();
+  if (!trimmed) return {};
+  const spaceIdx = trimmed.indexOf(" ");
+  if (spaceIdx === -1) {
+    return { unstructuredName: trimmed };
+  }
+  return {
+    givenName: trimmed.slice(0, spaceIdx),
+    familyName: trimmed.slice(spaceIdx + 1),
+  };
+}
+
 /** Map a WhoNow contact to a Google Person body for createContact / updateContact. */
 function contactToGooglePerson(c: Contact, contactSource?: GoogleContactSource): GooglePersonCreate {
   const body: GooglePersonCreate = {};
   const name = (c.name ?? "").trim();
-  if (name) body.names = [{ displayName: name }];
+  if (name) {
+    const parts = splitName(name);
+    body.names = [omitUndefined(parts) as { givenName?: string; familyName?: string; unstructuredName?: string }];
+  }
   if ((c.email ?? "").trim()) body.emailAddresses = [{ value: (c.email ?? "").trim() }];
   if ((c.phone ?? "").trim()) body.phoneNumbers = [{ value: (c.phone ?? "").trim() }];
   const company = (c.company ?? "").trim();
@@ -374,11 +393,14 @@ function contactToGooglePerson(c: Contact, contactSource?: GoogleContactSource):
   }
 
   if (contactSource?.etag?.trim()) {
+    body.etag = contactSource.personEtag || undefined;
     body.metadata = {
       sources: [
         omitUndefined({
           etag: contactSource.etag.trim(),
-        }),
+          type: contactSource.type || "CONTACT",
+          id: contactSource.id || undefined,
+        }) as { etag?: string; type?: string; id?: string },
       ],
     };
   }
@@ -416,15 +438,21 @@ async function fetchGoogleConnectionsIndex(
       const contactSource = getWritableContactSource(p);
       if (!resourceName || !contactSource?.etag) continue;
       const entry: ConnectionIndexEntry = { resourceName, contactSource };
-      const email = p.emailAddresses?.[0]?.value;
-      if (email) {
-        const key = normalizeEmail(email);
-        if (!byEmail.has(key)) byEmail.set(key, entry);
+      const emails = p.emailAddresses ?? [];
+      let hasEmail = false;
+      for (const em of emails) {
+        const key = normalizeEmail(em.value ?? "");
+        if (key && !byEmail.has(key)) {
+          byEmail.set(key, entry);
+          hasEmail = true;
+        }
       }
-      const phone = p.phoneNumbers?.[0]?.value;
-      if (phone && !email) {
-        const key = normalizePhone(phone);
-        if (key && !byPhone.has(key)) byPhone.set(key, entry);
+      if (!hasEmail) {
+        const phones = p.phoneNumbers ?? [];
+        for (const ph of phones) {
+          const key = normalizePhone(ph.value ?? "");
+          if (key && !byPhone.has(key)) byPhone.set(key, entry);
+        }
       }
     }
     pageToken = data.nextPageToken;
@@ -447,6 +475,8 @@ async function fetchLatestContactSource(accessToken: string, resourceName: strin
 }
 
 const SYNC_PERSON_FIELDS = "names,emailAddresses,phoneNumbers,organizations,addresses,biographies";
+const BATCH_UPDATE_MASK = "names,emailAddresses,phoneNumbers,organizations,addresses,biographies";
+const BATCH_SIZE = 200;
 
 function getUpdatePersonFields(body: GooglePersonCreate): string {
   const writableFields: Array<keyof GooglePersonCreate> = [
@@ -462,6 +492,7 @@ function getUpdatePersonFields(body: GooglePersonCreate): string {
 
 function stripOptionalGoogleFields(body: GooglePersonCreate): GooglePersonCreate {
   return {
+    etag: body.etag,
     names: body.names,
     emailAddresses: body.emailAddresses,
     phoneNumbers: body.phoneNumbers,
@@ -470,9 +501,33 @@ function stripOptionalGoogleFields(body: GooglePersonCreate): GooglePersonCreate
   };
 }
 
+/** Split an array into chunks of `size`. */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
+type BatchCreateRequest = {
+  contacts: Array<{ contactPerson: GooglePersonCreate }>;
+  readMask: string;
+};
+
+type BatchUpdateRequest = {
+  contacts: Record<string, GooglePersonCreate>;
+  updateMask: string;
+  readMask: string;
+};
+
+type PersonResponse = { person?: GooglePerson; httpStatusCode?: number; status?: { code?: number; message?: string } };
+type BatchCreateResponse = { createdPeople?: PersonResponse[] };
+type BatchUpdateResponse = { updateResult?: Record<string, PersonResponse> };
+
 /**
- * Sync WhoNow contacts to Google: update existing (matched by email or phone) or create new.
- * Runs sequentially. Skips contacts without a name. Returns created, updated, failed, errors.
+ * Sync WhoNow contacts to Google using batch APIs (up to 200 per request).
+ * Falls back to individual requests on batch failure.
  */
 export async function syncContactsToGoogle(
   contacts: Contact[],
@@ -481,31 +536,17 @@ export async function syncContactsToGoogle(
 ): Promise<GoogleSyncResult> {
   let created = 0;
   let updated = 0;
+  let skipped = 0;
   let failed = 0;
   const errors: string[] = [];
   const failureReasonSummary = new Map<string, number>();
   let firstFailureDebug: GoogleSyncFailureDebug | undefined;
   const debugFailFast = options?.debugFailFast ?? shouldDebugFailFast();
-  const maxWriteAttemptsPerContact = Math.max(
-    1,
-    options?.maxWriteAttemptsPerContact ?? GOOGLE_SYNC_MAX_WRITE_ATTEMPTS_PER_CONTACT
-  );
-  let writeThrottleMs = WRITE_THROTTLE_MS;
+  const dryRun = options?.dryRun ?? false;
+  const onProgress = options?.onProgress;
 
   const bumpFailureReason = (key: string) => {
     failureReasonSummary.set(key, (failureReasonSummary.get(key) ?? 0) + 1);
-  };
-
-  const updateWriteThrottle = (status: number) => {
-    if (status === 429) {
-      writeThrottleMs = Math.min(WRITE_THROTTLE_MAX_MS, Math.round(writeThrottleMs * 1.6 + 200));
-      return;
-    }
-    if (status >= 200 && status < 300) {
-      writeThrottleMs = Math.max(WRITE_THROTTLE_MS, Math.round(writeThrottleMs * 0.9));
-      return;
-    }
-    writeThrottleMs = Math.min(WRITE_THROTTLE_MAX_MS, Math.round(writeThrottleMs * 1.1));
   };
 
   let index: { byEmail: Map<string, ConnectionIndexEntry>; byPhone: Map<string, ConnectionIndexEntry> };
@@ -513,359 +554,275 @@ export async function syncContactsToGoogle(
     index = await fetchGoogleConnectionsIndex(accessToken);
   } catch (e) {
     return {
-      created: 0,
-      updated: 0,
+      created: 0, updated: 0, skipped: 0,
       failed: contacts.length,
       errors: [e instanceof Error ? e.message : "Failed to fetch Google contacts"],
       failureReasonSummary: {},
     };
   }
 
-  const createUrl = `https://people.googleapis.com/v1/people:createContact?personFields=${SYNC_PERSON_FIELDS}`;
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-  };
-
-  logGoogleSyncDebug("sync-start", { contactCount: contacts.length });
+  // Categorize contacts into creates, updates, and skips
+  type CreateEntry = { contact: Contact; body: GooglePersonCreate; name: string };
+  type UpdateEntry = { contact: Contact; body: GooglePersonCreate; name: string; resourceName: string };
+  const toCreate: CreateEntry[] = [];
+  const toUpdate: UpdateEntry[] = [];
+  let processedCount = 0;
 
   for (const c of contacts) {
-    const contactRef = {
-      id: c.id,
-      name: (c.name ?? "").trim() || "(no-name)",
-      email: (c.email ?? "").trim() || null,
-      phone: (c.phone ?? "").trim() || null,
-    };
     const name = (c.name ?? "").trim();
     if (!name) {
-      failed++;
-      errors.push(`Skipped "${c.email || c.phone || "no email/phone"}" (no name)`);
+      skipped++;
+      processedCount++;
+      onProgress?.(processedCount, contacts.length, "(skipped)");
       continue;
     }
-
     const emailKey = normalizeEmail(c.email ?? "");
     const phoneKey = normalizePhone(c.phone ?? "");
     const existing = emailKey ? index.byEmail.get(emailKey) : phoneKey ? index.byPhone.get(phoneKey) : undefined;
 
     if (existing) {
-      let sourceForUpdate = existing.contactSource;
-      let body = contactToGooglePerson(c, sourceForUpdate);
-      let updatePersonFields = getUpdatePersonFields(body);
-      if (!updatePersonFields) {
-        failed++;
-        errors.push(`${name}: nothing to update`);
-        bumpFailureReason("skip:nothing_to_update");
+      const body = contactToGooglePerson(c, existing.contactSource);
+      if (!getUpdatePersonFields(body)) {
+        skipped++;
+        processedCount++;
+        onProgress?.(processedCount, contacts.length, name);
         continue;
       }
-      const buildUpdateUrl = (fields: string, returnFields: string) =>
-        `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${fields}&personFields=${returnFields}`;
-      let updateUrl = buildUpdateUrl(updatePersonFields, SYNC_PERSON_FIELDS);
-      let writeAttempts = 0;
+      toUpdate.push({ contact: c, body, name, resourceName: existing.resourceName });
+    } else {
+      const body = contactToGooglePerson(c);
+      toCreate.push({ contact: c, body, name });
+    }
+  }
 
-      const runWrite = async (
-        url: string,
-        requestBody: GooglePersonCreate,
-        operation: string
-      ): Promise<Response | null> => {
-        if (writeAttempts >= maxWriteAttemptsPerContact) return null;
-        writeAttempts++;
-        await sleep(writeThrottleMs);
-        const response = await fetchPeopleApi(
-          url,
-          { method: "PATCH", headers, body: JSON.stringify(requestBody) },
-          {
-            operation,
-            contactRef: `${contactRef.name}:${contactRef.email ?? contactRef.phone ?? c.id}`,
-            maxRetries: 5,
-          }
-        );
-        updateWriteThrottle(response.status);
-        return response;
-      };
+  if (dryRun) {
+    return {
+      created: 0, updated: 0, skipped, failed: 0,
+      errors: [], failureReasonSummary: {},
+      dryRunPlan: { toCreate: toCreate.length, toUpdate: toUpdate.length, toSkip: skipped },
+    };
+  }
 
-      try {
-        logGoogleSyncDebug("update-attempt", {
-          contactRef,
-          resourceName: existing.resourceName,
-          updatePersonFields,
-          hasMetadataSource: !!sourceForUpdate?.etag,
-          hasAddresses: !!body.addresses?.length,
-          hasBiographies: !!body.biographies?.length,
-          writeAttempts,
-          writeThrottleMs,
-        });
-        let res = await runWrite(updateUrl, body, "update-contact");
-        if (!res) {
-          failed++;
-          bumpFailureReason("update:attempt_cap_reached");
-          errors.push(`${name}: stopped after ${maxWriteAttemptsPerContact} write attempts`);
-          if (debugFailFast) break;
-          continue;
-        }
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
 
-        if (!res.ok && res.status === 400) {
-          const initialBodyText = await res.clone().text();
-          const initialClassified = classifyGoogleError(res.status, initialBodyText);
-          bumpFailureReason(initialClassified.reasonKey);
+  logGoogleSyncDebug("sync-start", {
+    contactCount: contacts.length,
+    toCreate: toCreate.length,
+    toUpdate: toUpdate.length,
+    skipped,
+    batches: Math.ceil(toCreate.length / BATCH_SIZE) + Math.ceil(toUpdate.length / BATCH_SIZE),
+  });
 
-          if (initialClassified.classification === "etag_conflict") {
-            const refreshedSource = await fetchLatestContactSource(accessToken, existing.resourceName);
-            if (refreshedSource?.etag?.trim()) {
-              sourceForUpdate = refreshedSource;
-              body = contactToGooglePerson(c, sourceForUpdate);
-              updatePersonFields = getUpdatePersonFields(body);
-              updateUrl = buildUpdateUrl(updatePersonFields, SYNC_PERSON_FIELDS);
-              logGoogleSyncDebug("update-etag-refresh-retry", {
-                contactRef,
-                resourceName: existing.resourceName,
-                updatePersonFields,
-                writeAttempts,
-              });
-              const retryRes = await runWrite(updateUrl, body, "update-contact-after-etag-refresh");
-              if (retryRes) {
-                res = retryRes;
-              }
-            }
-          }
-        }
-
-        if (!res.ok && res.status === 400) {
-          const currentBodyText = await res.clone().text();
-          const currentClassified = classifyGoogleError(res.status, currentBodyText);
-          bumpFailureReason(currentClassified.reasonKey);
-
-          if (currentClassified.classification === "invalid_payload") {
-            logGoogleSyncDebug("update-invalid-payload-stop", {
-              contactRef,
-              reason: currentClassified.reason,
-              statusText: currentClassified.statusText,
-            });
+  // --- Batch creates ---
+  const createChunks = chunk(toCreate, BATCH_SIZE);
+  for (const batch of createChunks) {
+    const batchReq: BatchCreateRequest = {
+      contacts: batch.map((entry) => ({ contactPerson: entry.body })),
+      readMask: SYNC_PERSON_FIELDS,
+    };
+    try {
+      const res = await fetchPeopleApi(
+        "https://people.googleapis.com/v1/people:batchCreateContacts",
+        { method: "POST", headers, body: JSON.stringify(batchReq) },
+        { operation: "batch-create", maxRetries: 3 }
+      );
+      if (res.ok) {
+        const data = (await res.json()) as BatchCreateResponse;
+        const createdPeople = data.createdPeople ?? [];
+        for (let i = 0; i < batch.length; i++) {
+          const personRes = createdPeople[i];
+          if (personRes?.httpStatusCode && personRes.httpStatusCode >= 400) {
+            failed++;
+            const msg = personRes.status?.message ?? `HTTP ${personRes.httpStatusCode}`;
+            errors.push(`${batch[i].name}: batch create failed (${msg})`);
+            bumpFailureReason(`batch-create:${personRes.httpStatusCode}`);
           } else {
-          const fallbackBody = stripOptionalGoogleFields(body);
-          const fallbackFields = getUpdatePersonFields(fallbackBody);
-          if (fallbackFields) {
-              const fallbackUrl = buildUpdateUrl(fallbackFields, fallbackFields);
-            logGoogleSyncDebug("update-fallback-attempt", {
-              contactRef,
-              fallbackFields,
-              strippedAddresses: !!body.addresses?.length,
-              strippedBiographies: !!body.biographies?.length,
-                writeAttempts,
-            });
-              const fallbackRes = await runWrite(fallbackUrl, fallbackBody, "update-contact-fallback");
-              if (fallbackRes) {
-                res = fallbackRes;
-              }
-            }
+            created++;
           }
+          processedCount++;
+          onProgress?.(processedCount, contacts.length, batch[i].name);
         }
-
-        if (res.ok) {
-          updated++;
-        } else {
-          const updateErrText = await res.text();
-          const updateErr = formatGoogleApiError(res.status, updateErrText);
-          const updateClassified = classifyGoogleError(res.status, updateErrText);
-          bumpFailureReason(updateClassified.reasonKey);
-
-          const failureDebug: GoogleSyncFailureDebug = {
-            contactRef,
-            operation: "update-contact",
-            url: parseUrlForDebug(updateUrl),
-            requestBody: body,
-            status: res.status,
-            reason: updateClassified.reason,
-            statusText: updateClassified.statusText,
-            message: updateClassified.message,
-            rawErrorBody: updateErrText,
-          };
-          if (!firstFailureDebug) {
-            firstFailureDebug = failureDebug;
-          }
-
-          logGoogleSyncDebug("update-failed", {
-            contactRef,
-            status: res.status,
-            error: updateErr,
-            updatePersonFields,
-            reason: updateClassified.reason,
-            statusText: updateClassified.statusText,
-            writeAttempts,
-            maxWriteAttemptsPerContact,
-            failureDebug,
-          });
-
-          if (shouldAttemptCreateAfterUpdateFailure(updateClassified.classification)) {
-            const createBody = contactToGooglePerson(c);
-            await sleep(writeThrottleMs);
-            const createRes = await fetchPeopleApi(
-              createUrl,
-              { method: "POST", headers, body: JSON.stringify(createBody) },
-              {
-                operation: "create-after-update-failed",
-                contactRef: `${contactRef.name}:${contactRef.email ?? contactRef.phone ?? c.id}`,
-                maxRetries: 5,
-              }
+      } else {
+        logGoogleSyncDebug("batch-create-failed-fallback", { status: res.status, batchSize: batch.length });
+        const errBody = await res.text();
+        // Fall back to individual creates for this batch
+        for (const entry of batch) {
+          try {
+            const individualRes = await fetchPeopleApi(
+              `https://people.googleapis.com/v1/people:createContact?personFields=${SYNC_PERSON_FIELDS}`,
+              { method: "POST", headers, body: JSON.stringify(entry.body) },
+              { operation: "individual-create-fallback", contactRef: entry.name, maxRetries: 3 }
             );
-            updateWriteThrottle(createRes.status);
-            if (createRes.ok) {
+            if (individualRes.ok) {
               created++;
             } else {
               failed++;
-              const createErrText = await createRes.text();
-              const createErr = formatGoogleApiError(createRes.status, createErrText);
-              const createClassified = classifyGoogleError(createRes.status, createErrText);
-              bumpFailureReason(createClassified.reasonKey);
-              errors.push(`${name}: update failed (${updateErr}), create failed (${createErr})`);
-              logGoogleSyncDebug("create-after-update-failed", {
-                contactRef,
-                updateError: updateErr,
-                createError: createErr,
-                reason: createClassified.reason,
-                statusText: createClassified.statusText,
-              });
+              const individualErr = await individualRes.text();
+              const errMsg = formatGoogleApiError(individualRes.status, individualErr);
+              errors.push(`${entry.name}: ${errMsg}`);
+              bumpFailureReason(`create:${individualRes.status}`);
+              if (!firstFailureDebug) {
+                firstFailureDebug = {
+                  contactRef: { id: entry.contact.id, name: entry.name, email: entry.contact.email ?? null, phone: entry.contact.phone ?? null },
+                  operation: "individual-create-fallback",
+                  url: "people:createContact",
+                  requestBody: entry.body,
+                  status: individualRes.status,
+                  ...parseGoogleApiErrorBody(individualErr),
+                  rawErrorBody: individualErr,
+                };
+              }
+              if (debugFailFast) break;
             }
-          } else {
+          } catch (e) {
             failed++;
-            errors.push(`${name}: ${updateErr}`);
+            bumpFailureReason("create:exception");
+            errors.push(`${entry.name}: ${e instanceof Error ? e.message : "Unknown error"}`);
+            if (debugFailFast) break;
           }
-
-          if (debugFailFast) {
-            logGoogleSyncDebug("debug-fail-fast-stop", {
-              contactRef,
-              reason: updateClassified.reason,
-              statusText: updateClassified.statusText,
-              status: res.status,
-            });
-            break;
-          }
+          processedCount++;
+          onProgress?.(processedCount, contacts.length, entry.name);
         }
-      } catch (e) {
-        failed++;
-        bumpFailureReason("update:exception");
-        errors.push(`${name}: ${e instanceof Error ? e.message : "Unknown error"}`);
-        if (debugFailFast) break;
+        if (debugFailFast && failed > 0) break;
       }
-    } else {
-      const body = contactToGooglePerson(c);
+    } catch (e) {
+      for (const entry of batch) {
+        failed++;
+        processedCount++;
+        onProgress?.(processedCount, contacts.length, entry.name);
+      }
+      bumpFailureReason("batch-create:exception");
+      errors.push(`Batch create failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+      if (debugFailFast) break;
+    }
+    if (debugFailFast && failed > 0) break;
+  }
+
+  // --- Batch updates ---
+  if (!(debugFailFast && failed > 0)) {
+    const updateChunks = chunk(toUpdate, BATCH_SIZE);
+    for (const batch of updateChunks) {
+      const contactsMap: Record<string, GooglePersonCreate> = {};
+      for (const entry of batch) {
+        contactsMap[entry.resourceName] = entry.body;
+      }
+      const batchReq: BatchUpdateRequest = {
+        contacts: contactsMap,
+        updateMask: BATCH_UPDATE_MASK,
+        readMask: SYNC_PERSON_FIELDS,
+      };
       try {
-        let writeAttempts = 0;
-        const runCreate = async (
-          requestBody: GooglePersonCreate,
-          operation: string
-        ): Promise<Response | null> => {
-          if (writeAttempts >= maxWriteAttemptsPerContact) return null;
-          writeAttempts++;
-          await sleep(writeThrottleMs);
-          const response = await fetchPeopleApi(
-            createUrl,
-            { method: "POST", headers, body: JSON.stringify(requestBody) },
-            {
-              operation,
-              contactRef: `${contactRef.name}:${contactRef.email ?? contactRef.phone ?? c.id}`,
-              maxRetries: 5,
-            }
-          );
-          updateWriteThrottle(response.status);
-          return response;
-        };
-
-        logGoogleSyncDebug("create-attempt", {
-          contactRef,
-          hasAddresses: !!body.addresses?.length,
-          hasBiographies: !!body.biographies?.length,
-          writeAttempts,
-          writeThrottleMs,
-        });
-        let res = await runCreate(body, "create-contact");
-        if (!res) {
-          failed++;
-          bumpFailureReason("create:attempt_cap_reached");
-          errors.push(`${name}: stopped after ${maxWriteAttemptsPerContact} write attempts`);
-          if (debugFailFast) break;
-          continue;
-        }
-        if (!res.ok && res.status === 400) {
-          const firstErrText = await res.clone().text();
-          const firstClassified = classifyGoogleError(res.status, firstErrText);
-          bumpFailureReason(firstClassified.reasonKey);
-          const fallbackBody = stripOptionalGoogleFields(body);
-          logGoogleSyncDebug("create-fallback-attempt", {
-            contactRef,
-            strippedAddresses: !!body.addresses?.length,
-            strippedBiographies: !!body.biographies?.length,
-            writeAttempts,
-          });
-          const fallbackRes = await runCreate(fallbackBody, "create-contact-fallback");
-          if (fallbackRes) {
-            res = fallbackRes;
-          }
-        }
+        const res = await fetchPeopleApi(
+          "https://people.googleapis.com/v1/people:batchUpdateContacts",
+          { method: "POST", headers, body: JSON.stringify(batchReq) },
+          { operation: "batch-update", maxRetries: 3 }
+        );
         if (res.ok) {
-          created++;
+          const data = (await res.json()) as BatchUpdateResponse;
+          const results = data.updateResult ?? {};
+          for (const entry of batch) {
+            const personRes = results[entry.resourceName];
+            if (personRes?.httpStatusCode && personRes.httpStatusCode >= 400) {
+              failed++;
+              const msg = personRes.status?.message ?? `HTTP ${personRes.httpStatusCode}`;
+              errors.push(`${entry.name}: batch update failed (${msg})`);
+              bumpFailureReason(`batch-update:${personRes.httpStatusCode}`);
+            } else {
+              updated++;
+            }
+            processedCount++;
+            onProgress?.(processedCount, contacts.length, entry.name);
+          }
         } else {
-          failed++;
-          const errText = await res.text();
-          const createErr = formatGoogleApiError(res.status, errText);
-          const classified = classifyGoogleError(res.status, errText);
-          bumpFailureReason(classified.reasonKey);
-          const failureDebug: GoogleSyncFailureDebug = {
-            contactRef,
-            operation: "create-contact",
-            url: parseUrlForDebug(createUrl),
-            requestBody: body,
-            status: res.status,
-            reason: classified.reason,
-            statusText: classified.statusText,
-            message: classified.message,
-            rawErrorBody: errText,
-          };
-          if (!firstFailureDebug) {
-            firstFailureDebug = failureDebug;
+          logGoogleSyncDebug("batch-update-failed-fallback", { status: res.status, batchSize: batch.length });
+          // Fall back to individual updates for this batch
+          for (const entry of batch) {
+            try {
+              const updatePersonFields = getUpdatePersonFields(entry.body);
+              const updateUrl = `https://people.googleapis.com/v1/${entry.resourceName}:updateContact?updatePersonFields=${updatePersonFields}&personFields=${SYNC_PERSON_FIELDS}`;
+              const individualRes = await fetchPeopleApi(
+                updateUrl,
+                { method: "PATCH", headers, body: JSON.stringify(entry.body) },
+                { operation: "individual-update-fallback", contactRef: entry.name, maxRetries: 3 }
+              );
+              if (individualRes.ok) {
+                updated++;
+              } else {
+                // Try stripping optional fields
+                const fallbackBody = stripOptionalGoogleFields(entry.body);
+                const fallbackFields = getUpdatePersonFields(fallbackBody);
+                if (fallbackFields) {
+                  const fallbackUrl = `https://people.googleapis.com/v1/${entry.resourceName}:updateContact?updatePersonFields=${fallbackFields}&personFields=${fallbackFields}`;
+                  const fallbackRes = await fetchPeopleApi(
+                    fallbackUrl,
+                    { method: "PATCH", headers, body: JSON.stringify(fallbackBody) },
+                    { operation: "individual-update-fallback-stripped", contactRef: entry.name, maxRetries: 2 }
+                  );
+                  if (fallbackRes.ok) {
+                    updated++;
+                  } else {
+                    failed++;
+                    const errText = await fallbackRes.text();
+                    errors.push(`${entry.name}: ${formatGoogleApiError(fallbackRes.status, errText)}`);
+                    bumpFailureReason(`update:${fallbackRes.status}`);
+                    if (!firstFailureDebug) {
+                      firstFailureDebug = {
+                        contactRef: { id: entry.contact.id, name: entry.name, email: entry.contact.email ?? null, phone: entry.contact.phone ?? null },
+                        operation: "individual-update-fallback",
+                        url: parseUrlForDebug(fallbackUrl),
+                        requestBody: fallbackBody,
+                        status: fallbackRes.status,
+                        ...parseGoogleApiErrorBody(errText),
+                        rawErrorBody: errText,
+                      };
+                    }
+                    if (debugFailFast) break;
+                  }
+                } else {
+                  failed++;
+                  const errText = await individualRes.text();
+                  errors.push(`${entry.name}: ${formatGoogleApiError(individualRes.status, errText)}`);
+                  bumpFailureReason(`update:${individualRes.status}`);
+                  if (debugFailFast) break;
+                }
+              }
+            } catch (e) {
+              failed++;
+              bumpFailureReason("update:exception");
+              errors.push(`${entry.name}: ${e instanceof Error ? e.message : "Unknown error"}`);
+              if (debugFailFast) break;
+            }
+            processedCount++;
+            onProgress?.(processedCount, contacts.length, entry.name);
           }
-          errors.push(`${name}: ${createErr}`);
-          logGoogleSyncDebug("create-failed", {
-            contactRef,
-            status: res.status,
-            error: createErr,
-            reason: classified.reason,
-            statusText: classified.statusText,
-            writeAttempts,
-            maxWriteAttemptsPerContact,
-            failureDebug,
-          });
-          if (debugFailFast) {
-            logGoogleSyncDebug("debug-fail-fast-stop", {
-              contactRef,
-              reason: classified.reason,
-              statusText: classified.statusText,
-              status: res.status,
-            });
-            break;
-          }
+          if (debugFailFast && failed > 0) break;
         }
       } catch (e) {
-        failed++;
-        bumpFailureReason("create:exception");
-        errors.push(`${name}: ${e instanceof Error ? e.message : "Unknown error"}`);
+        for (const entry of batch) {
+          failed++;
+          processedCount++;
+          onProgress?.(processedCount, contacts.length, entry.name);
+        }
+        bumpFailureReason("batch-update:exception");
+        errors.push(`Batch update failed: ${e instanceof Error ? e.message : "Unknown error"}`);
         if (debugFailFast) break;
       }
+      if (debugFailFast && failed > 0) break;
     }
   }
 
   const summarizedReasons = Object.fromEntries(failureReasonSummary.entries());
   logGoogleSyncDebug("sync-finished", {
-    created,
-    updated,
-    failed,
+    created, updated, skipped, failed,
     errorCount: errors.length,
     debugFailFast,
-    maxWriteAttemptsPerContact,
-    finalWriteThrottleMs: writeThrottleMs,
     failureReasonSummary: summarizedReasons,
     firstFailureDebug,
   });
-  return { created, updated, failed, errors, failureReasonSummary: summarizedReasons, firstFailureDebug };
+  return { created, updated, skipped, failed, errors, failureReasonSummary: summarizedReasons, firstFailureDebug };
 }
 
 export const useGoogleContacts = (options?: { enabled?: boolean }) => {
@@ -877,26 +834,6 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
   const isConfigured = Boolean(GOOGLE_CLIENT_ID);
-
-  const setConnectedPreference = useCallback((connected: boolean) => {
-    try {
-      if (connected) {
-        localStorage.setItem(GOOGLE_CONNECTION_PERSIST_KEY, "1");
-      } else {
-        localStorage.removeItem(GOOGLE_CONNECTION_PERSIST_KEY);
-      }
-    } catch {
-      // Ignore storage failures (private browsing, blocked storage, etc.)
-    }
-  }, []);
-
-  const shouldRestoreConnection = useCallback(() => {
-    try {
-      return localStorage.getItem(GOOGLE_CONNECTION_PERSIST_KEY) === "1";
-    } catch {
-      return false;
-    }
-  }, []);
 
   const signIn = useCallback(async () => {
     if (!GOOGLE_CLIENT_ID) {
@@ -947,12 +884,15 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
           if (response.access_token) {
             setAccessToken(response.access_token);
             setIsAuthenticated(true);
-            setConnectedPreference(true);
             await fetchContacts(response.access_token);
           } else {
             setIsAuthenticated(false);
             setAccessToken(null);
           }
+          setIsLoading(false);
+        },
+        error_callback: (err) => {
+          console.warn("[GoogleContacts] Sign-in error:", err);
           setIsLoading(false);
         },
       });
@@ -963,7 +903,7 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
       console.error(error);
       setIsLoading(false);
     }
-  }, [setConnectedPreference]);
+  }, []);
 
   const fetchContacts = async (token: string) => {
     setIsLoading(true);
@@ -1021,11 +961,10 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
     if (accessToken) {
       google.accounts.oauth2.revoke(accessToken, () => {});
     }
-    setConnectedPreference(false);
     setAccessToken(null);
     setIsAuthenticated(false);
     setContacts([]);
-  }, [accessToken, setConnectedPreference]);
+  }, [accessToken]);
 
   // Consume token after redirect flow (desktop): check on mount and when window regains focus
   const consumePendingToken = useCallback(() => {
@@ -1037,12 +976,11 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
       if (!token) return;
       setAccessToken(token);
       setIsAuthenticated(true);
-      setConnectedPreference(true);
       fetchContacts(token);
     } catch {
       // ignore
     }
-  }, [setConnectedPreference]);
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -1052,53 +990,6 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
     return () => window.removeEventListener("focus", onFocus);
   }, [consumePendingToken, enabled]);
 
-  useEffect(() => {
-    if (!enabled) return;
-    if (!GOOGLE_CLIENT_ID || !shouldRestoreConnection()) return;
-
-    let cancelled = false;
-
-    const restoreGoogleConnection = async () => {
-      setIsLoading(true);
-      try {
-        await loadGoogleScript();
-
-        const client = google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: SCOPES,
-          callback: async (response: GoogleTokenResponse) => {
-            if (cancelled) return;
-            if (response.access_token) {
-              setAccessToken(response.access_token);
-              setIsAuthenticated(true);
-              await fetchContacts(response.access_token);
-            } else {
-              // Keep preference so we can try again next launch/session.
-              setAccessToken(null);
-              setIsAuthenticated(false);
-            }
-            setIsLoading(false);
-          },
-        });
-
-        // Silent re-auth: no prompts. If Google cannot silently issue a token,
-        // we keep the user disconnected in this runtime until they click connect.
-        client.requestAccessToken({ prompt: "none" });
-      } catch {
-        if (!cancelled) {
-          setIsLoading(false);
-          setAccessToken(null);
-          setIsAuthenticated(false);
-        }
-      }
-    };
-
-    void restoreGoogleConnection();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [shouldRestoreConnection, enabled]);
 
   const clearContacts = useCallback(() => {
     setContacts([]);
@@ -1106,13 +997,15 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
 
   const syncToGoogle = useCallback(
     async (
-      contactsToSync: Contact[]
+      contactsToSync: Contact[],
+      syncOptions?: GoogleSyncOptions
     ): Promise<GoogleSyncResult> => {
       if (!accessToken) {
         toast.error("Connect your Google account first");
         return {
           created: 0,
           updated: 0,
+          skipped: 0,
           failed: contactsToSync.length,
           errors: ["Not authenticated"],
           failureReasonSummary: {},
@@ -1120,7 +1013,8 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
       }
       setIsSyncing(true);
       try {
-        const result = await syncContactsToGoogle(contactsToSync, accessToken);
+        const result = await syncContactsToGoogle(contactsToSync, accessToken, syncOptions);
+        if (result.dryRunPlan) return result;
         const parts: string[] = [];
         if (result.created > 0) parts.push(`${result.created} created`);
         if (result.updated > 0) parts.push(`${result.updated} updated`);
@@ -1135,6 +1029,7 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
         logGoogleSyncDebug("sync-toast-summary", {
           created: result.created,
           updated: result.updated,
+          skipped: result.skipped,
           failed: result.failed,
           failureReasonSummary: result.failureReasonSummary,
           firstFailureDebug: result.firstFailureDebug,
@@ -1146,6 +1041,7 @@ export const useGoogleContacts = (options?: { enabled?: boolean }) => {
         return {
           created: 0,
           updated: 0,
+          skipped: 0,
           failed: contactsToSync.length,
           errors: [e instanceof Error ? e.message : "Unknown error"],
           failureReasonSummary: {},
@@ -1197,6 +1093,7 @@ declare global {
           client_id: string;
           scope: string;
           callback: (response: GoogleTokenResponse) => void;
+          error_callback?: (error: { type: string; message?: string }) => void;
         }) => { requestAccessToken: (options?: { prompt?: string }) => void };
         revoke: (token: string, callback: () => void) => void;
       };

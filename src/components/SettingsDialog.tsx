@@ -42,12 +42,39 @@ interface SettingsDialogProps {
   canEditKeywords?: boolean;
 }
 
+type SyncProgress = { current: number; total: number; lastContact: string };
+type DiagnosticResult = {
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+  failureReasonSummary: Record<string, number>;
+  firstFailureDebug?: {
+    contactRef: { id: string; name: string; email: string | null; phone: string | null };
+    operation: string;
+    url: string;
+    requestBody: unknown;
+    status: number;
+    reason: string | null;
+    statusText: string | null;
+    message: string;
+    rawErrorBody: string;
+  };
+};
+
 function GoogleSettingsSection() {
   const { user } = useAuth();
   const googleContacts = useGoogleContacts();
   const { status: calendarStatus, isLoading: calendarLoading, connect: connectCalendar, disconnect: disconnectCalendar } = useGoogleCalendarIntegration();
   const { addFollowUpsToCalendar, updateAddFollowUpsToCalendar } = useReminderSettings();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
+  const [dryRunResult, setDryRunResult] = useState<{ toCreate: number; toUpdate: number; toSkip: number } | null>(null);
+  const [isDryRunning, setIsDryRunning] = useState(false);
+  const [diagnosticResult, setDiagnosticResult] = useState<DiagnosticResult | null>(null);
+  const [showDiagnostic, setShowDiagnostic] = useState(false);
+  const [copiedDiagnostic, setCopiedDiagnostic] = useState(false);
   const isGoogleConnected = googleContacts.isAuthenticated;
   const isCalendarConnected = calendarStatus?.connected ?? false;
 
@@ -57,27 +84,95 @@ function GoogleSettingsSection() {
     }
   };
 
+  const handleDryRun = async () => {
+    if (!user?.id || !googleContacts.isAuthenticated || isSyncing || isDryRunning) return;
+    setIsDryRunning(true);
+    setDryRunResult(null);
+    try {
+      const contacts = await fetchAllContactsForExport(supabase, user.id);
+      if (contacts.length === 0) {
+        toast.info("No contacts to preview");
+        return;
+      }
+      const result = await googleContacts.syncToGoogle(contacts, { dryRun: true });
+      if (result.dryRunPlan) {
+        setDryRunResult(result.dryRunPlan);
+      }
+    } catch (err) {
+      console.error("Dry run error:", err);
+      toast.error("Failed to preview sync.");
+    } finally {
+      setIsDryRunning(false);
+    }
+  };
+
   const handleSyncToGoogle = async () => {
-    if (!user?.id) return;
+    if (!user?.id || isSyncing) return;
     if (!googleContacts.isAuthenticated) {
       toast.info("Connect your Google account first");
       await googleContacts.signIn();
       return;
     }
+    setIsSyncing(true);
+    setSyncProgress({ current: 0, total: 0, lastContact: "Loading contacts…" });
+    setDryRunResult(null);
     try {
       const contacts = await fetchAllContactsForExport(supabase, user.id);
       if (contacts.length === 0) {
         toast.info("No contacts to sync");
         return;
       }
-      setIsSyncing(true);
-      await googleContacts.syncToGoogle(contacts);
+      setSyncProgress({ current: 0, total: contacts.length, lastContact: "" });
+      const result = await googleContacts.syncToGoogle(contacts, {
+        onProgress: (current, total, lastContact) => {
+          setSyncProgress({ current, total, lastContact });
+        },
+      });
+      if (result.failed > 0) {
+        setDiagnosticResult(result as DiagnosticResult);
+      }
     } catch (err) {
       console.error("Sync to Google error:", err);
       toast.error("Failed to sync contacts to Google. Please try again.");
     } finally {
       setIsSyncing(false);
+      setSyncProgress(null);
     }
+  };
+
+  const handleDiagnosticSync = async () => {
+    if (!user?.id || !googleContacts.isAuthenticated || isSyncing) return;
+    setIsSyncing(true);
+    setSyncProgress({ current: 0, total: 0, lastContact: "Loading contacts…" });
+    setDiagnosticResult(null);
+    try {
+      const contacts = await fetchAllContactsForExport(supabase, user.id);
+      if (contacts.length === 0) {
+        toast.info("No contacts to diagnose");
+        return;
+      }
+      const result = await googleContacts.syncToGoogle(contacts, {
+        debugFailFast: true,
+        onProgress: (current, total, lastContact) => {
+          setSyncProgress({ current, total, lastContact });
+        },
+      });
+      setDiagnosticResult(result as DiagnosticResult);
+      setShowDiagnostic(true);
+    } catch (err) {
+      console.error("Diagnostic sync error:", err);
+      toast.error("Diagnostic sync failed.");
+    } finally {
+      setIsSyncing(false);
+      setSyncProgress(null);
+    }
+  };
+
+  const handleCopyDiagnostic = () => {
+    if (!diagnosticResult) return;
+    navigator.clipboard.writeText(JSON.stringify(diagnosticResult, null, 2));
+    setCopiedDiagnostic(true);
+    setTimeout(() => setCopiedDiagnostic(false), 2000);
   };
 
   return (
@@ -118,36 +213,180 @@ function GoogleSettingsSection() {
           {googleContacts.isConfigured && (
             <>
               <Separator />
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-medium">Sync contacts to Google</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Push your WhoNow contacts to your Google account. Existing contacts (matched by email or phone) are updated; others are created.
-                  </p>
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Sync contacts to Google</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Push your WhoNow contacts to your Google account. Existing contacts (matched by email or phone) are updated; others are created.
+                    </p>
+                  </div>
+                  {isGoogleConnected ? (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDryRun}
+                        disabled={isSyncing || isDryRunning}
+                      >
+                        {isDryRunning ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Eye className="h-4 w-4 mr-2" />
+                        )}
+                        Preview
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleSyncToGoogle}
+                        disabled={isSyncing || isDryRunning}
+                      >
+                        {isSyncing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Syncing…
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Sync now
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Connect Google above</span>
+                  )}
                 </div>
-                {isGoogleConnected ? (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleSyncToGoogle}
-                    disabled={isSyncing}
-                  >
-                    {isSyncing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Syncing…
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Sync now
-                      </>
+
+                {syncProgress && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Syncing {syncProgress.current} / {syncProgress.total}…</span>
+                      <span className="truncate ml-2 max-w-[200px]">{syncProgress.lastContact}</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all duration-300"
+                        style={{ width: `${Math.round((syncProgress.current / syncProgress.total) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {dryRunResult && (
+                  <div className="rounded-md bg-muted/50 p-3 text-xs space-y-1">
+                    <p className="font-medium">Sync preview:</p>
+                    <p>{dryRunResult.toCreate} contacts will be <span className="text-green-600 dark:text-green-400 font-medium">created</span></p>
+                    <p>{dryRunResult.toUpdate} contacts will be <span className="text-blue-600 dark:text-blue-400 font-medium">updated</span></p>
+                    {dryRunResult.toSkip > 0 && <p>{dryRunResult.toSkip} contacts will be skipped (no name)</p>}
+                  </div>
+                )}
+
+                {isGoogleConnected && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground h-7"
+                      onClick={handleDiagnosticSync}
+                      disabled={isSyncing || isDryRunning}
+                    >
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      Diagnose sync issues
+                    </Button>
+                    {diagnosticResult && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground h-7"
+                        onClick={() => setShowDiagnostic(true)}
+                      >
+                        <FileText className="h-3 w-3 mr-1" />
+                        View last report
+                      </Button>
                     )}
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Connect Google above</span>
+                  </div>
                 )}
               </div>
+
+              {showDiagnostic && diagnosticResult && (
+                <div className="rounded-lg border p-4 space-y-3 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Sync Diagnostic Report</Label>
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleCopyDiagnostic}>
+                        {copiedDiagnostic ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                        {copiedDiagnostic ? "Copied" : "Copy JSON"}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowDiagnostic(false)}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div className="rounded bg-background p-2 text-center">
+                      <div className="font-bold text-green-600 dark:text-green-400">{diagnosticResult.created}</div>
+                      <div className="text-muted-foreground">Created</div>
+                    </div>
+                    <div className="rounded bg-background p-2 text-center">
+                      <div className="font-bold text-blue-600 dark:text-blue-400">{diagnosticResult.updated}</div>
+                      <div className="text-muted-foreground">Updated</div>
+                    </div>
+                    <div className="rounded bg-background p-2 text-center">
+                      <div className="font-bold text-yellow-600 dark:text-yellow-400">{diagnosticResult.skipped}</div>
+                      <div className="text-muted-foreground">Skipped</div>
+                    </div>
+                    <div className="rounded bg-background p-2 text-center">
+                      <div className="font-bold text-red-600 dark:text-red-400">{diagnosticResult.failed}</div>
+                      <div className="text-muted-foreground">Failed</div>
+                    </div>
+                  </div>
+                  {Object.keys(diagnosticResult.failureReasonSummary).length > 0 && (
+                    <div className="text-xs space-y-1">
+                      <p className="font-medium">Failure reasons:</p>
+                      {Object.entries(diagnosticResult.failureReasonSummary)
+                        .sort(([, a], [, b]) => b - a)
+                        .map(([reason, count]) => (
+                          <p key={reason} className="text-muted-foreground font-mono">
+                            {reason}: {count}
+                          </p>
+                        ))}
+                    </div>
+                  )}
+                  {diagnosticResult.firstFailureDebug && (
+                    <div className="text-xs space-y-1">
+                      <p className="font-medium">First failure detail:</p>
+                      <div className="rounded bg-background p-2 font-mono text-[11px] max-h-48 overflow-auto whitespace-pre-wrap break-all">
+                        <p><span className="text-muted-foreground">Contact:</span> {diagnosticResult.firstFailureDebug.contactRef.name} ({diagnosticResult.firstFailureDebug.contactRef.email || diagnosticResult.firstFailureDebug.contactRef.phone || "no id"})</p>
+                        <p><span className="text-muted-foreground">Operation:</span> {diagnosticResult.firstFailureDebug.operation}</p>
+                        <p><span className="text-muted-foreground">HTTP:</span> {diagnosticResult.firstFailureDebug.status} {diagnosticResult.firstFailureDebug.statusText}</p>
+                        <p><span className="text-muted-foreground">Reason:</span> {diagnosticResult.firstFailureDebug.reason || "none"}</p>
+                        <p><span className="text-muted-foreground">Message:</span> {diagnosticResult.firstFailureDebug.message}</p>
+                        <p><span className="text-muted-foreground">URL:</span> {diagnosticResult.firstFailureDebug.url}</p>
+                        <p><span className="text-muted-foreground">Request body:</span></p>
+                        <pre className="ml-2">{JSON.stringify(diagnosticResult.firstFailureDebug.requestBody, null, 2)}</pre>
+                        <p><span className="text-muted-foreground">Raw error:</span></p>
+                        <pre className="ml-2">{diagnosticResult.firstFailureDebug.rawErrorBody}</pre>
+                      </div>
+                    </div>
+                  )}
+                  {diagnosticResult.errors.length > 0 && (
+                    <div className="text-xs space-y-1">
+                      <p className="font-medium">Error messages ({diagnosticResult.errors.length}):</p>
+                      <div className="rounded bg-background p-2 max-h-32 overflow-auto text-[11px] text-muted-foreground">
+                        {diagnosticResult.errors.slice(0, 20).map((err, i) => (
+                          <p key={i}>{err}</p>
+                        ))}
+                        {diagnosticResult.errors.length > 20 && (
+                          <p className="font-medium">… and {diagnosticResult.errors.length - 20} more</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
