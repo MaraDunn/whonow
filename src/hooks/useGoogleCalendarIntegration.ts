@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -10,7 +10,7 @@ export function useGoogleCalendarIntegration() {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
 
-  const getStatus = useCallback(async () => {
+  const getStatus = useCallback(async (retryAfter401 = false) => {
     try {
       setIsLoading(true);
       const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
@@ -35,6 +35,12 @@ export function useGoogleCalendarIntegration() {
         body: JSON.stringify({ action: "get-status", jwt: token }),
       });
       const data = await resp.json().catch(() => ({}));
+      if (resp.status === 401 && !retryAfter401) {
+        const { data: { session: retrySession } } = await supabase.auth.refreshSession();
+        if (retrySession?.access_token) {
+          return getStatus(true);
+        }
+      }
       if (!resp.ok) {
         setStatus({ connected: false });
         return { connected: false };
@@ -48,6 +54,11 @@ export function useGoogleCalendarIntegration() {
       setIsLoading(false);
     }
   }, []);
+
+  // Fetch calendar connection status on mount so follow-up → calendar works without opening Settings
+  useEffect(() => {
+    getStatus();
+  }, [getStatus]);
 
   const connect = useCallback(async () => {
     try {

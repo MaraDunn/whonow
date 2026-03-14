@@ -76,23 +76,27 @@ function CalendarSettingsSection() {
               Connect Google Calendar
             </Button>
           )}
-          {status?.connected && (
-            <div className="flex items-center justify-between rounded-lg border p-4">
-              <div className="space-y-0.5">
-                <Label htmlFor="add-follow-ups-to-calendar" className="text-sm font-medium">
-                  Add follow-ups to my calendar
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  When you set a follow-up date on a contact, create an all-day event in Google Calendar.
-                </p>
-              </div>
-              <Switch
-                id="add-follow-ups-to-calendar"
-                checked={addFollowUpsToCalendar}
-                onCheckedChange={(checked) => updateAddFollowUpsToCalendar(checked)}
-              />
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="add-follow-ups-to-calendar"
+                className={`text-sm font-medium ${!status?.connected ? "text-muted-foreground" : ""}`}
+              >
+                Add follow-ups to my calendar
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {status?.connected
+                  ? "When you set a follow-up date on a contact, create an all-day event in Google Calendar."
+                  : "Connect Google Calendar above to add follow-up dates as all-day events."}
+              </p>
             </div>
-          )}
+            <Switch
+              id="add-follow-ups-to-calendar"
+              checked={addFollowUpsToCalendar}
+              onCheckedChange={(checked) => updateAddFollowUpsToCalendar(checked)}
+              disabled={!status?.connected}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

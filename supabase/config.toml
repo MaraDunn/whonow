@@ -47,3 +47,7 @@ verify_jwt = false
 
 [functions.help-email]
 verify_jwt = false
+
+[functions.google-calendar-integration]
+# Function validates JWT (body.jwt or Authorization); avoids gateway 401
+verify_jwt = false

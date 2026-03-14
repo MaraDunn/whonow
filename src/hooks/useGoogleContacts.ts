@@ -105,7 +105,8 @@ function contactToGooglePerson(c: Contact, etag?: string): GooglePersonCreate {
   return body;
 }
 
-const INDEX_PERSON_FIELDS = "names,emailAddresses,phoneNumbers,metadata,resourceName";
+// resourceName is not a valid personFields value; it is always returned with each Person.
+const INDEX_PERSON_FIELDS = "names,emailAddresses,phoneNumbers,metadata";
 
 /**
  * Fetch all connections and build index by normalized email and (for no-email contacts) phone.
