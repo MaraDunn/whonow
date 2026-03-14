@@ -9,6 +9,7 @@ import { TIER_CONFIGS } from "@/types/subscription";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -563,9 +564,10 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:w-[95vw] md:w-[95vw] lg:w-[95vw] xl:w-[95vw] max-w-[2400px] h-[95vh] sm:h-[90vh] max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="w-[95vw] sm:w-[95vw] md:w-[95vw] lg:w-[95vw] xl:w-[95vw] max-w-[2400px] h-[95vh] sm:h-[90vh] max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0" aria-describedby="settings-dialog-description">
         <DialogHeader className="px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b flex-shrink-0">
           <DialogTitle className="font-display text-xl">Settings</DialogTitle>
+          <DialogDescription id="settings-dialog-description" className="sr-only">Account, preferences, and data management</DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 flex flex-col sm:flex-row overflow-hidden min-h-0">

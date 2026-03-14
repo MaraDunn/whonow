@@ -28,15 +28,38 @@ serve(async (req) => {
   const url = new URL(req.url);
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
-  secureLog("GCAL", "Request", { method: req.method, path: url.pathname });
+  const corsJson = { ...corsHeaders, "Content-Type": "application/json" as const };
 
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
 
+  try {
+    return await handleRequest(req, url, origin, corsHeaders, corsJson);
+  } catch (e) {
+    console.error("Google Calendar integration error:", e);
+    return new Response(
+      JSON.stringify({ error: "An error occurred. Please try again." }),
+      { status: 500, headers: corsJson }
+    );
+  }
+});
+
+async function handleRequest(
+  req: Request,
+  url: URL,
+  origin: string | null,
+  corsHeaders: Record<string, string>,
+  corsJson: Record<string, string>
+) {
+  secureLog("GCAL", "Request", { method: req.method, path: url.pathname });
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const appUrl = Deno.env.get("APP_URL") || "http://localhost:8080";
+  // Base URL where users land after OAuth. Set APP_URL to https://whonow.co/app if the app lives at /app.
+  const appBase = (Deno.env.get("APP_URL") || "http://localhost:8080").replace(/\/+$/, "");
+  const redirectTo = (queryOrPath: string) =>
+    queryOrPath.startsWith("?") ? `${appBase}${queryOrPath}` : `${appBase}/${queryOrPath}`.replace(/([^:]\/)\/+/g, "$1");
 
   // OAuth callback: GET with code and state
   const isOAuthCallback = req.method === "GET" && url.searchParams.has("code");
@@ -50,7 +73,7 @@ serve(async (req) => {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: `${appUrl}/?integration=google_calendar&status=error&message=${encodeURIComponent(errorParam)}`,
+          Location: redirectTo(`?integration=google_calendar&status=error&message=${encodeURIComponent(errorParam)}`),
         },
       });
     }
@@ -61,7 +84,7 @@ serve(async (req) => {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: `${appUrl}/?integration=google_calendar&status=error&message=missing_params`,
+          Location: redirectTo("?integration=google_calendar&status=error&message=missing_params"),
         },
       });
     }
@@ -71,7 +94,7 @@ serve(async (req) => {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: `${appUrl}/?integration=google_calendar&status=error&message=oauth_misconfigured`,
+          Location: redirectTo("?integration=google_calendar&status=error&message=oauth_misconfigured"),
         },
       });
     }
@@ -81,7 +104,7 @@ serve(async (req) => {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: `${appUrl}/?integration=google_calendar&status=error&message=invalid_state`,
+          Location: redirectTo("?integration=google_calendar&status=error&message=invalid_state"),
         },
       });
     }
@@ -104,39 +127,67 @@ serve(async (req) => {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: `${appUrl}/?integration=google_calendar&status=error&message=token_exchange_failed`,
+          Location: redirectTo("?integration=google_calendar&status=error&message=token_exchange_failed"),
         },
       });
     }
     const tokenData = (await tokenRes.json()) as GoogleTokenResponse;
     const expiresAt = new Date(Date.now() + (tokenData.expires_in || 3600) * 1000).toISOString();
 
-    const { error: upsertError } = await supabase.from("integrations").upsert(
-      {
-        user_id: payload.userId,
-        provider: "google_calendar",
-        scope: "user",
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token ?? null,
-        token_expires_at: expiresAt,
-        is_active: true,
-        settings: {},
-      },
-      { onConflict: "user_id,provider" }
-    );
+    const row = {
+      user_id: payload.userId,
+      provider: "google_calendar",
+      scope: "user",
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token ?? null,
+      token_expires_at: expiresAt,
+      is_active: true,
+      settings: {},
+    };
 
-    if (upsertError) {
-      console.error("Error storing Google Calendar integration:", upsertError);
-      return new Response(null, {
-        status: 302,
-        headers: {
-          Location: `${appUrl}/?integration=google_calendar&status=error&message=storage_error`,
-        },
-      });
+    const { data: existing } = await supabase
+      .from("integrations")
+      .select("id")
+      .eq("user_id", payload.userId)
+      .eq("provider", "google_calendar")
+      .eq("scope", "user")
+      .maybeSingle();
+
+    if (existing) {
+      const { error: updateError } = await supabase
+        .from("integrations")
+        .update({
+          access_token: row.access_token,
+          refresh_token: row.refresh_token,
+          token_expires_at: row.token_expires_at,
+          is_active: row.is_active,
+          settings: row.settings,
+        })
+        .eq("id", existing.id);
+      if (updateError) {
+        console.error("Error updating Google Calendar integration:", updateError);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: redirectTo("?integration=google_calendar&status=error&message=storage_error"),
+          },
+        });
+      }
+    } else {
+      const { error: insertError } = await supabase.from("integrations").insert(row);
+      if (insertError) {
+        console.error("Error inserting Google Calendar integration:", insertError);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: redirectTo("?integration=google_calendar&status=error&message=storage_error"),
+          },
+        });
+      }
     }
     return new Response(null, {
       status: 302,
-      headers: { Location: `${appUrl}/?integration=google_calendar&status=success` },
+      headers: { Location: redirectTo("?integration=google_calendar&status=success") },
     });
   }
 
@@ -321,4 +372,4 @@ serve(async (req) => {
     default:
       return err("Unknown action.");
   }
-});
+}

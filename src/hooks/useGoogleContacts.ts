@@ -65,6 +65,15 @@ function normalizePhone(phone: string): string {
   return (phone ?? "").replace(/\D/g, "");
 }
 
+/** Remove undefined from object (one level). Used so we never send undefined to People API. */
+function omitUndefined<T extends Record<string, unknown>>(o: T): T {
+  const out = { ...o };
+  for (const key of Object.keys(out)) {
+    if (out[key] === undefined) delete out[key];
+  }
+  return out;
+}
+
 /** Map a WhoNow contact to a Google Person body for createContact / updateContact. */
 function contactToGooglePerson(c: Contact, etag?: string): GooglePersonCreate {
   const body: GooglePersonCreate = {};
@@ -74,7 +83,9 @@ function contactToGooglePerson(c: Contact, etag?: string): GooglePersonCreate {
   if ((c.phone ?? "").trim()) body.phoneNumbers = [{ value: (c.phone ?? "").trim() }];
   const company = (c.company ?? "").trim();
   const role = (c.role ?? "").trim();
-  if (company || role) body.organizations = [{ name: company || undefined, title: role || undefined }];
+  if (company || role) {
+    body.organizations = [omitUndefined({ name: company || undefined, title: role || undefined }) as { name?: string; title?: string }];
+  }
 
   const address = (c.address ?? "").trim();
   const city = (c.city ?? "").trim();
@@ -83,15 +94,13 @@ function contactToGooglePerson(c: Contact, etag?: string): GooglePersonCreate {
   const country = (c.country ?? "").trim();
   if (address || city || state || zipCode || country) {
     const formattedValue = [address, city, state, zipCode, country].filter(Boolean).join(", ");
-    body.addresses = [
-      {
-        formattedValue: formattedValue || undefined,
-        city: city || undefined,
-        region: state || undefined,
-        postalCode: zipCode || undefined,
-        country: country || undefined,
-      },
-    ];
+    const addr: Record<string, string> = {};
+    if (formattedValue) addr.formattedValue = formattedValue;
+    if (city) addr.city = city;
+    if (state) addr.region = state;
+    if (zipCode) addr.postalCode = zipCode;
+    if (country) addr.country = country;
+    body.addresses = [addr as GooglePersonCreate["addresses"] extends (infer U)[] ? U : never];
   }
 
   const description = (c.description ?? "").trim();
@@ -99,8 +108,8 @@ function contactToGooglePerson(c: Contact, etag?: string): GooglePersonCreate {
     body.biographies = [{ value: description, contentType: "TEXT_PLAIN" }];
   }
 
-  if (etag) {
-    body.metadata = { sources: [{ etag }] };
+  if (etag && etag.trim()) {
+    body.metadata = { sources: [{ etag: etag.trim() }] };
   }
   return body;
 }
@@ -200,7 +209,19 @@ export async function syncContactsToGoogle(
       const updateUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${updatePersonFields}&personFields=${SYNC_PERSON_FIELDS}`;
       const body = contactToGooglePerson(c, existing.etag);
       try {
-        const res = await fetch(updateUrl, { method: "PATCH", headers, body: JSON.stringify(body) });
+        let res = await fetch(updateUrl, { method: "PATCH", headers, body: JSON.stringify(body) });
+        if (!res.ok && res.status === 400) {
+          const coreFields = "names,emailAddresses,phoneNumbers,organizations";
+          const coreUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${coreFields}&personFields=${coreFields}`;
+          const coreBody: GooglePersonCreate = {
+            names: body.names,
+            emailAddresses: body.emailAddresses,
+            phoneNumbers: body.phoneNumbers,
+            organizations: body.organizations,
+            metadata: body.metadata,
+          };
+          res = await fetch(coreUrl, { method: "PATCH", headers, body: JSON.stringify(coreBody) });
+        }
         if (res.ok) {
           updated++;
         } else {
