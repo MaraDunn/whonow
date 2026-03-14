@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getValidSession } from "@/utils/authToken";
 
 interface GoogleCalendarStatus {
   connected: boolean;
@@ -13,8 +14,8 @@ export function useGoogleCalendarIntegration() {
   const getStatus = useCallback(async (retryAfter401 = false) => {
     try {
       setIsLoading(true);
-      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-      if (sessionError || !session?.access_token) {
+      const session = await getValidSession();
+      if (!session?.access_token) {
         setStatus({ connected: false });
         return { connected: false };
       }
@@ -36,7 +37,7 @@ export function useGoogleCalendarIntegration() {
       });
       const data = await resp.json().catch(() => ({}));
       if (resp.status === 401 && !retryAfter401) {
-        const { data: { session: retrySession } } = await supabase.auth.refreshSession();
+        const retrySession = await getValidSession();
         if (retrySession?.access_token) {
           return getStatus(true);
         }
@@ -63,8 +64,8 @@ export function useGoogleCalendarIntegration() {
   const connect = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-      if (sessionError || !session?.access_token) {
+      const session = await getValidSession();
+      if (!session?.access_token) {
         toast.error("Please sign in to connect Google Calendar");
         return;
       }
@@ -110,8 +111,8 @@ export function useGoogleCalendarIntegration() {
   const disconnect = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-      if (sessionError || !session) {
+      const session = await getValidSession();
+      if (!session) {
         toast.error("Please sign in to disconnect");
         return;
       }
@@ -148,8 +149,8 @@ export function useGoogleCalendarIntegration() {
   const createEvent = useCallback(
     async (contactId: string, followUpDate: string, contactName: string): Promise<boolean> => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-        if (sessionError || !session) return false;
+        const session = await getValidSession();
+        if (!session) return false;
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
         if (!supabaseUrl || !supabaseAnonKey) return false;

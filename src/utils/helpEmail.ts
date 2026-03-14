@@ -6,6 +6,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { getRecentErrorLogs } from "@/utils/errorLogBuffer";
+import { getValidSession } from "@/utils/authToken";
 
 export type HelpEmailType = "bug_report" | "contact_support" | "contact_sales";
 
@@ -28,13 +29,6 @@ const MAX_ERROR_LOGS_LENGTH = 20000;
 function truncate(s: string, max: number): string {
   if (typeof s !== "string") return "";
   return s.slice(0, max);
-}
-
-async function getValidSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) return null;
-  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-  return refreshed ?? session;
 }
 
 async function callHelpEmail(payload: HelpEmailPayload): Promise<{ success: boolean; error?: string }> {

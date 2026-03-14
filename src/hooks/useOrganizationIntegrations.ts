@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { getValidSession } from "@/utils/authToken";
 
 interface IntegrationStatus {
   connected: boolean;
@@ -114,9 +115,8 @@ export function useOrganizationIntegrations() {
     try {
       setIsLoading(true);
       
-      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-      
-      if (sessionError || !session) {
+      const session = await getValidSession();
+      if (!session) {
         toast.error(`Please sign in to connect ${provider}`);
         return;
       }

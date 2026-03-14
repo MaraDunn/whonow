@@ -3,52 +3,13 @@ import type { Session } from "@supabase/supabase-js";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { devLog } from "@/lib/devLog";
-
-/** Decode JWT payload without verification (we only need exp). Returns null if invalid. */
-function getJwtExp(accessToken: string): number | null {
-  try {
-    const parts = accessToken.split(".");
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return typeof payload.exp === "number" ? payload.exp : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Returns true if the token is still valid for at least 30 seconds. */
-function isTokenValid(session: Session | null): boolean {
-  if (!session?.access_token) return false;
-  const exp = getJwtExp(session.access_token);
-  if (exp == null) return true; // unknown exp, allow
-  return exp > Date.now() / 1000 + 30;
-}
+import { getValidSession } from "@/utils/authToken";
 
 const SESSION_EXPIRED_MSG = "Session expired. Please sign in again to scan business cards.";
 
 /** Clear local session so the app can show sign-in again (avoids stuck "signed in" state with invalid token). */
 function clearSessionSoUserCanReauth() {
   void supabase.auth.signOut({ scope: "local" });
-}
-
-/** Get current session and optionally refresh so we have a valid token for Edge Function calls. */
-async function getValidSession(): Promise<Session | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) return null;
-
-  const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
-
-  // If refresh failed, don't use the old session — it may have an expired access_token
-  if (error) {
-    devLog("Session refresh failed:", error.message);
-    return isTokenValid(session) ? session : null;
-  }
-
-  const active = refreshed ?? session;
-  if (!active?.access_token) return null;
-
-  // Only return session if token is still valid (avoids sending expired token to Edge Function)
-  return isTokenValid(active) ? active : null;
 }
 
 interface ScannedContact {

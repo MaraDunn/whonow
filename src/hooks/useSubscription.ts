@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { getValidAccessToken } from "@/utils/authToken";
 import { SubscriptionData, SubscriptionTier, FeatureName, FEATURE_ACCESS } from "@/types/subscription";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -113,13 +114,6 @@ export const useSubscription = () => {
     }
     return fallback;
   };
-
-  // Get a valid access token, always refreshing so we don't send an expired JWT (avoids 401 from gateway)
-  const getValidAccessToken = useCallback(async (): Promise<string | null> => {
-    const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
-    if (error || !refreshed?.access_token) return null;
-    return refreshed.access_token;
-  }, []);
 
   const checkSubscription = useCallback(async () => {
     if (!session?.access_token || !user) {
@@ -372,7 +366,7 @@ export const useSubscription = () => {
       // Don't reset subscription on errors - keep cached data to prevent flickering
       // Loading state already set to false in the promise
     }
-  }, [session?.access_token, user, getValidAccessToken]);
+  }, [session?.access_token, user]);
 
   useEffect(() => {
     // If user is logged out, clear cache and reset to starter
@@ -522,7 +516,7 @@ export const useSubscription = () => {
         return null;
       }
     },
-    [session?.access_token, getValidAccessToken]
+    [session?.access_token]
   );
 
   const openCustomerPortal = useCallback(async () => {
@@ -568,7 +562,7 @@ export const useSubscription = () => {
       toast.error(message);
       return null;
     }
-  }, [session?.access_token, getValidAccessToken]);
+  }, [session?.access_token]);
 
   const updateSubscription = useCallback(
     async (tier: SubscriptionTier, seats?: number) => {
@@ -611,7 +605,7 @@ export const useSubscription = () => {
         return false;
       }
     },
-    [session?.access_token, getValidAccessToken, checkSubscription]
+    [session?.access_token, checkSubscription]
   );
 
   return {

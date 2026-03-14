@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { devLog } from "@/lib/devLog";
+import { getValidSession } from "@/utils/authToken";
 
 interface SlackChannel {
   id: string;
@@ -26,9 +27,8 @@ export function useSlackIntegration() {
   const getStatus = useCallback(async () => {
     try {
       setIsLoading(true);
-      // Use refreshSession to ensure we have a valid token
-      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
-      if (sessionError || !session) {
+      const session = await getValidSession();
+      if (!session) {
         // User is not authenticated, return silently
         setStatus({ connected: false });
         return { connected: false };
@@ -79,16 +79,11 @@ export function useSlackIntegration() {
     try {
       setIsLoading(true);
       
-      // Force refresh the session to get a fresh token
-      const { data: { session: refreshedSession }, error: sessionError } = await supabase.auth.refreshSession();
-      
-      if (sessionError || !refreshedSession) {
-        console.error("Session refresh failed:", sessionError);
+      const refreshedSession = await getValidSession();
+      if (!refreshedSession) {
         toast.error("Please sign in to connect Slack");
         return;
       }
-
-      // Use the refreshed session token
       const accessToken = refreshedSession.access_token;
       devLog("Calling slack-integration with fresh token (length:", accessToken.length, ")");
       

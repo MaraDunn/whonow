@@ -39,6 +39,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { SearchQueryFilters } from "@/types/searchQuery";
 import { applySearchFiltersToContacts } from "@/utils/applySearchFilters";
+import { getValidSession } from "@/utils/authToken";
 import { ContactDragProvider } from "@/contexts/ContactDragContext";
 import { HealthClockProvider } from "@/contexts/HealthClockContext";
 
@@ -1013,8 +1014,8 @@ const IndexContent = () => {
           label: `Importing ${normalizedContacts.length} contacts…`,
         });
 
-        // Refresh session once so we have a valid token for all batches (avoids gateway 401 with verify_jwt)
-        await supabase.auth.refreshSession();
+        // Ensure we have a valid token for all batches (throttled to avoid 429)
+        await getValidSession();
 
         // Process batches sequentially to avoid overwhelming the browser
         for (let i = 0; i < batches.length; i++) {
