@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -100,9 +101,12 @@ export function ContactSalesDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby="contact-sales-description">
         <DialogHeader>
           <DialogTitle>Contact Sales</DialogTitle>
+          <DialogDescription id="contact-sales-description" className="sr-only">
+            Send a sales inquiry with your name, email, and message.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">

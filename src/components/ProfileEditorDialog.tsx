@@ -4,6 +4,7 @@ import { X, Camera, Loader2, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -256,7 +257,10 @@ export function ProfileEditorDialog({ open, onOpenChange }: ProfileEditorDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[calc(100vh-2rem)] flex flex-col p-0 [&>button]:hidden">
+      <DialogContent className="sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[calc(100vh-2rem)] flex flex-col p-0 [&>button]:hidden" aria-describedby="profile-editor-description">
+        <DialogDescription id="profile-editor-description" className="sr-only">
+          Edit your profile name, avatar, and preferences.
+        </DialogDescription>
         <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 shrink-0 border-b border-border">
           <div className="flex items-center justify-between">
             <DialogTitle className="font-display text-xl sm:text-lg">Edit Profile</DialogTitle>

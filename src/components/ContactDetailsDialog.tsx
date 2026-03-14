@@ -10,6 +10,7 @@ import { format, parseISO } from "date-fns";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -562,7 +563,10 @@ export function ContactDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg md:max-w-2xl max-h-[90vh] w-[calc(100vw-2rem)] sm:w-full flex flex-col p-0 [&>button]:hidden overflow-hidden">
+      <DialogContent className="sm:max-w-lg md:max-w-2xl max-h-[90vh] w-[calc(100vw-2rem)] sm:w-full flex flex-col p-0 [&>button]:hidden overflow-hidden" aria-describedby="contact-details-description">
+        <DialogDescription id="contact-details-description" className="sr-only">
+          {isEditing ? "Edit this contact" : "View contact details and actions."}
+        </DialogDescription>
         {/* Header: pr-12 reserves space for close button on mobile to avoid overlap with Shared pill */}
         <div className="relative flex items-center justify-between px-3 sm:px-4 pr-12 sm:pr-4 py-2 sm:py-3 border-b border-border gap-2 shrink-0">
           <DialogTitle className="font-display font-semibold text-base sm:text-lg text-foreground truncate min-w-0">

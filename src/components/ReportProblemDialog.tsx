@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -101,9 +102,12 @@ export function ReportProblemDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby="report-problem-description">
         <DialogHeader>
           <DialogTitle>Report a problem</DialogTitle>
+          <DialogDescription id="report-problem-description" className="sr-only">
+            Describe the issue and optionally attach a file.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">

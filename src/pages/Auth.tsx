@@ -15,6 +15,7 @@ import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
 import { trackStartTrial } from "@/utils/metaPixel";
 import { cn } from "@/lib/utils";
+import { GOOGLE_PENDING_TOKEN_KEY, GOOGLE_REDIRECT_PENDING_KEY } from "@/hooks/useGoogleContacts";
 
 const emailSchema = z.string().email("Please enter a valid email address").max(254, "Email is too long");
 const passwordSchema = z.string()
@@ -116,6 +117,27 @@ const Auth = () => {
       navigate("/auth", { replace: true }); // clear ?unverified=1 from URL
     }
   }, [searchParams, navigate]);
+
+  // Return from Google Contacts OAuth redirect (desktop/popup-blocked flow): store token and go to app
+  useEffect(() => {
+    const fromHash = location.hash.slice(1);
+    if (!fromHash) return;
+    const params = new URLSearchParams(fromHash);
+    const state = params.get("state");
+    const accessToken = params.get("access_token");
+    if (state !== "google_contacts" || !accessToken) return;
+    try {
+      if (sessionStorage.getItem(GOOGLE_REDIRECT_PENDING_KEY)) {
+        sessionStorage.removeItem(GOOGLE_REDIRECT_PENDING_KEY);
+      }
+      sessionStorage.setItem(GOOGLE_PENDING_TOKEN_KEY, accessToken);
+      toast.success("Google Contacts connected.");
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      navigate("/app", { replace: true });
+    } catch {
+      // ignore
+    }
+  }, [location.hash, navigate]);
 
   const validateForm = (isSignUp: boolean) => {
     const newErrors: { email?: string; password?: string; fullName?: string; agreeToTerms?: string } = {};

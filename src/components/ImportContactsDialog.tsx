@@ -78,7 +78,7 @@ export function ImportContactsDialog({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const { signOut } = useAuth();
-  const google = useGoogleContacts();
+  const google = useGoogleContacts({ enabled: open && activeTab === "google" });
   const fileImport = useFileContacts();
   const scanner = useBusinessCardScanner();
 
