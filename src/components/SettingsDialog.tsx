@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Download, Loader2, RefreshCw, Link2 } from "lucide-react";
+import { X, Plus, RotateCcw, Sun, Moon, Monitor, Palette, Tags, User, Shield, LogOut, Copy, Check, Eye, EyeOff, Lock, Mail, Sparkles, Building2, Search, ChevronRight, CreditCard, Users, Key, Trash2, FileText, Settings, ShieldCheck, ShieldX, ArrowRight, AlertTriangle, Download, Loader2, Link2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { OrganizationIntegrationsPanel } from "@/components/OrganizationIntegrationsPanel";
 import { BrandingSettings } from "@/components/BrandingSettings";
@@ -43,41 +43,15 @@ interface SettingsDialogProps {
 }
 
 function GoogleSettingsSection() {
-  const { user } = useAuth();
   const googleContacts = useGoogleContacts();
   const { status: calendarStatus, isLoading: calendarLoading, connect: connectCalendar, disconnect: disconnectCalendar } = useGoogleCalendarIntegration();
   const { addFollowUpsToCalendar, updateAddFollowUpsToCalendar } = useReminderSettings();
-  const [isSyncing, setIsSyncing] = useState(false);
-
   const isGoogleConnected = googleContacts.isAuthenticated;
   const isCalendarConnected = calendarStatus?.connected ?? false;
 
   const handleConnectGoogle = async () => {
     if (!googleContacts.isAuthenticated) {
       await googleContacts.signIn();
-    }
-  };
-
-  const handleSyncToGoogle = async () => {
-    if (!user?.id) return;
-    if (!googleContacts.isAuthenticated) {
-      toast.info("Connect your Google account first");
-      await googleContacts.signIn();
-      return;
-    }
-    try {
-      const contacts = await fetchAllContactsForExport(supabase, user.id);
-      if (contacts.length === 0) {
-        toast.info("No contacts to sync");
-        return;
-      }
-      setIsSyncing(true);
-      await googleContacts.syncToGoogle(contacts);
-    } catch (err) {
-      console.error("Sync to Google error:", err);
-      toast.error("Failed to sync contacts to Google. Please try again.");
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -97,8 +71,8 @@ function GoogleSettingsSection() {
           </CardTitle>
           <CardDescription>
             {isGoogleConnected
-              ? "Connected for importing contacts and syncing WhoNow contacts to Google Contacts."
-              : "Connect Google Contacts to import contacts and sync WhoNow contacts to your Google account."}
+              ? "Connected for importing contacts from Google into WhoNow."
+              : "Connect Google Contacts to import your Google contacts into WhoNow."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -173,41 +147,6 @@ function GoogleSettingsSection() {
             />
           </div>
 
-          {googleContacts.isConfigured && (
-            <>
-              <Separator />
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-medium">Sync contacts to Google</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Push your WhoNow contacts to your Google account. Existing contacts (matched by email or phone) are updated; others are created.
-                  </p>
-                </div>
-                {isGoogleConnected ? (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleSyncToGoogle}
-                    disabled={isSyncing}
-                  >
-                    {isSyncing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Syncing…
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Sync now
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Connect Google above</span>
-                )}
-              </div>
-            </>
-          )}
         </CardContent>
       </Card>
     </div>
