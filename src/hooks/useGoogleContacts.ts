@@ -73,21 +73,107 @@ const GOOGLE_CLIENT_ID =
 // Read + write so we can import (read) and sync back to Google (write).
 const SCOPES = "https://www.googleapis.com/auth/contacts";
 const GOOGLE_CONNECTION_PERSIST_KEY = "whonow.googleContacts.connected";
+const GOOGLE_SYNC_DEBUG =
+  import.meta.env.DEV || String(import.meta.env.VITE_GOOGLE_SYNC_DEBUG ?? "").toLowerCase() === "true";
+const WRITE_THROTTLE_MS = 180;
+
+type GoogleApiErrorBody = {
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+    details?: unknown[];
+    errors?: Array<{ message?: string; domain?: string; reason?: string }>;
+  };
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function truncateText(value: string, maxLen = 300): string {
+  if (value.length <= maxLen) return value;
+  return `${value.slice(0, maxLen)}...`;
+}
+
+function parseRetryAfterMs(retryAfterHeader: string | null): number | null {
+  if (!retryAfterHeader) return null;
+  const asSeconds = Number(retryAfterHeader);
+  if (Number.isFinite(asSeconds) && asSeconds >= 0) {
+    return Math.round(asSeconds * 1000);
+  }
+  const asDateMs = Date.parse(retryAfterHeader);
+  if (!Number.isNaN(asDateMs)) {
+    const delta = asDateMs - Date.now();
+    return delta > 0 ? delta : 0;
+  }
+  return null;
+}
+
+function formatGoogleApiError(status: number, bodyText: string): string {
+  let parsed: GoogleApiErrorBody | null = null;
+  try {
+    parsed = JSON.parse(bodyText) as GoogleApiErrorBody;
+  } catch {
+    parsed = null;
+  }
+  const g = parsed?.error;
+  const base = g?.message || bodyText || "Unknown Google API error";
+  const reason = g?.errors?.[0]?.reason;
+  const statusText = g?.status;
+  const pieces = [`HTTP ${status}`];
+  if (statusText) pieces.push(statusText);
+  if (reason) pieces.push(`reason=${reason}`);
+  return `${pieces.join(" ")} - ${truncateText(base, 240)}`;
+}
+
+function logGoogleSyncDebug(event: string, payload: Record<string, unknown>) {
+  if (!GOOGLE_SYNC_DEBUG) return;
+  console.info(`[GoogleSync] ${event}`, payload);
+}
 
 function normalizeEmail(email: string): string {
   return (email ?? "").trim().toLowerCase();
 }
 
-/** People API rate limit: retry on 429/503 with exponential backoff. */
-async function fetchPeopleApi(url: string, headers: Record<string, string>, maxRetries = 3): Promise<Response> {
+/** People API wrapper with retry/backoff and detailed debug logs. */
+async function fetchPeopleApi(
+  url: string,
+  init: RequestInit,
+  context: { operation: string; maxRetries?: number; contactRef?: string }
+): Promise<Response> {
+  const maxRetries = context.maxRetries ?? 4;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, { headers });
-    if (res.status !== 429 && res.status !== 503) return res;
-    if (attempt === maxRetries) return res;
-    const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000);
-    await new Promise((r) => setTimeout(r, delayMs));
+    const startedAt = Date.now();
+    const res = await fetch(url, init);
+    const elapsedMs = Date.now() - startedAt;
+    if (res.ok) return res;
+
+    const retryable = res.status === 429 || res.status === 503 || res.status === 500 || res.status === 502;
+    const retryAfterMs = parseRetryAfterMs(res.headers.get("Retry-After"));
+
+    logGoogleSyncDebug("request-failed", {
+      operation: context.operation,
+      contactRef: context.contactRef,
+      status: res.status,
+      attempt,
+      maxRetries,
+      retryable,
+      retryAfterMs,
+      elapsedMs,
+      url,
+    });
+
+    if (!retryable || attempt === maxRetries) {
+      return res;
+    }
+
+    const exponentialMs = Math.min(1000 * Math.pow(2, attempt), 12000);
+    const jitterMs = Math.floor(Math.random() * 250);
+    const waitMs = Math.max(retryAfterMs ?? 0, exponentialMs + jitterMs);
+    await sleep(waitMs);
   }
-  return fetch(url, { headers });
+  return fetch(url, init);
 }
 
 function normalizePhone(phone: string): string {
@@ -166,7 +252,11 @@ async function fetchGoogleConnectionsIndex(
   const apiHeaders = { Authorization: `Bearer ${accessToken}` };
   do {
     const url = pageToken ? `${baseUrl}&pageToken=${encodeURIComponent(pageToken)}` : baseUrl;
-    const response = await fetchPeopleApi(url, apiHeaders);
+    const response = await fetchPeopleApi(
+      url,
+      { headers: apiHeaders },
+      { operation: "connections-index-read", maxRetries: 4 }
+    );
     if (!response.ok) throw new Error("Failed to fetch Google connections");
     const data = (await response.json()) as PeopleConnectionsResponse;
     const connections = data.connections || [];
@@ -247,7 +337,15 @@ export async function syncContactsToGoogle(
     "Content-Type": "application/json",
   };
 
+  logGoogleSyncDebug("sync-start", { contactCount: contacts.length });
+
   for (const c of contacts) {
+    const contactRef = {
+      id: c.id,
+      name: (c.name ?? "").trim() || "(no-name)",
+      email: (c.email ?? "").trim() || null,
+      phone: (c.phone ?? "").trim() || null,
+    };
     const name = (c.name ?? "").trim();
     if (!name) {
       failed++;
@@ -269,29 +367,71 @@ export async function syncContactsToGoogle(
       }
       const updateUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${updatePersonFields}&personFields=${SYNC_PERSON_FIELDS}`;
       try {
-        let res = await fetch(updateUrl, { method: "PATCH", headers, body: JSON.stringify(body) });
+        await sleep(WRITE_THROTTLE_MS);
+        logGoogleSyncDebug("update-attempt", {
+          contactRef,
+          resourceName: existing.resourceName,
+          updatePersonFields,
+          hasMetadataSource: !!body.metadata?.sources?.[0]?.etag,
+          hasAddresses: !!body.addresses?.length,
+          hasBiographies: !!body.biographies?.length,
+        });
+        let res = await fetchPeopleApi(
+          updateUrl,
+          { method: "PATCH", headers, body: JSON.stringify(body) },
+          { operation: "update-contact", contactRef: `${contactRef.name}:${contactRef.email ?? contactRef.phone ?? c.id}`, maxRetries: 5 }
+        );
         if (!res.ok && res.status === 400) {
           const fallbackBody = stripOptionalGoogleFields(body);
           const fallbackFields = getUpdatePersonFields(fallbackBody);
           if (fallbackFields) {
             const fallbackUrl = `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=${fallbackFields}&personFields=${fallbackFields}`;
-            res = await fetch(fallbackUrl, { method: "PATCH", headers, body: JSON.stringify(fallbackBody) });
+            logGoogleSyncDebug("update-fallback-attempt", {
+              contactRef,
+              fallbackFields,
+              strippedAddresses: !!body.addresses?.length,
+              strippedBiographies: !!body.biographies?.length,
+            });
+            await sleep(WRITE_THROTTLE_MS);
+            res = await fetchPeopleApi(
+              fallbackUrl,
+              { method: "PATCH", headers, body: JSON.stringify(fallbackBody) },
+              { operation: "update-contact-fallback", contactRef: `${contactRef.name}:${contactRef.email ?? contactRef.phone ?? c.id}`, maxRetries: 5 }
+            );
           }
         }
         if (res.ok) {
           updated++;
         } else {
           const updateErrText = await res.text();
+          const updateErr = formatGoogleApiError(res.status, updateErrText);
+          logGoogleSyncDebug("update-failed", {
+            contactRef,
+            status: res.status,
+            error: updateErr,
+            updatePersonFields,
+          });
           // If update fails (often because target isn't writable), fall back to create
           // so sync still gets the contact into Google instead of hard-failing.
           const createBody = contactToGooglePerson(c);
-          const createRes = await fetch(createUrl, { method: "POST", headers, body: JSON.stringify(createBody) });
+          await sleep(WRITE_THROTTLE_MS);
+          const createRes = await fetchPeopleApi(
+            createUrl,
+            { method: "POST", headers, body: JSON.stringify(createBody) },
+            { operation: "create-after-update-failed", contactRef: `${contactRef.name}:${contactRef.email ?? contactRef.phone ?? c.id}`, maxRetries: 5 }
+          );
           if (createRes.ok) {
             created++;
           } else {
             failed++;
             const createErrText = await createRes.text();
-            errors.push(`${name}: update failed (${updateErrText.slice(0, 60)}), create failed (${createErrText.slice(0, 60)})`);
+            const createErr = formatGoogleApiError(createRes.status, createErrText);
+            errors.push(`${name}: update failed (${updateErr}), create failed (${createErr})`);
+            logGoogleSyncDebug("create-after-update-failed", {
+              contactRef,
+              updateError: updateErr,
+              createError: createErr,
+            });
           }
         }
       } catch (e) {
@@ -301,17 +441,43 @@ export async function syncContactsToGoogle(
     } else {
       const body = contactToGooglePerson(c);
       try {
-        let res = await fetch(createUrl, { method: "POST", headers, body: JSON.stringify(body) });
+        await sleep(WRITE_THROTTLE_MS);
+        logGoogleSyncDebug("create-attempt", {
+          contactRef,
+          hasAddresses: !!body.addresses?.length,
+          hasBiographies: !!body.biographies?.length,
+        });
+        let res = await fetchPeopleApi(
+          createUrl,
+          { method: "POST", headers, body: JSON.stringify(body) },
+          { operation: "create-contact", contactRef: `${contactRef.name}:${contactRef.email ?? contactRef.phone ?? c.id}`, maxRetries: 5 }
+        );
         if (!res.ok && res.status === 400) {
           const fallbackBody = stripOptionalGoogleFields(body);
-          res = await fetch(createUrl, { method: "POST", headers, body: JSON.stringify(fallbackBody) });
+          logGoogleSyncDebug("create-fallback-attempt", {
+            contactRef,
+            strippedAddresses: !!body.addresses?.length,
+            strippedBiographies: !!body.biographies?.length,
+          });
+          await sleep(WRITE_THROTTLE_MS);
+          res = await fetchPeopleApi(
+            createUrl,
+            { method: "POST", headers, body: JSON.stringify(fallbackBody) },
+            { operation: "create-contact-fallback", contactRef: `${contactRef.name}:${contactRef.email ?? contactRef.phone ?? c.id}`, maxRetries: 5 }
+          );
         }
         if (res.ok) {
           created++;
         } else {
           failed++;
           const errText = await res.text();
-          errors.push(`${name}: ${errText.slice(0, 80)}`);
+          const createErr = formatGoogleApiError(res.status, errText);
+          errors.push(`${name}: ${createErr}`);
+          logGoogleSyncDebug("create-failed", {
+            contactRef,
+            status: res.status,
+            error: createErr,
+          });
         }
       } catch (e) {
         failed++;
@@ -320,6 +486,7 @@ export async function syncContactsToGoogle(
     }
   }
 
+  logGoogleSyncDebug("sync-finished", { created, updated, failed, errorCount: errors.length });
   return { created, updated, failed, errors };
 }
 
@@ -401,7 +568,11 @@ export const useGoogleContacts = () => {
         const url = pageToken
           ? `${baseUrl}&pageToken=${encodeURIComponent(pageToken)}`
           : baseUrl;
-        const response = await fetchPeopleApi(url, apiHeaders);
+        const response = await fetchPeopleApi(
+          url,
+          { headers: apiHeaders },
+          { operation: "connections-read", maxRetries: 4 }
+        );
 
         if (!response.ok) {
           throw new Error(response.status === 429 ? "Too many requests; please try again in a minute." : "Failed to fetch contacts");
