@@ -64,14 +64,22 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
-    const subscriptions = await stripe.subscriptions.list({
+    // Include trialing so new subscriptions (14-day trial) are recognized immediately after checkout
+    let subscriptions = await stripe.subscriptions.list({
       customer: customerId,
       status: "active",
       limit: 1,
     });
+    if (subscriptions.data.length === 0) {
+      subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "trialing",
+        limit: 1,
+      });
+    }
 
     if (subscriptions.data.length === 0) {
-      logStep("No active subscription found");
+      logStep("No active or trialing subscription found");
       return new Response(JSON.stringify({ 
         subscribed: false, 
         tier: "starter",

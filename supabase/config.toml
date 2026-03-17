@@ -34,6 +34,10 @@ verify_jwt = false
 # Function validates token; avoids gateway 401 when JWT is valid but gateway rejects
 verify_jwt = false
 
+[functions.update-subscription]
+# Function validates token; avoids gateway 401 when JWT is valid but gateway rejects
+verify_jwt = false
+
 [functions.stripe-webhook]
 # Must be false: Stripe sends webhooks without an Authorization header; gateway would otherwise return 401
 verify_jwt = false

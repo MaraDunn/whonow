@@ -119,8 +119,12 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in create-checkout", { message: errorMessage });
+    // Return user-safe message: hide config details, keep validation/Stripe messages
+    const safeMessage = errorMessage.includes("STRIPE_SECRET_KEY")
+      ? "Checkout is not configured. Please add Stripe keys in Supabase project settings."
+      : errorMessage;
     return new Response(
-      JSON.stringify({ error: "Checkout failed" }),
+      JSON.stringify({ error: safeMessage }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,

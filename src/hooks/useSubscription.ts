@@ -416,6 +416,15 @@ export const useSubscription = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("subscription") === "success") {
+      try {
+        localStorage.removeItem(SUBSCRIPTION_CACHE_KEY);
+        localStorage.removeItem(`${SUBSCRIPTION_CACHE_KEY}_time`);
+      } catch {
+        // ignore
+      }
+      if (typeof window !== "undefined" && typeof window.fbq === "function") {
+        window.fbq("track", "Subscribe");
+      }
       toast.success("Subscription activated successfully!");
       setShowCreateOrganizationAfterUpgrade(true);
       checkSubscription();

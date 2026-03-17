@@ -138,8 +138,11 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in update-subscription", { message: errorMessage });
+    const safeMessage = errorMessage.includes("STRIPE_SECRET_KEY")
+      ? "Subscription is not configured. Please add Stripe keys in Supabase project settings."
+      : errorMessage;
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: safeMessage }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
   }

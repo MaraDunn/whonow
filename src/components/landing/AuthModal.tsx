@@ -113,6 +113,9 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
         toast.error(error.message);
       }
     } else {
+      if (typeof window !== "undefined" && typeof window.fbq === "function") {
+        window.fbq("track", "StartTrial");
+      }
       toast.success("Check your email to verify your account.");
       setSignUpEmailSent(email);
     }
