@@ -94,27 +94,22 @@ serve(async (req) => {
 
     let subscription = subscriptions.data[0];
     if (!subscription.current_period_end || !subscription.current_period_start) {
-      logStep("Subscription missing date fields, fetching from Stripe", { subscriptionId: subscription.id });
+      logStep("Subscription missing date fields, fetching full object from Stripe", { subscriptionId: subscription.id });
       const retrieved = await stripe.subscriptions.retrieve(subscription.id);
       if (retrieved.current_period_end && retrieved.current_period_start) {
         subscription = retrieved;
       } else {
-        return new Response(JSON.stringify({
-          subscribed: false,
-          tier: "starter",
-          seats_limit: 1,
-          seats_used: 0,
-          subscription_end: null,
-          error: "Subscription is being processed, please try again in a moment"
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        });
+        // Dates still missing — proceed with null dates so the tier still gets synced
+        logStep("Subscription dates unavailable after retrieve; proceeding with null dates", { subscriptionId: subscription.id });
       }
     }
-    
-    const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-    const subscriptionStart = new Date(subscription.current_period_start * 1000).toISOString();
+
+    const subscriptionEnd = subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000).toISOString()
+      : null;
+    const subscriptionStart = subscription.current_period_start
+      ? new Date(subscription.current_period_start * 1000).toISOString()
+      : null;
     logStep("Active subscription found", { subscriptionId: subscription.id });
 
     const priceId = subscription.items.data[0]?.price?.id as string | undefined;
@@ -156,11 +151,10 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       subscribed: true,
       tier: tier,
-      // Return the Stripe price id for debugging/telemetry
       product_id: priceId,
       seats_limit: seatsLimit,
-      seats_used: 0, // Will be fetched from database
-      subscription_end: subscriptionEnd
+      seats_used: 0,
+      subscription_end: subscriptionEnd ?? null,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
