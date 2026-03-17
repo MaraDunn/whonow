@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
-import { trackStartTrial } from "@/utils/metaPixel";
 import { cn } from "@/lib/utils";
 
 const emailSchema = z.string().email("Please enter a valid email address");
@@ -114,7 +113,6 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
         toast.error(error.message);
       }
     } else {
-      trackStartTrial();
       toast.success("Check your email to verify your account.");
       setSignUpEmailSent(email);
     }
@@ -169,18 +167,18 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        className="fixed inset-0 bg-background/80 backdrop-blur-sm"
         onClick={() => {
           resetForm();
           onClose();
         }}
       />
 
-      {/* Modal */}
-      <Card className="relative z-10 w-full max-w-md mx-4 animate-scale-in">
+      {/* Modal: constrained to viewport so it stays usable with zoom/large text */}
+      <Card className="relative z-10 w-full max-w-md max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden animate-scale-in my-auto">
         <button
           onClick={() => {
             resetForm();
@@ -191,7 +189,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
           <X className="h-5 w-5" />
         </button>
 
-        <CardHeader className="text-center">
+        <CardHeader className="text-center flex-shrink-0">
           <div className="mx-auto mb-4 flex justify-center">
             <WhoNowLogo size="lg" showText={false} />
           </div>
@@ -199,7 +197,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = "signin" }: AuthModalP
           <CardDescription>Find anyone, anytime</CardDescription>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="overflow-y-auto min-h-0 flex-1">
           {signUpEmailSent ? (
             <div className="space-y-4">
               <div className="rounded-lg bg-muted/50 p-4 text-center">

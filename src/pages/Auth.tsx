@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import { WhoNowLogo } from "@/components/WhoNowLogo";
 import { getAuthRedirectOrigin } from "@/utils/launchMode";
-import { trackStartTrial } from "@/utils/metaPixel";
 import { cn } from "@/lib/utils";
 import { GOOGLE_PENDING_TOKEN_KEY, GOOGLE_REDIRECT_PENDING_KEY } from "@/hooks/useGoogleContacts";
 
@@ -210,7 +209,6 @@ const Auth = () => {
         return;
       }
 
-      trackStartTrial();
       toast.success("Check your email to verify your account.");
       setSignUpEmailSent(email);
     } catch (err) {

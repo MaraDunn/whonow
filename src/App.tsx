@@ -1,8 +1,8 @@
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -112,10 +112,21 @@ const DesktopAppRootRedirect = () => {
   );
 };
 
+const MetaPixelRouteTracker = () => {
+  const location = useLocation();
+  useEffect(() => {
+    if (typeof window !== "undefined" && typeof window.fbq === "function") {
+      window.fbq("track", "PageView");
+    }
+  }, [location.pathname, location.search]);
+  return null;
+};
+
 const AppRoutes = () => {
   return (
     <>
       <BrandingTheme />
+      <MetaPixelRouteTracker />
       <Routes>
         <Route path="/" element={<DesktopAppRootRedirect />} />
         <Route path="/waitlist" element={<Navigate to="/" replace />} />
