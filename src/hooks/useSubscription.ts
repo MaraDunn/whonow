@@ -446,8 +446,8 @@ export const useSubscription = () => {
     setShowCreateOrganizationAfterUpgrade(false);
   }, []);
 
-  /** Clear cache and any in-flight request, then sync from Stripe/DB. Use when subscription is live in Stripe but not showing. */
-  const forceSyncSubscription = useCallback(() => {
+  /** Bypass DB, call check-subscription Edge Function directly, sync from Stripe. */
+  const forceSyncSubscription = useCallback(async () => {
     try {
       localStorage.removeItem(SUBSCRIPTION_CACHE_KEY);
       localStorage.removeItem(`${SUBSCRIPTION_CACHE_KEY}_time`);
@@ -455,8 +455,62 @@ export const useSubscription = () => {
       // ignore
     }
     pendingRequest = null;
-    checkSubscription();
-  }, [checkSubscription]);
+    setIsLoading(true);
+
+    try {
+      let token = await getValidAccessToken();
+      if (!token && session?.access_token) {
+        token = session.access_token;
+      }
+      if (!token) {
+        toast.error("Session expired. Please sign in again.");
+        setIsLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("check-subscription", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (error) {
+        console.error("Force sync error:", error);
+        const msg = describeFunctionsError(error);
+        toast.error(msg || "Failed to sync subscription");
+        setIsLoading(false);
+        return;
+      }
+
+      if (data?.error) {
+        console.error("Force sync returned error:", data.error);
+        toast.error(data.error);
+        setIsLoading(false);
+        return;
+      }
+
+      console.log("[forceSyncSubscription] Edge Function returned:", JSON.stringify(data));
+      const subscriptionData: SubscriptionData = {
+        subscribed: data?.subscribed ?? false,
+        tier: normalizeTier(data?.tier, data?.subscribed ?? false),
+        productId: data?.product_id,
+        seatsLimit: data?.seats_limit ?? 1,
+        seatsUsed: data?.seats_used ?? 0,
+        subscriptionEnd: data?.subscription_end ?? null,
+      };
+      setSubscription(subscriptionData);
+      cacheSubscription(subscriptionData);
+      setIsLoading(false);
+
+      if (subscriptionData.subscribed) {
+        toast.success(`Subscription synced: ${subscriptionData.tier.charAt(0).toUpperCase() + subscriptionData.tier.slice(1)} plan`);
+      } else {
+        toast.info("No active subscription found in Stripe");
+      }
+    } catch (err) {
+      console.error("Force sync failed:", err);
+      toast.error("Failed to sync subscription");
+      setIsLoading(false);
+    }
+  }, [session?.access_token]);
 
   const canAccessFeature = useCallback(
     (feature: FeatureName): boolean => {

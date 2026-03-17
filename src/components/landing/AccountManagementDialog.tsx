@@ -575,10 +575,7 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                       size="sm"
                       className="text-muted-foreground"
                       disabled={subscriptionLoading}
-                      onClick={() => {
-                        forceSyncSubscription();
-                        toast.info("Syncing subscription from Stripe…");
-                      }}
+                      onClick={() => forceSyncSubscription()}
                     >
                       <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
                       Sync subscription

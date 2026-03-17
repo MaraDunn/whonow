@@ -1690,10 +1690,7 @@ export function SettingsDialog({
                           size="sm"
                           className="w-full text-muted-foreground"
                           disabled={subLoading}
-                          onClick={() => {
-                            forceSyncSubscription();
-                            toast.info("Syncing subscription from Stripe…");
-                          }}
+                          onClick={() => forceSyncSubscription()}
                         >
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Sync subscription
