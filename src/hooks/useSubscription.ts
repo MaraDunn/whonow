@@ -226,9 +226,10 @@ export const useSubscription = () => {
           tier = effectiveTier;
         }
 
-        // If we have a subscription (personal or company), use it
-        if (subscriptionToUse) {
-          // Use the tier we determined (which prioritizes company subscription)
+        // If we have a paid subscription (personal or company), use it. When DB only shows
+        // starter, still fall through to check-subscription so we sync from Stripe (e.g.
+        // after checkout before webhook ran).
+        if (subscriptionToUse && tier !== "starter") {
           const finalTier = tier;
           const isSubscribed = subscriptionToUse.status === "active" && finalTier !== "starter";
           const subscriptionData: SubscriptionData = {
@@ -445,6 +446,18 @@ export const useSubscription = () => {
     setShowCreateOrganizationAfterUpgrade(false);
   }, []);
 
+  /** Clear cache and any in-flight request, then sync from Stripe/DB. Use when subscription is live in Stripe but not showing. */
+  const forceSyncSubscription = useCallback(() => {
+    try {
+      localStorage.removeItem(SUBSCRIPTION_CACHE_KEY);
+      localStorage.removeItem(`${SUBSCRIPTION_CACHE_KEY}_time`);
+    } catch {
+      // ignore
+    }
+    pendingRequest = null;
+    checkSubscription();
+  }, [checkSubscription]);
+
   const canAccessFeature = useCallback(
     (feature: FeatureName): boolean => {
       const allowedTiers = FEATURE_ACCESS[feature];
@@ -625,6 +638,7 @@ export const useSubscription = () => {
     updateSubscription,
     openCustomerPortal,
     refreshSubscription: checkSubscription,
+    forceSyncSubscription,
     showCreateOrganizationAfterUpgrade,
     dismissCreateOrgPrompt,
   };

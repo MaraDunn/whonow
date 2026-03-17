@@ -483,7 +483,7 @@ export function SettingsDialog({
     refreshInviteCode,
     deleteCompany,
   } = useProfile(user?.id);
-  const { tier, subscription, createCheckout, isLoading: subLoading, refreshSubscription, canAccessFeature } = useSubscription();
+  const { tier, subscription, createCheckout, isLoading: subLoading, refreshSubscription, forceSyncSubscription, canAccessFeature } = useSubscription();
 
   // Fallback: if no owner is set and user is admin, treat as super admin (backwards compatibility)
   const isSuperAdmin = isSuperAdminFromHook || (isAdmin && (!company?.ownerId || company?.ownerId === user?.id));
@@ -1683,6 +1683,21 @@ export function SettingsDialog({
                             </Button>
                           </>
                         )}
+                        <Separator />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-muted-foreground"
+                          disabled={subLoading}
+                          onClick={() => {
+                            forceSyncSubscription();
+                            toast.info("Syncing subscription from Stripe…");
+                          }}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Sync subscription
+                        </Button>
                       </CardContent>
                     </Card>
                   </div>

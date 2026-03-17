@@ -111,9 +111,9 @@ serve(async (req) => {
         }, { onConflict: "user_id" });
       if (upsertError) {
         logStep("Error upserting subscription", { error: upsertError.message });
-      } else {
-        logStep("Subscription synced", { tier, status, userId });
+        throw new Error(upsertError.message);
       }
+      logStep("Subscription synced", { tier, status, userId });
     };
 
     // Handle subscription events
@@ -122,12 +122,12 @@ serve(async (req) => {
         const session = event.data.object as Stripe.Checkout.Session;
         if (session.mode !== "subscription" || !session.subscription) {
           logStep("Checkout session not subscription or no subscription id", { mode: session.mode });
-          break;
+          return new Response(JSON.stringify({ error: "Unhandled session mode" }), { status: 200 });
         }
         const userId = session.metadata?.user_id;
         if (!userId) {
-          logStep("No user_id in checkout session metadata, skipping");
-          break;
+          logStep("No user_id in checkout session metadata, cannot sync");
+          return new Response(JSON.stringify({ error: "Missing user_id in metadata" }), { status: 500 });
         }
         const subscriptionId = typeof session.subscription === "string"
           ? session.subscription
@@ -152,17 +152,18 @@ serve(async (req) => {
         let userId: string | null = existing?.user_id ?? null;
 
         if (!userId) {
-          // Find user by customer email (listUsers is paginated; only first page was used before)
+          // Find user by customer email (case-insensitive; Stripe and Auth may differ)
           const customer = await stripe.customers.retrieve(customerId);
           if (customer.deleted) {
             logStep("Customer deleted, skipping");
-            break;
+            return new Response(JSON.stringify({ error: "Customer deleted" }), { status: 200 });
           }
-          const customerEmail = customer.email;
-          if (!customerEmail) {
+          const customerEmail = (customer as { email?: string | null }).email;
+          if (!customerEmail || typeof customerEmail !== "string") {
             logStep("No customer email found", { customerId });
-            break;
+            return new Response(JSON.stringify({ error: "No customer email" }), { status: 500 });
           }
+          const emailLower = customerEmail.trim().toLowerCase();
           let page = 1;
           const perPage = 100;
           while (true) {
@@ -172,9 +173,11 @@ serve(async (req) => {
             });
             if (userError) {
               logStep("Error listing users", { error: userError.message });
-              break;
+              return new Response(JSON.stringify({ error: "User lookup failed" }), { status: 500 });
             }
-            const user = listData.users.find((u) => u.email === customerEmail);
+            const user = listData.users.find(
+              (u) => u.email?.trim().toLowerCase() === emailLower
+            );
             if (user) {
               userId = user.id;
               break;
@@ -190,7 +193,7 @@ serve(async (req) => {
 
         if (!userId) {
           logStep("No user found for subscription", { subscriptionId: subscription.id });
-          break;
+          return new Response(JSON.stringify({ error: "No user for subscription" }), { status: 500 });
         }
 
         await upsertSubscription({ userId, subscription, stripe });

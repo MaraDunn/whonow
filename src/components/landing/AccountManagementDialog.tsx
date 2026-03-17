@@ -32,6 +32,7 @@ import {
   Plus,
   ArrowRight,
   XCircle,
+  RefreshCw,
 } from "lucide-react";
 import {
   Dialog,
@@ -110,6 +111,7 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
     openCustomerPortal, 
     createCheckout,
     updateSubscription,
+    forceSyncSubscription,
     isLoading: subscriptionLoading 
   } = useSubscription();
 
@@ -566,6 +568,22 @@ export const AccountManagementDialog = ({ open, onOpenChange }: AccountManagemen
                       </li>
                     ))}
                   </ul>
+                  <div className="mt-3 pt-3 border-t">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      disabled={subscriptionLoading}
+                      onClick={() => {
+                        forceSyncSubscription();
+                        toast.info("Syncing subscription from Stripe…");
+                      }}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                      Sync subscription
+                    </Button>
+                  </div>
                 </div>
               </div>
 
