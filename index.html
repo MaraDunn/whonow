@@ -24,25 +24,18 @@
     <meta name="twitter:site" content="@WhoNow" />
     <meta name="twitter:image" content="https://www.whonow.co/twitter-image.png?v=4" />
 
-    <!-- Meta Pixel Code (loads only when not blocked by ad blockers) -->
+    <!-- Meta Pixel Code -->
     <script>
-      (function() {
-        var script = document.createElement('script');
-        script.async = true;
-        script.src = 'https://connect.facebook.net/en_US/fbevents.js';
-        script.onerror = function() { /* Blocked by client (e.g. ad blocker) - ignore */ };
-        script.onload = function() {
-          if (typeof fbq === 'function') {
-            fbq('init', '1604362754269395');
-            fbq('track', 'PageView');
-          }
-        };
-        window.fbq = window.fbq || function() { (window.fbq.queue = window.fbq.queue || []).push(arguments); };
-        window.fbq.loaded = true;
-        window.fbq.version = '2.0';
-        window.fbq.queue = [];
-        document.head.appendChild(script);
-      })();
+      !function(f,b,e,v,n,t,s)
+      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', '1604362754269395');
+      fbq('track', 'PageView');
     </script>
     <!-- End Meta Pixel Code -->
   </head>
