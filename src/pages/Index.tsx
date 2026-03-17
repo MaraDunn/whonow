@@ -1573,9 +1573,13 @@ const IndexContent = () => {
               {showOnboarding && (
                 <OnboardingTutorial
                   steps={onboardingSteps}
-                  onComplete={() => {
+                  onComplete={(importTab) => {
                     completeOnboarding();
                     setShowOnboarding(false);
+                    if (importTab) {
+                      setImportDefaultTab(importTab);
+                      setImportDialogOpen(true);
+                    }
                   }}
                   onSkip={() => {
                     completeOnboarding();

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, ArrowRight, Check } from "lucide-react";
+import { X, ArrowRight, Check, Chrome, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -12,11 +12,13 @@ export interface OnboardingStep {
   content: string;
   targetSelector?: string;
   position?: "top" | "bottom" | "left" | "right";
+  /** When true, show "Sync from Google" and "Import from File" buttons; on choose, onComplete(importTab) is called. */
+  importChoice?: boolean;
 }
 
 interface OnboardingTutorialProps {
   steps: OnboardingStep[];
-  onComplete: () => void;
+  onComplete: (importTab?: "google" | "file") => void;
   onSkip: () => void;
 }
 
@@ -160,7 +162,7 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
     const leavingDirectories = currentStep?.id === DIRECTORIES_STEP_ID;
     if (isLastStep) {
       setIsVisible(false);
-      setTimeout(onComplete, 200);
+      setTimeout(() => onComplete(), 200);
     } else {
       setIsVisible(false);
       setTimeout(() => {
@@ -168,6 +170,11 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
         if (leavingDirectories && isMobile) setOpenMobile(false);
       }, 200);
     }
+  };
+
+  const handleImportChoice = (tab: "google" | "file") => {
+    setIsVisible(false);
+    setTimeout(() => onComplete(tab), 200);
   };
 
   const handleSkip = () => {
@@ -301,28 +308,51 @@ export function OnboardingTutorial({ steps, onComplete, onSkip }: OnboardingTuto
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2 mt-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSkip}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Skip
-            </Button>
-            <Button onClick={handleNext} size="sm" className="ml-auto gap-2">
-              {isLastStep ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  Done
-                </>
-              ) : (
-                <>
-                  Next
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </Button>
+          <div className="mt-4">
+            {currentStep.importChoice ? (
+              <div className="flex flex-col gap-2">
+                <Button onClick={() => handleImportChoice("file")} size="sm" className="w-full gap-2">
+                  <FileUp className="h-4 w-4" />
+                  Import from File
+                </Button>
+                <Button onClick={() => handleImportChoice("google")} size="sm" className="w-full gap-2">
+                  <Chrome className="h-4 w-4" />
+                  Sync from Google
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSkip}
+                  className="text-muted-foreground hover:text-foreground mt-2"
+                >
+                  Skip
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSkip}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Skip
+                </Button>
+                <Button onClick={handleNext} size="sm" className="ml-auto gap-2">
+                  {isLastStep ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Done
+                    </>
+                  ) : (
+                    <>
+                      Next
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>

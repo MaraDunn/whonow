@@ -35,4 +35,10 @@ export const onboardingSteps: OnboardingStep[] = [
     targetSelector: "[data-onboarding-add-button]",
     position: "bottom",
   },
+  {
+    id: "import-choice",
+    title: "Let's get you started",
+    content: "How would you like to import contacts?",
+    importChoice: true,
+  },
 ];
