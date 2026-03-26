@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
 import type { Contact } from "@/types/contact";
 import { computeHealthScore } from "@/utils/relationshipHealth";
 
@@ -237,6 +238,7 @@ interface HealthClientRow {
   created_at: string;
   last_contacted_at: string | null;
   follow_up_date: string | null;
+  reminder_interval_override: number | null;
   folder_id: string | null;
   preferred_contact_interval_days: number | null;
   client_weight: number | null;
@@ -244,8 +246,9 @@ interface HealthClientRow {
 
 export function useHealthScoreData() {
   const { user } = useAuth();
+  const { contactInterval } = useReminderSettings();
   return useQuery<HealthScoreData>({
-    queryKey: ["insight-contacts", "health-score", "v2", user?.id],
+    queryKey: ["insight-contacts", "health-score", "v2", user?.id, contactInterval],
     queryFn: async () => {
       if (!user?.id) throw new Error("Not authenticated");
       const now = new Date();
@@ -289,11 +292,14 @@ export function useHealthScoreData() {
           createdAt: r.created_at,
           lastContactedAt: r.last_contacted_at || undefined,
           followUpDate: r.follow_up_date || undefined,
+          reminderIntervalOverride: r.reminder_interval_override ?? undefined,
           folderId: r.folder_id || undefined,
           preferredContactIntervalDays: r.preferred_contact_interval_days ?? undefined,
           clientWeight: r.client_weight ?? undefined,
         };
-        const { score, status } = computeHealthScore(contact, interactionCounts[r.id] ?? 0, now);
+        const { score, status } = computeHealthScore(contact, interactionCounts[r.id] ?? 0, now, {
+          defaultIntervalDays: contactInterval,
+        });
         return { ...contact, relationshipHealthScore: score, relationshipHealthStatus: status } as Contact & { relationshipHealthScore: number; relationshipHealthStatus: "Healthy" | "At Risk" | "Cold" };
       });
 

@@ -117,11 +117,12 @@ function EmailButton({ email, subject = "", body }: EmailButtonProps) {
 // ─── Template toolbar ────────────────────────────────────────────────────────
 
 interface TemplateToolbarProps {
+  currentSubject: string;
   currentBody: string;
-  onLoad: (body: string) => void;
+  onLoad: (template: { subject: string; body: string }) => void;
 }
 
-function TemplateToolbar({ currentBody, onLoad }: TemplateToolbarProps) {
+function TemplateToolbar({ currentSubject, currentBody, onLoad }: TemplateToolbarProps) {
   const { templates, addTemplate, updateTemplate, deleteTemplate } =
     useMessageTemplates();
   const [saveOpen, setSaveOpen] = useState(false);
@@ -133,7 +134,7 @@ function TemplateToolbar({ currentBody, onLoad }: TemplateToolbarProps) {
   const handleSave = () => {
     const name = saveName.trim();
     if (!name) return;
-    addTemplate(name, currentBody);
+    addTemplate(name, currentSubject, currentBody);
     toast.success(`Template "${name}" saved`);
     setSaveName("");
     setSaveOpen(false);
@@ -152,7 +153,7 @@ function TemplateToolbar({ currentBody, onLoad }: TemplateToolbarProps) {
   };
 
   const handleOverwrite = (id: string) => {
-    updateTemplate(id, { body: currentBody });
+    updateTemplate(id, { subject: currentSubject, body: currentBody });
     toast.success("Template updated");
   };
 
@@ -208,7 +209,7 @@ function TemplateToolbar({ currentBody, onLoad }: TemplateToolbarProps) {
                     <DropdownMenuItem
                       className="flex-1 cursor-pointer text-xs"
                       onClick={() => {
-                        onLoad(t.body);
+                        onLoad({ subject: t.subject, body: t.body });
                         toast.success(`Loaded "${t.name}"`);
                       }}
                     >
@@ -312,6 +313,7 @@ interface MassOutreachAssistantProps {
 }
 
 export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreachAssistantProps) {
+  const [subjectTemplate, setSubjectTemplate] = useState("");
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -336,9 +338,10 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
     () =>
       selectedContacts.map((contact) => ({
         contact,
+        subject: fillTemplate(subjectTemplate, contact),
         message: fillTemplate(template, contact),
       })),
-    [selectedContacts, template]
+    [selectedContacts, subjectTemplate, template]
   );
 
   const toggleContact = (id: string) => {
@@ -407,8 +410,18 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
               </div>
             </div>
             <TemplateToolbar
+              currentSubject={subjectTemplate}
               currentBody={template}
-              onLoad={(body) => setTemplate(body)}
+              onLoad={({ subject, body }) => {
+                setSubjectTemplate(subject);
+                setTemplate(body);
+              }}
+            />
+            <Input
+              value={subjectTemplate}
+              onChange={(e) => setSubjectTemplate(e.target.value)}
+              className="h-9 text-sm"
+              placeholder="Email subject (supports variables)"
             />
             <Textarea
               ref={textareaRef}
@@ -520,7 +533,7 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
           ) : (
             <div className="max-h-[480px] overflow-y-auto">
               <div className="space-y-3 pr-2">
-                {previews.map(({ contact, message }) => (
+                {previews.map(({ contact, subject, message }) => (
                   <div key={contact.id} className="border rounded-lg p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -533,7 +546,7 @@ export function MassOutreachAssistant({ contacts, preSelectedIds }: MassOutreach
                         <p className="text-xs font-medium truncate">{contact.name}</p>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0">
-                        <EmailButton email={contact.email} body={message} />
+                        <EmailButton email={contact.email} subject={subject} body={message} />
                         <CopyButton text={message} />
                       </div>
                     </div>

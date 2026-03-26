@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
 import type { Contact } from "@/types/contact";
 import { computeHealthScore } from "@/utils/relationshipHealth";
 
@@ -256,6 +257,7 @@ interface HealthSharedRow {
   created_at: string;
   last_contacted_at: string | null;
   follow_up_date: string | null;
+  reminder_interval_override: number | null;
   folder_id: string | null;
   preferred_contact_interval_days: number | null;
   client_weight: number | null;
@@ -264,10 +266,11 @@ interface HealthSharedRow {
 export function useOrgHealthScoreData() {
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
+  const { contactInterval } = useReminderSettings();
   const companyId = profile?.companyId;
 
   return useQuery<OrgHealthScoreData>({
-    queryKey: ["org-insight-contacts", "health-score", companyId],
+    queryKey: ["org-insight-contacts", "health-score", companyId, contactInterval],
     queryFn: async () => {
       if (!user?.id || !companyId) throw new Error("Not authenticated");
       const now = new Date();
@@ -310,11 +313,14 @@ export function useOrgHealthScoreData() {
           createdAt: r.created_at,
           lastContactedAt: r.last_contacted_at || undefined,
           followUpDate: r.follow_up_date || undefined,
+          reminderIntervalOverride: r.reminder_interval_override ?? undefined,
           folderId: r.folder_id || undefined,
           preferredContactIntervalDays: r.preferred_contact_interval_days ?? undefined,
           clientWeight: r.client_weight ?? undefined,
         };
-        const { score, status } = computeHealthScore(contact, interactionCounts[r.id] ?? 0, now);
+        const { score, status } = computeHealthScore(contact, interactionCounts[r.id] ?? 0, now, {
+          defaultIntervalDays: contactInterval,
+        });
         return { ...contact, relationshipHealthScore: score, relationshipHealthStatus: status } as Contact & { relationshipHealthScore: number; relationshipHealthStatus: "Healthy" | "At Risk" | "Cold" };
       });
 

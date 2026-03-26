@@ -200,6 +200,7 @@ const ContactCardComponent = function ContactCard({
   const [folderPopoverOpen, setFolderPopoverOpen] = React.useState(false);
   const isMobile = useIsMobile();
   const { setPayload } = useContactDrag();
+  const { contactInterval } = useReminderSettings();
 
   const canDrag = !isMobile && !!onUpdateFolder && !isTrashView;
   const handleDragStart = React.useCallback(
@@ -258,15 +259,20 @@ const ContactCardComponent = function ContactCard({
   // Recompute health every minute (healthClock); frequency (recentInteractionCount) allows scores above 70.
   const healthResult = React.useMemo(() => {
     if (!contact.isClient) return null;
-    return computeHealthScore(contact, recentInteractionCount);
+    return computeHealthScore(contact, recentInteractionCount, new Date(), {
+      defaultIntervalDays: contactInterval,
+    });
   }, [
     healthClock,
     contact.id,
     contact.lastContactedAt,
+    contact.followUpDate,
+    contact.reminderIntervalOverride,
     contact.preferredContactIntervalDays,
     contact.clientWeight,
     contact.isClient,
     recentInteractionCount,
+    contactInterval,
   ]);
 
   const handleAction = React.useCallback((type: ActionType) => {

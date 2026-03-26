@@ -95,7 +95,7 @@ export function OrganizationDashboard({
   onToggleSelectionMode,
   interactionCounts,
 }: OrganizationDashboardProps) {
-  const { reminderInterval } = useReminderSettings();
+  const { reminderInterval, contactInterval } = useReminderSettings();
   const [outreachPreSelected, setOutreachPreSelected] = useState<Set<string>>(new Set());
   const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
 
@@ -109,7 +109,9 @@ export function OrganizationDashboard({
     const now = new Date();
     let list = contacts.map((c) => {
       const count = interactionCounts?.[c.id] ?? 0;
-      const { score, status } = computeHealthScore(c, count, now);
+      const { score, status } = computeHealthScore(c, count, now, {
+        defaultIntervalDays: contactInterval,
+      });
       return { ...c, relationshipHealthScore: score, relationshipHealthStatus: status };
     });
 
@@ -128,7 +130,7 @@ export function OrganizationDashboard({
     }
 
     return list;
-  }, [contacts, healthFilter, orgSortOption, healthClock, interactionCounts]);
+  }, [contacts, healthFilter, orgSortOption, healthClock, interactionCounts, contactInterval]);
 
   return (
     <div>

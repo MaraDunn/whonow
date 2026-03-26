@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line,
   Tooltip as ReTooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import {
@@ -27,7 +27,6 @@ import {
   useOrgStaleContacts,
   useOrgSharedRatioData,
   useOrgContactedRatioData,
-  useOrgExpandedChartData,
   useOrgHealthScoreData,
 } from "@/hooks/useOrgInsightContacts";
 import { useBulkSetFollowUpDate, useSetFollowUpDate } from "@/hooks/useFollowUps";
@@ -35,6 +34,7 @@ import { useGoogleCalendarIntegration } from "@/hooks/useGoogleCalendarIntegrati
 import { useReminderSettings } from "@/hooks/useReminderSettings";
 import { toast } from "sonner";
 import type { Contact } from "@/types/contact";
+import type { OrgMonthlyBucket } from "@/hooks/useOrgRelationshipInsights";
 
 // ─── Shared Components ───────────────────────────────────────────
 
@@ -734,90 +734,44 @@ export function OrgHealthScoreDialog({ open, onOpenChange }: OrgHealthScoreDialo
 
 // ─── Expanded Chart Dialog ───────────────────────────────────────
 
-const ORG_SERIES_CONFIG = [
-  { key: "contactsAdded" as const, label: "Contacts Added", color: "#6366f1" },
-  { key: "sharedAdded" as const, label: "Shared Added", color: "#3b82f6" },
-  { key: "contacted" as const, label: "Contacted", color: "#22c55e" },
-  { key: "followUpsSet" as const, label: "Follow-ups Set", color: "#8b5cf6" },
-];
-
 interface OrgExpandedChartDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  data: OrgMonthlyBucket[];
 }
 
 export function OrgExpandedChartDialog({
   open,
+  data,
   onOpenChange,
 }: OrgExpandedChartDialogProps) {
-  const [activeSeries, setActiveSeries] = useState<Set<string>>(
-    new Set(["contactsAdded", "sharedAdded"])
+  const chartData = useMemo(
+    () => data.map((d) => ({ label: d.month.slice(5), health: d.count })),
+    [data]
   );
-  const { data, isLoading } = useOrgExpandedChartData(6);
-
-  const toggleSeries = (key: string) => {
-    setActiveSeries((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        if (next.size > 1) next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Organization Growth Analytics</DialogTitle>
+          <DialogTitle>Organization Health Trend</DialogTitle>
           <DialogDescription>
-            6-month overview of your organization's shared contact activity
+            6-month average relationship health score across shared contacts
           </DialogDescription>
         </DialogHeader>
-
-        <div className="flex flex-wrap gap-2">
-          {ORG_SERIES_CONFIG.map((s) => {
-            const active = activeSeries.has(s.key);
-            return (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => toggleSeries(s.key)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
-                  active
-                    ? "border-transparent text-white"
-                    : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
-                )}
-                style={active ? { backgroundColor: s.color } : undefined}
-              >
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: s.color }}
-                />
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {isLoading ? (
-          <Skeleton className="h-64 w-full rounded-lg" />
-        ) : data && data.length > 0 ? (
+        {chartData.length > 0 ? (
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} barGap={2} barCategoryGap="20%">
+              <LineChart data={chartData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
                   stroke="hsl(var(--border))"
                 />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                <YAxis domain={[0, 100]} allowDecimals={false} tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
                 <ReTooltip
-                  cursor={{ fill: "hsl(var(--accent))" }}
+                  cursor={{ stroke: "#3b82f6", strokeWidth: 1, strokeDasharray: "4 4" }}
                   contentStyle={{
                     background: "hsl(var(--popover))",
                     border: "1px solid hsl(var(--border))",
@@ -831,18 +785,16 @@ export function OrgExpandedChartDialog({
                   iconSize={8}
                   wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
                 />
-                {ORG_SERIES_CONFIG.filter((s) => activeSeries.has(s.key)).map(
-                  (s) => (
-                    <Bar
-                      key={s.key}
-                      dataKey={s.key}
-                      name={s.label}
-                      fill={s.color}
-                      radius={[3, 3, 0, 0]}
-                    />
-                  )
-                )}
-              </BarChart>
+                <Line
+                  type="monotone"
+                  dataKey="health"
+                  name="Avg Health Score"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 4 }}
+                />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         ) : (

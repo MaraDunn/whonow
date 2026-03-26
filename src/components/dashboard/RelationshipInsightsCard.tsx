@@ -97,7 +97,7 @@ function GrowthChart({ data }: GrowthChartProps) {
   return (
     <div>
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-        Client Growth (6 months)
+        Relationship Health (6 months)
       </p>
       <svg
         viewBox={`0 0 ${width} ${height}`}
@@ -303,6 +303,7 @@ export function RelationshipInsightsCard({
       {activeDialog === "chart" && (
         <ExpandedChartDialog
           open
+          data={metrics.monthlyGrowth}
           onOpenChange={(o) => {
             if (!o) closeDialog();
           }}

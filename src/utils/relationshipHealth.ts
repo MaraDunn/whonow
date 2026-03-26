@@ -7,6 +7,11 @@ export interface HealthResult {
   status: HealthStatus;
 }
 
+export interface HealthScoreOptions {
+  /** Global fallback when a contact doesn't have a preferred interval set. */
+  defaultIntervalDays?: number;
+}
+
 /**
  * Deterministic, O(1) relationship health score for a single client contact.
  *
@@ -30,11 +35,16 @@ export interface HealthResult {
  */
 const HEALTHY_CAP = 0.9; // Full recency score only when within 90% of preferred interval; past that we decay so "due" = At Risk
 export function computeHealthScore(
-  contact: Pick<Contact, "lastContactedAt" | "preferredContactIntervalDays" | "clientWeight">,
+  contact: Pick<Contact, "lastContactedAt" | "preferredContactIntervalDays" | "clientWeight" | "followUpDate" | "reminderIntervalOverride">,
   recentInteractionCount: number,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options?: HealthScoreOptions
 ): HealthResult {
-  const interval = sanitizeInterval(contact.preferredContactIntervalDays);
+  const interval = sanitizeInterval(
+    contact.preferredContactIntervalDays ??
+      contact.reminderIntervalOverride ??
+      options?.defaultIntervalDays
+  );
   const weight = sanitizeWeight(contact.clientWeight);
 
   // No interaction ever → instant Cold
@@ -69,7 +79,17 @@ export function computeHealthScore(
   const frequencyScore = Math.min(Math.max(0, recentInteractionCount), 10) * 3;
 
   const rawScore = (recencyScore + frequencyScore) * weight;
-  const finalScore = Math.min(Math.round(rawScore), 100);
+  let finalScore = Math.min(Math.round(rawScore), 100);
+
+  // If a follow-up date is missed, the relationship should not remain "Healthy".
+  // If it's missed by at least one interval window, it should be treated as "Cold".
+  const overdueDays = getOverdueDays(contact.followUpDate, now);
+  if (overdueDays > 0) {
+    finalScore = Math.min(finalScore, 69);
+    if (overdueDays >= interval) {
+      finalScore = Math.min(finalScore, 39);
+    }
+  }
 
   return { score: finalScore, status: scoreToStatus(finalScore) };
 }
@@ -88,6 +108,15 @@ function sanitizeInterval(value: number | undefined): number {
 function sanitizeWeight(value: number | undefined): number {
   if (!value || !isFinite(value) || value <= 0) return 1.0;
   return value;
+}
+
+function getOverdueDays(followUpDate: string | undefined, now: Date): number {
+  if (!followUpDate) return 0;
+  const due = new Date(`${followUpDate}T00:00:00`);
+  if (isNaN(due.getTime())) return 0;
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffMs = todayStart.getTime() - due.getTime();
+  return diffMs > 0 ? Math.floor(diffMs / 86_400_000) : 0;
 }
 
 /**

@@ -95,7 +95,7 @@ export function ClientDashboard({
   onToggleSelectionMode,
   interactionCounts,
 }: ClientDashboardProps) {
-  const { reminderInterval } = useReminderSettings();
+  const { reminderInterval, contactInterval } = useReminderSettings();
   const [outreachPreSelected, setOutreachPreSelected] = useState<Set<string>>(new Set());
   const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
 
@@ -111,7 +111,9 @@ export function ClientDashboard({
     let list = contacts.map((c) => {
       if (!c.isClient) return c;
       const count = interactionCounts?.[c.id] ?? 0;
-      const { score, status } = computeHealthScore(c, count, now);
+      const { score, status } = computeHealthScore(c, count, now, {
+        defaultIntervalDays: contactInterval,
+      });
       return { ...c, relationshipHealthScore: score, relationshipHealthStatus: status };
     });
 
@@ -132,7 +134,7 @@ export function ClientDashboard({
     }
 
     return list;
-  }, [contacts, healthFilter, clientSortOption, healthClock, interactionCounts]);
+  }, [contacts, healthFilter, clientSortOption, healthClock, interactionCounts, contactInterval]);
 
   return (
     <div>

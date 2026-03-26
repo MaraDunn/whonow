@@ -2,18 +2,22 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useReminderSettings } from "@/hooks/useReminderSettings";
 import { computeHealthScore } from "@/utils/relationshipHealth";
 
 interface HealthInputRow {
   id: string;
+  created_at?: string | null;
   last_contacted_at: string | null;
+  follow_up_date: string | null;
+  reminder_interval_override: number | null;
   preferred_contact_interval_days: number | null;
   client_weight: number | null;
 }
 
 export interface OrgMonthlyBucket {
   month: string; // "YYYY-MM"
-  count: number;
+  count: number; // average health score (0-100) for that month
 }
 
 export interface OrgRelationshipMetrics {
@@ -35,10 +39,11 @@ export interface OrgRelationshipMetrics {
 export const useOrgRelationshipInsights = (reminderInterval: number = 30) => {
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
+  const { contactInterval } = useReminderSettings();
   const companyId = profile?.companyId;
 
   return useQuery<OrgRelationshipMetrics>({
-    queryKey: ["org-relationship-insights", "v1", companyId, reminderInterval],
+    queryKey: ["org-relationship-insights", "v2", companyId, reminderInterval, contactInterval],
     queryFn: async (): Promise<OrgRelationshipMetrics> => {
       if (!user?.id || !companyId) throw new Error("Not authenticated or no company");
 
@@ -47,7 +52,7 @@ export const useOrgRelationshipInsights = (reminderInterval: number = 30) => {
       const staleThreshold = new Date(now.getTime() - reminderInterval * 86_400_000).toISOString();
       const ninetyDaysAgo = new Date(now.getTime() - 90 * 86_400_000).toISOString();
 
-      const [addedRes, contactedRes, staleRes, sharedRes, totalRes, growthRes, sharedContactedRes, healthSharedRes, activityRes] =
+      const [addedRes, contactedRes, staleRes, sharedRes, totalRes, sharedContactedRes, healthSharedRes, activityRes] =
         await Promise.all([
           // Shared contacts added this month
           supabase
@@ -96,20 +101,6 @@ export const useOrgRelationshipInsights = (reminderInterval: number = 30) => {
             .is("deleted_at", null)
             .not("tags", "cs", '{"my-profile"}'),
 
-          // Monthly growth: shared contacts created in last 6 months
-          supabase
-            .from("contacts")
-            .select("created_at")
-            .eq("company_id", companyId)
-            .eq("is_shared", true)
-            .is("deleted_at", null)
-            .not("tags", "cs", '{"my-profile"}')
-            .gte(
-              "created_at",
-              new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString()
-            )
-            .order("created_at", { ascending: true }),
-
           // Shared contacts with at least one contact (last_contacted_at is set)
           supabase
             .from("contacts")
@@ -156,11 +147,14 @@ export const useOrgRelationshipInsights = (reminderInterval: number = 30) => {
         const { score, status } = computeHealthScore(
           {
             lastContactedAt: c.last_contacted_at || undefined,
+            followUpDate: c.follow_up_date || undefined,
+            reminderIntervalOverride: c.reminder_interval_override || undefined,
             preferredContactIntervalDays: c.preferred_contact_interval_days || undefined,
             clientWeight: c.client_weight || undefined,
           },
           interactionCounts[c.id] ?? 0,
-          now
+          now,
+          { defaultIntervalDays: contactInterval }
         );
         scoreSum += score;
         if (status === "Healthy") healthyCount++;
@@ -169,22 +163,41 @@ export const useOrgRelationshipInsights = (reminderInterval: number = 30) => {
       }
       const avgHealthScore = healthShared.length > 0 ? Math.round(scoreSum / healthShared.length) : 0;
 
-      const bucketMap: Record<string, number> = {};
+      const monthlyGrowth: OrgMonthlyBucket[] = [];
       for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        bucketMap[key] = 0;
+        const monthStartDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthEndDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+        const monthKey = `${monthStartDate.getFullYear()}-${String(monthStartDate.getMonth() + 1).padStart(2, "0")}`;
+        let monthScoreSum = 0;
+        let monthCount = 0;
+
+        for (const c of healthShared) {
+          const hasExistedByMonthEnd =
+            !c.created_at || monthEndDate >= new Date(c.created_at);
+          if (!hasExistedByMonthEnd) continue;
+
+          const { score } = computeHealthScore(
+            {
+              lastContactedAt: c.last_contacted_at || undefined,
+              followUpDate: c.follow_up_date || undefined,
+              reminderIntervalOverride: c.reminder_interval_override || undefined,
+              preferredContactIntervalDays: c.preferred_contact_interval_days || undefined,
+              clientWeight: c.client_weight || undefined,
+            },
+            // Historical monthly trend uses recency-based health.
+            0,
+            monthEndDate,
+            { defaultIntervalDays: contactInterval }
+          );
+          monthScoreSum += score;
+          monthCount++;
+        }
+
+        monthlyGrowth.push({
+          month: monthKey,
+          count: monthCount > 0 ? Math.round(monthScoreSum / monthCount) : 0,
+        });
       }
-      for (const row of growthRes.data ?? []) {
-        const key = (row.created_at as string).slice(0, 7);
-        if (key in bucketMap) bucketMap[key]++;
-      }
-      const monthKeys = Object.keys(bucketMap).sort();
-      let running = 0;
-      const monthlyGrowth: OrgMonthlyBucket[] = monthKeys.map((month) => {
-        running += bucketMap[month];
-        return { month, count: running };
-      });
 
       return {
         addedThisMonth: addedRes.count ?? 0,

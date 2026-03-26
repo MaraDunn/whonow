@@ -7,6 +7,7 @@ import { toast } from "sonner";
 export interface MessageTemplate {
   id: string;
   name: string;
+  subject: string;
   body: string;
   createdAt: string;
   updatedAt: string;
@@ -16,6 +17,7 @@ type DbTemplate = {
   id: string;
   owner_id: string;
   name: string;
+  subject: string | null;
   body: string;
   created_at: string;
   updated_at: string;
@@ -25,6 +27,7 @@ function mapDb(row: DbTemplate): MessageTemplate {
   return {
     id: row.id,
     name: row.name,
+    subject: row.subject ?? "",
     body: row.body,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -61,15 +64,17 @@ export function useMessageTemplates() {
   const addMutation = useMutation({
     mutationFn: async ({
       name,
+      subject,
       body,
     }: {
       name: string;
+      subject: string;
       body: string;
     }): Promise<MessageTemplate> => {
       if (!user?.id) throw new Error("Not authenticated");
       const { data, error } = await supabase
         .from("message_templates")
-        .insert({ owner_id: user.id, name: name.trim(), body })
+        .insert({ owner_id: user.id, name: name.trim(), subject, body })
         .select()
         .single();
       if (error) throw error;
@@ -84,8 +89,8 @@ export function useMessageTemplates() {
   });
 
   const addTemplate = useCallback(
-    (name: string, body: string) => {
-      addMutation.mutate({ name, body });
+    (name: string, subject: string, body: string) => {
+      addMutation.mutate({ name, subject, body });
     },
     [addMutation]
   );
@@ -97,12 +102,13 @@ export function useMessageTemplates() {
       changes,
     }: {
       id: string;
-      changes: Partial<Pick<MessageTemplate, "name" | "body">>;
+      changes: Partial<Pick<MessageTemplate, "name" | "subject" | "body">>;
     }) => {
       const { error } = await supabase
         .from("message_templates")
         .update({
           ...(changes.name !== undefined && { name: changes.name.trim() }),
+          ...(changes.subject !== undefined && { subject: changes.subject }),
           ...(changes.body !== undefined && { body: changes.body }),
           updated_at: new Date().toISOString(),
         })
@@ -118,7 +124,10 @@ export function useMessageTemplates() {
   });
 
   const updateTemplate = useCallback(
-    (id: string, changes: Partial<Pick<MessageTemplate, "name" | "body">>) => {
+    (
+      id: string,
+      changes: Partial<Pick<MessageTemplate, "name" | "subject" | "body">>
+    ) => {
       updateMutation.mutate({ id, changes });
     },
     [updateMutation]

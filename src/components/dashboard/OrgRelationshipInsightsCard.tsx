@@ -95,7 +95,7 @@ function GrowthChart({ data }: GrowthChartProps) {
   return (
     <div>
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-        Shared Contact Growth (6 months)
+        Relationship Health (6 months)
       </p>
       <svg
         viewBox={`0 0 ${width} ${height}`}
@@ -262,6 +262,7 @@ export function OrgRelationshipInsightsCard({
       {activeDialog === "chart" && (
         <OrgExpandedChartDialog
           open
+          data={metrics.monthlyGrowth}
           onOpenChange={(o) => { if (!o) closeDialog(); }}
         />
       )}
