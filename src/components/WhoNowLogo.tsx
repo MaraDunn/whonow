@@ -4,26 +4,29 @@ import { useBranding } from "@/hooks/useBranding";
 interface WhoNowLogoProps {
   /** "icon" = icon only (optionally with text); "full" = icon + wordmark image from branding */
   variant?: "icon" | "full";
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   showText?: boolean;
   className?: string;
 }
 
 /** Icon-only sizes (2x scale from base) */
 const iconSizeClasses = {
+  xs: "h-10 w-10",
   sm: "h-20 w-20",
   md: "h-32 w-32",
   lg: "h-40 w-40",
 };
 
-/** Full logo height (2x scale from base) */
+/** Full logo height; xs = landing nav (bar stays ~64px; logo may overflow via transparent padding) */
 const fullLogoHeightClasses = {
+  xs: "h-20",
   sm: "h-28",
   md: "h-32",
   lg: "h-40",
 };
 
 const textSizes = {
+  xs: "text-lg",
   sm: "text-xl",
   md: "text-3xl",
   lg: "text-4xl",

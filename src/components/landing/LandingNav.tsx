@@ -60,43 +60,43 @@ export const LandingNav = ({ onSignIn, onGetStarted }: LandingNavProps) => {
   };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20 overflow-hidden">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 flex-shrink-0 overflow-hidden">
-            <WhoNowLogo variant="full" size="sm" />
+    <nav className="fixed top-0 left-0 right-0 z-50 overflow-visible bg-background/80 backdrop-blur-lg border-b border-border">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-visible">
+        <div className="flex items-center justify-between h-16 overflow-visible">
+          {/* Logo: taller than the bar; transparent image padding can bleed past the header */}
+          <Link to="/" className="relative z-[1] flex items-center shrink-0 min-w-0 overflow-visible">
+            <WhoNowLogo variant="full" size="xs" />
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-6">
             <button
               onClick={() => scrollToSection("features")}
-              className="text-muted-foreground hover:text-foreground transition-colors text-base font-medium"
+              className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
             >
               Features
             </button>
             <button
               onClick={() => scrollToSection("demo")}
-              className="text-muted-foreground hover:text-foreground transition-colors text-base font-medium"
+              className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
             >
               Demo
             </button>
             <button
               onClick={() => scrollToSection("downloads")}
-              className="text-muted-foreground hover:text-foreground transition-colors text-base font-medium"
+              className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
             >
               Downloads
             </button>
             <button
               onClick={() => scrollToSection("pricing")}
-              className="text-muted-foreground hover:text-foreground transition-colors text-base font-medium"
+              className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
             >
               Pricing
             </button>
             <button
               onClick={() => scrollToSection("faq")}
-              className="text-muted-foreground hover:text-foreground transition-colors text-base font-medium"
+              className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
             >
               FAQ
             </button>
